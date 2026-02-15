@@ -238,7 +238,6 @@ export function TasksClient({ alias }: { alias: string }) {
   const [applyTemplateId, setApplyTemplateId] = useState("");
   const [applyTeamName, setApplyTeamName] = useState("");
   const [applyParentTaskId, setApplyParentTaskId] = useState("");
-  const [proposeByTask, setProposeByTask] = useState<Record<string, string>>({});
   const [isTaskMenuOpen, setIsTaskMenuOpen] = useState(false);
   const [taskMenuView, setTaskMenuView] = useState<TaskMenuView>("BESCHIKBAAR");
   const [assignedAliasFilter, setAssignedAliasFilter] = useState<string>(alias);
@@ -251,6 +250,8 @@ export function TasksClient({ alias }: { alias: string }) {
   const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null);
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
   const [moveTargetParentId, setMoveTargetParentId] = useState("");
+  const [proposeDialogTask, setProposeDialogTask] = useState<{ id: string; title: string } | null>(null);
+  const [proposeDialogAlias, setProposeDialogAlias] = useState("");
 
   const sortedTasks = useMemo(
     () =>
@@ -509,6 +510,34 @@ export function TasksClient({ alias }: { alias: string }) {
   }, [alias, assignedAliasFilter, assignedAliasOptions]);
 
   useEffect(() => {
+    if (!proposeDialogTask) {
+      return;
+    }
+    if (otherAliases.length === 0) {
+      setProposeDialogTask(null);
+      setProposeDialogAlias("");
+      return;
+    }
+    if (!otherAliases.includes(proposeDialogAlias)) {
+      setProposeDialogAlias(otherAliases[0]);
+    }
+  }, [otherAliases, proposeDialogAlias, proposeDialogTask]);
+
+  useEffect(() => {
+    if (!proposeDialogTask) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setProposeDialogTask(null);
+        setProposeDialogAlias("");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [proposeDialogTask]);
+
+  useEffect(() => {
     if (focusedTaskId && !tasksById.has(focusedTaskId)) {
       setFocusedTaskId(null);
     }
@@ -596,16 +625,35 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
-  async function onPropose(taskId: string) {
-    const proposedAlias = proposeByTask[taskId]?.trim();
-    if (!proposedAlias) {
-      setError("Kies eerst een lid om de taak aan voor te stellen.");
+  function onStartPropose(task: ApiTask) {
+    if (otherAliases.length === 0) {
+      setError("Geen leden beschikbaar om aan voor te stellen.");
       return;
     }
-    setActiveTaskId(taskId);
+    setError(null);
+    setProposeDialogTask({ id: task.id, title: task.title });
+    setProposeDialogAlias(otherAliases[0]);
+  }
+
+  function onCancelProposeDialog() {
+    setProposeDialogTask(null);
+    setProposeDialogAlias("");
+  }
+
+  async function onConfirmPropose() {
+    if (!proposeDialogTask) {
+      return;
+    }
+    const proposedAlias = proposeDialogAlias.trim();
+    if (!proposedAlias || !otherAliases.includes(proposedAlias)) {
+      setError(`Kies een geldig lid uit de lijst: ${otherAliases.join(", ")}`);
+      return;
+    }
+
+    setActiveTaskId(proposeDialogTask.id);
     setError(null);
     try {
-      const response = await fetch(`/api/tasks/${taskId}/propose`, {
+      const response = await fetch(`/api/tasks/${proposeDialogTask.id}/propose`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ proposedAlias })
@@ -615,6 +663,8 @@ export function TasksClient({ alias }: { alias: string }) {
         setError(payload.error ?? "Voorstel doen is mislukt.");
         return;
       }
+      setProposeDialogTask(null);
+      setProposeDialogAlias("");
       await loadAll();
     } catch {
       setError("Netwerkfout bij voorstel.");
@@ -1034,10 +1084,15 @@ export function TasksClient({ alias }: { alias: string }) {
             <button type="button" onClick={() => setIsTaskMenuOpen((open) => !open)}>
               {isTaskMenuOpen ? "Sluit menu" : "☰ Menu"}
             </button>
-            <p className="muted">Weergave: {labelForMenuView(taskMenuView)}</p>
+            {taskMenuView === "TOEGEWEZEN" ? (
+              <p className="muted">Taken, toegewezen aan:</p>
+            ) : taskMenuView === "BESCHIKBAAR" ? (
+              <p className="muted">Taken, openstaand</p>
+            ) : (
+              <p className="muted">Weergave: {labelForMenuView(taskMenuView)}</p>
+            )}
             {taskMenuView === "TOEGEWEZEN" ? (
               <label style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "nowrap" }}>
-                <span className="muted">Toegewezen aan:</span>
                 <select
                   value={assignedAliasFilter}
                   onChange={(event) => {
@@ -1278,7 +1333,6 @@ export function TasksClient({ alias }: { alias: string }) {
           const canManageTask = manageableTaskIds.has(task.id);
           const canProposeTask =
             canManageTask && (task.status === "TOEGEWEZEN" || task.status === "BESCHIKBAAR");
-          const proposedAlias = proposeByTask[task.id] ?? "";
           const isEditingTask = editingTaskId === task.id;
           const isMovingTask = movingTaskId === task.id;
           const isCreatingSubtask = creatingSubtaskForTaskId === task.id;
@@ -1309,14 +1363,14 @@ export function TasksClient({ alias }: { alias: string }) {
             0
           );
           const canDeleteTask = canManageTask && task.parentId !== null;
+          const canRegisterTask = task.status === "BESCHIKBAAR" && !isCreatingSubtask;
+          const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
+          const showInlineTaskActions = canRegisterTask || canReleaseTask || canProposeTask;
 
           return (
             <article key={task.id} className="card">
               <h2>{task.title}</h2>
               <p className="muted">{task.description}</p>
-              <p className="muted">
-                Team: {task.teamName ?? "-"} | Parent: {task.parent?.title ?? "-"}
-              </p>
               <p className="muted">
                 Coordinator (effectief): {task.coordinatorAlias ?? "-"} | Status:{" "}
                 {labelForStatus(task.status)}
@@ -1326,7 +1380,6 @@ export function TasksClient({ alias }: { alias: string }) {
                 {new Date(task.endTime).toLocaleString("nl-NL")} | Waarde (berekend):{" "}
                 {formatPoints(calculatedTaskPoints)}
               </p>
-              <p className="muted">Context: {taskPath.join(" > ")}</p>
 
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <button
@@ -1808,54 +1861,50 @@ export function TasksClient({ alias }: { alias: string }) {
                     ) : null}
                   </div>
 
-                  {task.status === "BESCHIKBAAR" && !isCreatingSubtask ? (
-                    <button
-                      type="button"
-                      onClick={() => onRegister(task.id)}
-                      disabled={activeTaskId === task.id}
+                  {showInlineTaskActions ? (
+                    <div
+                      style={{
+                        display: "inline-grid",
+                        gridAutoFlow: "column",
+                        columnGap: "0.5rem",
+                        alignItems: "center",
+                        width: "max-content",
+                        maxWidth: "100%",
+                        overflowX: "auto"
+                      }}
                     >
-                      {activeTaskId === task.id ? "Inschrijven..." : "Schrijf in op taak"}
-                    </button>
-                  ) : null}
-
-                  {canManageTask && task.status === "TOEGEWEZEN" ? (
-                    <button
-                      type="button"
-                      onClick={() => onRelease(task.id)}
-                      disabled={activeTaskId === task.id}
-                    >
-                      {activeTaskId === task.id ? "Vrijgeven..." : "Maak taak beschikbaar"}
-                    </button>
-                  ) : null}
-
-                  {canProposeTask ? (
-                    <div className="grid">
-                      <label>
-                        Stel taak voor aan lid
-                        <select
-                          value={proposedAlias}
-                          onChange={(event) =>
-                            setProposeByTask((current) => ({
-                              ...current,
-                              [task.id]: event.target.value
-                            }))
-                          }
+                      {canRegisterTask ? (
+                        <button
+                          type="button"
+                          onClick={() => onRegister(task.id)}
+                          disabled={activeTaskId === task.id}
+                          style={{ whiteSpace: "nowrap" }}
                         >
-                          <option value="">Kies lid</option>
-                          {otherAliases.map((candidateAlias) => (
-                            <option key={candidateAlias} value={candidateAlias}>
-                              {candidateAlias}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => onPropose(task.id)}
-                        disabled={activeTaskId === task.id}
-                      >
-                        {activeTaskId === task.id ? "Voorstellen..." : "Stel voor"}
-                      </button>
+                          {activeTaskId === task.id ? "Inschrijven..." : "Schrijf in op taak"}
+                        </button>
+                      ) : null}
+
+                      {canReleaseTask ? (
+                        <button
+                          type="button"
+                          onClick={() => onRelease(task.id)}
+                          disabled={activeTaskId === task.id}
+                          style={{ whiteSpace: "nowrap" }}
+                        >
+                          {activeTaskId === task.id ? "Beschikbaar stellen..." : "Stel taak beschikbaar"}
+                        </button>
+                      ) : null}
+
+                      {canProposeTask ? (
+                        <button
+                          type="button"
+                          onClick={() => onStartPropose(task)}
+                          disabled={activeTaskId === task.id}
+                          style={{ whiteSpace: "nowrap" }}
+                        >
+                          {activeTaskId === task.id ? "Voorstellen..." : "Stel taak voor aan lid"}
+                        </button>
+                      ) : null}
                     </div>
                   ) : null}
                 </>
@@ -1864,6 +1913,62 @@ export function TasksClient({ alias }: { alias: string }) {
           );
           })}
         </section>
+      ) : null}
+
+      {proposeDialogTask ? (
+        <div
+          onClick={onCancelProposeDialog}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Stel taak voor aan lid"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "34rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3>Stel taak voor aan lid</h3>
+            <p>
+              Welk lid wil je voorstellen voor de taak: <strong>{proposeDialogTask.title}</strong>?
+            </p>
+            <label>
+              Lid
+              <select
+                value={proposeDialogAlias}
+                onChange={(event) => setProposeDialogAlias(event.target.value)}
+              >
+                {otherAliases.map((candidateAlias) => (
+                  <option key={candidateAlias} value={candidateAlias}>
+                    {candidateAlias}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={onCancelProposeDialog}
+                disabled={activeTaskId === proposeDialogTask.id}
+              >
+                Annuleren
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmPropose}
+                disabled={activeTaskId === proposeDialogTask.id || !proposeDialogAlias}
+              >
+                {activeTaskId === proposeDialogTask.id ? "Voorstellen..." : "Stel voor"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
