@@ -29,6 +29,15 @@ Fase 1 bootstrap van de MVP op basis van:
 6. Start app:
    - `npm run dev`
 
+## Productie mail (lokale MTA)
+- De endpoint `POST /api/auth/request-magic-link` verzendt e-mail via lokale `sendmail`.
+- Vereiste env vars:
+  - `MAIL_FROM` (bijv. `Inzet VC Zwolle <noreply@vczwolle.frii.nl>`)
+  - `MAIL_ENVELOPE_FROM` (bijv. `noreply@vczwolle.frii.nl`)
+  - `MAIL_MESSAGE_ID_DOMAIN` (bijv. `vczwolle.frii.nl`)
+  - `SENDMAIL_PATH` (standaard `/usr/sbin/sendmail`)
+- Op de server moet een MTA aanwezig zijn die `sendmail -t -i` ondersteunt (bijv. Postfix).
+
 ## Docker Compose
 - `docker compose up --build`
 
@@ -58,7 +67,6 @@ Na reset:
 - Uitzonderingen op API-auth: `/api/auth/request-magic-link`, `/api/auth/verify-magic-link`, `/api/health`.
 
 ## Bekende TODO's
-- E-mail verzending koppelen aan lokale MTA.
 - Sessiebeheer/auth-afhandeling afronden na verify endpoint.
 - Volledige UI voor coordinatoren en ledenflows.
 - Integratietests toevoegen.

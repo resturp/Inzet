@@ -4,6 +4,27 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type LoginMode = "password" | "request" | "magic";
+type ApiPayload = {
+  message?: string;
+  error?: string;
+  debugAlias?: string;
+  debugToken?: string;
+  debugMagicLink?: string;
+};
+
+async function readApiPayload(response: Response): Promise<ApiPayload> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      return (await response.json()) as ApiPayload;
+    } catch {
+      return {};
+    }
+  }
+
+  const text = await response.text();
+  return { error: text || `Serverfout (${response.status})` };
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,9 +89,9 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ alias, password })
       });
-      const payload = (await response.json()) as { message?: string; error?: string };
+      const payload = await readApiPayload(response);
       if (!response.ok) {
-        setStatus(payload.error ?? "Inloggen met wachtwoord mislukt");
+        setStatus(payload.error ?? `Inloggen met wachtwoord mislukt (${response.status})`);
       } else {
         setStatus(payload.message ?? "Ingelogd");
         router.push("/tasks");
@@ -97,15 +118,9 @@ export default function LoginPage() {
           alias: requestedAlias || undefined
         })
       });
-      const payload = (await response.json()) as {
-        message?: string;
-        error?: string;
-        debugAlias?: string;
-        debugToken?: string;
-        debugMagicLink?: string;
-      };
+      const payload = await readApiPayload(response);
       if (!response.ok) {
-        setStatus(payload.error ?? "Aanvraag mislukt");
+        setStatus(payload.error ?? `Aanvraag mislukt (${response.status})`);
       } else {
         setStatus(payload.message ?? "Magic link verzonden");
         setAlias(payload.debugAlias ?? requestedAlias);
@@ -140,9 +155,9 @@ export default function LoginPage() {
           setPassword: magicSetPassword
         })
       });
-      const payload = (await response.json()) as { message?: string; error?: string };
+      const payload = await readApiPayload(response);
       if (!response.ok) {
-        setStatus(payload.error ?? "Verificatie mislukt");
+        setStatus(payload.error ?? `Verificatie mislukt (${response.status})`);
       } else {
         setStatus(payload.message ?? "Ingelogd");
         router.push("/tasks");
