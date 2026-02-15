@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "docs:pdf": "node scripts/export-docs-pdf.mjs",
+    "check:assigned-filter": "node scripts/check-assigned-filter.mjs",
     "dev:reset": "bash scripts/reset-dev.sh",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

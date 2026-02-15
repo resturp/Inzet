@@ -106,6 +106,10 @@ function labelForMenuView(view: TaskMenuView): string {
   }
 }
 
+function isAssignedStatus(status: ApiTask["status"]): boolean {
+  return status === "TOEGEWEZEN" || status === "GEREED";
+}
+
 function parseTaskPoints(value: string | number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
@@ -237,6 +241,7 @@ export function TasksClient({ alias }: { alias: string }) {
   const [proposeByTask, setProposeByTask] = useState<Record<string, string>>({});
   const [isTaskMenuOpen, setIsTaskMenuOpen] = useState(false);
   const [taskMenuView, setTaskMenuView] = useState<TaskMenuView>("BESCHIKBAAR");
+  const [assignedAliasFilter, setAssignedAliasFilter] = useState<string>(alias);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [creatingSubtaskForTaskId, setCreatingSubtaskForTaskId] = useState<string | null>(null);
   const [subtaskFormMode, setSubtaskFormMode] = useState<"new" | "copy">("new");
@@ -284,6 +289,53 @@ export function TasksClient({ alias }: { alias: string }) {
     return byParent;
   }, [sortedTasks]);
 
+  const myAssignedRootTaskIds = useMemo(
+    () =>
+      sortedTasks
+        .filter((task) => task.coordinatorAlias === alias && isAssignedStatus(task.status))
+        .map((task) => task.id),
+    [alias, sortedTasks]
+  );
+
+  const myAssignedSubtreeTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    const queue = [...myAssignedRootTaskIds];
+
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      if (!currentId || ids.has(currentId)) {
+        continue;
+      }
+      ids.add(currentId);
+      const children = childrenByParentId.get(currentId) ?? [];
+      for (const child of children) {
+        queue.push(child.id);
+      }
+    }
+
+    return ids;
+  }, [childrenByParentId, myAssignedRootTaskIds]);
+
+  const assignedAliasOptions = useMemo(() => {
+    const aliases = new Set<string>();
+
+    for (const task of sortedTasks) {
+      if (!myAssignedSubtreeTaskIds.has(task.id) || !isAssignedStatus(task.status)) {
+        continue;
+      }
+      if (task.coordinatorAlias) {
+        aliases.add(task.coordinatorAlias);
+      }
+    }
+
+    aliases.delete(alias);
+
+    return [
+      alias,
+      ...Array.from(aliases).sort((left, right) => left.localeCompare(right, "nl-NL"))
+    ];
+  }, [alias, myAssignedSubtreeTaskIds, sortedTasks]);
+
   const manageableTaskIds = useMemo(() => {
     return new Set(
       sortedTasks
@@ -328,12 +380,16 @@ export function TasksClient({ alias }: { alias: string }) {
       }
       return sortedTasks.filter((task) => {
         if (taskMenuView === "TOEGEWEZEN") {
-          return task.status === "TOEGEWEZEN" || task.status === "GEREED";
+          return (
+            isAssignedStatus(task.status) &&
+            myAssignedSubtreeTaskIds.has(task.id) &&
+            task.coordinatorAlias === assignedAliasFilter
+          );
         }
         return task.status === taskMenuView;
       });
     },
-    [isTaskListView, sortedTasks, taskMenuView]
+    [assignedAliasFilter, isTaskListView, myAssignedSubtreeTaskIds, sortedTasks, taskMenuView]
   );
 
   const calculatedPointsByTaskId = useMemo(() => {
@@ -443,6 +499,16 @@ export function TasksClient({ alias }: { alias: string }) {
   }, [loadAll]);
 
   useEffect(() => {
+    setAssignedAliasFilter(alias);
+  }, [alias]);
+
+  useEffect(() => {
+    if (!assignedAliasOptions.includes(assignedAliasFilter)) {
+      setAssignedAliasFilter(alias);
+    }
+  }, [alias, assignedAliasFilter, assignedAliasOptions]);
+
+  useEffect(() => {
     if (focusedTaskId && !tasksById.has(focusedTaskId)) {
       setFocusedTaskId(null);
     }
@@ -474,6 +540,17 @@ export function TasksClient({ alias }: { alias: string }) {
       setFocusedTaskId(null);
     }
   }, [focusedTaskId, isTaskListView]);
+
+  useEffect(() => {
+    if (
+      taskMenuView === "TOEGEWEZEN" &&
+      isTaskListView &&
+      focusedTaskId &&
+      !visibleTasks.some((task) => task.id === focusedTaskId)
+    ) {
+      setFocusedTaskId(null);
+    }
+  }, [focusedTaskId, isTaskListView, taskMenuView, visibleTasks]);
 
   async function onRegister(taskId: string) {
     setActiveTaskId(taskId);
@@ -689,6 +766,10 @@ export function TasksClient({ alias }: { alias: string }) {
 
   function onOpenTask(taskId: string) {
     setError(null);
+    if (taskMenuView === "TOEGEWEZEN") {
+      setTaskMenuView("BESCHIKBAAR");
+      setIsTaskMenuOpen(false);
+    }
     setFocusedTaskId(taskId);
     setEditingTaskId(null);
     setEditDraft(null);
@@ -954,6 +1035,33 @@ export function TasksClient({ alias }: { alias: string }) {
               {isTaskMenuOpen ? "Sluit menu" : "☰ Menu"}
             </button>
             <p className="muted">Weergave: {labelForMenuView(taskMenuView)}</p>
+            {taskMenuView === "TOEGEWEZEN" ? (
+              <label style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "nowrap" }}>
+                <span className="muted">Toegewezen aan:</span>
+                <select
+                  value={assignedAliasFilter}
+                  onChange={(event) => {
+                    setAssignedAliasFilter(event.target.value);
+                    setFocusedTaskId(null);
+                    setEditingTaskId(null);
+                    setEditDraft(null);
+                    setMovingTaskId(null);
+                    setMoveTargetParentId("");
+                    setCreatingSubtaskForTaskId(null);
+                    setSubtaskDraft(initialSubtask);
+                    setSubtaskFormMode("new");
+                    setCopySourceTaskId(null);
+                    setCopySourceTitle(null);
+                  }}
+                >
+                  {assignedAliasOptions.map((candidateAlias) => (
+                    <option key={candidateAlias} value={candidateAlias}>
+                      {candidateAlias === alias ? `${candidateAlias} (ik)` : candidateAlias}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
             <p className="muted">Aangemeld als: {alias}</p>
