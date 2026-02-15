@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  LID
+  COORDINATOR
+  BESTUUR
+}
+
+enum TaskStatus {
+  BESCHIKBAAR
+  TOEGEWEZEN
+  GEREED
+}
+
+enum OpenTaskStatus {
+  OPEN
+  AFGEWEZEN
+}
+
+model User {
+  alias           String    @id
+  bondsnummer     String    @unique
+  email           String?   @unique
+  passwordHash    String?
+  role            UserRole  @default(LID)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  ownedTasks       Task[]   @relation("TaskOwner")
+  proposedOpenTasks OpenTask[] @relation("OpenTaskProposed")
+  proposerOpenTasks OpenTask[] @relation("OpenTaskProposer")
+  magicLinkTokens MagicLinkToken[]
+}
+
+model TaskTemplate {
+  id               String         @id @default(cuid())
+  title            String
+  description      String
+  defaultPoints    Decimal?       @db.Decimal(20, 8)
+  parentTemplateId String?
+  parentTemplate   TaskTemplate?  @relation("TemplateParent", fields: [parentTemplateId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  childTemplates   TaskTemplate[] @relation("TemplateParent")
+  tasks            Task[]
+  createdAt        DateTime       @default(now())
+}
+
+model Task {
+  id               String     @id @default(cuid())
+  title            String
+  description      String
+  teamName         String?
+  parentId         String?
+  parent           Task?      @relation("TaskParent", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  children         Task[]     @relation("TaskParent")
+  ownCoordinatorAlias String? @map("coordinatorAlias")
+  ownCoordinator   User?      @relation("TaskOwner", fields: [ownCoordinatorAlias], references: [alias], onDelete: Restrict, onUpdate: Cascade)
+  points           Decimal    @db.Decimal(20, 8)
+  date             DateTime
+  startTime        DateTime?
+  endTime          DateTime
+  location         String?
+  templateId       String?
+  template         TaskTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  status           TaskStatus @default(BESCHIKBAAR)
+  createdAt        DateTime   @default(now())
+  openTasks        OpenTask[]
+}
+
+model OpenTask {
+  id            String         @id @default(cuid())
+  taskId        String
+  task          Task           @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  proposerAlias String
+  proposer      User           @relation("OpenTaskProposer", fields: [proposerAlias], references: [alias], onDelete: Restrict, onUpdate: Cascade)
+  proposedAlias String?
+  proposed      User?          @relation("OpenTaskProposed", fields: [proposedAlias], references: [alias], onDelete: Restrict, onUpdate: Cascade)
+  status        OpenTaskStatus @default(OPEN)
+  createdAt     DateTime       @default(now())
+
+  @@unique([taskId, proposerAlias, proposedAlias, status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorAlias String
+  actionType String
+  entityType String
+  entityId   String
+  payloadJson String?
+  createdAt  DateTime @default(now())
+}
+
+model MagicLinkToken {
+  id         String   @id @default(cuid())
+  userAlias  String
+  user       User     @relation(fields: [userAlias], references: [alias], onDelete: Cascade, onUpdate: Cascade)
+  tokenHash  String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+}
