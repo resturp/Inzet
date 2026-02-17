@@ -30,8 +30,8 @@ Een bruikbare MVP opleveren waarmee leden en coordinatoren taken veilig en prakt
 - Alle private API-routes vereisen sessie.
 
 ### 4.2 Autorisatie en eigenaarschap
-- Exact 1 eigenaar per taak.
-- Subtaak zonder coordinator erft coordinator van parent.
+- Een taak heeft 1 of meer eigenaren/coordinators.
+- Subtaak zonder eigen coordinators erft coordinators van parent.
 - `proposer == proposed`: coordinator beslist.
 - `proposer != proposed`: proposer beslist.
 - Root `Besturen vereniging` heeft altijd eigenaar.
@@ -61,7 +61,7 @@ Een bruikbare MVP opleveren waarmee leden en coordinatoren taken veilig en prakt
 
 ## 5. Datamodel MVP
 - `users`, `tasks`, `open_tasks`, `task_templates`, `audit_logs`, `magic_link_tokens`.
-- Essentieel: `tasks.parent_id` boomstructuur, `tasks.coordinator_alias` not null, audit op mutaties.
+- Essentieel: `tasks.parent_id` boomstructuur, taakcoordinatoren via koppelmodel, audit op mutaties.
 
 ## 6. API-opzet MVP
 - Auth: request magic link, verify magic link, login-password, logout.

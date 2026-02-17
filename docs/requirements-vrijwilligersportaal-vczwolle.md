@@ -38,8 +38,8 @@ Dit document bevat de functionele en technische eisen voor MVP fase 1, inclusief
 - `Must`: Alleen beheerflows tonen noodzakelijke persoonsgegevens, met rolcontrole.
 
 ### 4.3 Taakmodel en eigenaarschap
-- `Must`: Elke taak heeft exact 1 coordinator/eigenaar.
-- `Must`: Een subtaak zonder expliciete coordinator erft coordinator van parent.
+- `Must`: Elke taak heeft 1 of meer coordinators/eigenaren.
+- `Must`: Een subtaak zonder expliciete coordinators erft coordinators van parent.
 - `Must`: Root-taak `Besturen vereniging` bestaat altijd en heeft altijd een eigenaar.
 - `Must`: Het eerste aangemaakte account wordt eigenaar van `Besturen vereniging`.
 - `Must`: Alleen bestuur mag root-taken maken.
@@ -130,7 +130,8 @@ Dit document bevat de functionele en technische eisen voor MVP fase 1, inclusief
 
 ### 6.2 Datamodel (MVP)
 - `User`: alias (pk), bondsnummer (unique), email, role, is_active, password_hash.
-- `Task`: id, title, description, parent_id, coordinator_alias, points, date, start_time, end_time, location, team_name, template_id, status.
+- `Task`: id, title, description, parent_id, points, date, start_time, end_time, location, team_name, template_id, status.
+- `TaskCoordinator`: task_id, user_alias.
 - `OpenTask`: id, task_id, proposer_alias, proposed_alias, status.
 - `TaskTemplate`: id, title, description, parent_template_id, default_points.
 - `AuditLog`: id, actor_alias, action_type, entity_type, entity_id, payload_json, created_at.

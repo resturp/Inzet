@@ -2,9 +2,9 @@ import { OpenTaskStatus, TaskStatus, UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
-import { resolveEffectiveCoordinatorAlias } from "@/lib/authorization";
+import { resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
-import { canActorDecideProposal } from "@/lib/rules";
+import { canActorDecideProposal, resolveCoordinatorAliasesAfterAccept } from "@/lib/rules";
 
 export async function POST(
   _request: Request,
@@ -29,53 +29,74 @@ export async function POST(
       { status: 400 }
     );
   }
+  const proposedAlias = openTask.proposedAlias;
 
-  const effectiveCoordinatorAlias = await resolveEffectiveCoordinatorAlias(openTask.taskId);
+  const effectiveCoordinatorAliases = await resolveEffectiveCoordinatorAliases(openTask.taskId);
   const allowed = canActorDecideProposal({
     proposerAlias: openTask.proposerAlias,
     proposedAlias: openTask.proposedAlias,
     actorAlias: sessionUser.alias,
-    effectiveCoordinatorAlias: effectiveCoordinatorAlias ?? ""
+    effectiveCoordinatorAliases
   });
 
   if (!allowed) {
     return NextResponse.json({ error: "Geen rechten om voorstel te accepteren" }, { status: 403 });
   }
 
-  const parentEffectiveCoordinatorAlias = openTask.task.parentId
-    ? await resolveEffectiveCoordinatorAlias(openTask.task.parentId)
-    : null;
-  const nextOwnCoordinatorAlias =
-    parentEffectiveCoordinatorAlias && parentEffectiveCoordinatorAlias === openTask.proposedAlias
-      ? null
-      : openTask.proposedAlias;
+  const ownCoordinatorRows = await prisma.taskCoordinator.findMany({
+    where: { taskId: openTask.taskId },
+    select: { userAlias: true }
+  });
 
-  await prisma.$transaction([
-    prisma.task.update({
+  const desiredEffectiveCoordinatorAliases = resolveCoordinatorAliasesAfterAccept({
+    proposedAlias,
+    currentOwnCoordinatorAliases: ownCoordinatorRows.map((row) => row.userAlias)
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.task.update({
       where: { id: openTask.taskId },
       data: {
-        ownCoordinatorAlias: nextOwnCoordinatorAlias,
         status: TaskStatus.TOEGEWEZEN
       }
-    }),
-    prisma.user.updateMany({
+    });
+
+    await tx.taskCoordinator.deleteMany({
+      where: { taskId: openTask.taskId }
+    });
+
+    if (desiredEffectiveCoordinatorAliases.length > 0) {
+      await tx.taskCoordinator.createMany({
+        data: desiredEffectiveCoordinatorAliases.map((userAlias) => ({
+          taskId: openTask.taskId,
+          userAlias
+        }))
+      });
+    }
+
+    await tx.user.updateMany({
       where: {
-        alias: openTask.proposedAlias,
+        alias: proposedAlias,
         role: UserRole.LID
       },
       data: {
         role: UserRole.COORDINATOR
       }
-    }),
-    prisma.openTask.delete({ where: { id: openTask.id } })
-  ]);
+    });
+
+    await tx.openTask.delete({ where: { id: openTask.id } });
+  });
 
   await writeAuditLog({
     actorAlias: sessionUser.alias,
     actionType: "OPEN_TASK_ACCEPTED",
     entityType: "OpenTask",
     entityId: openTask.id,
-    payload: { taskId: openTask.taskId, newCoordinator: openTask.proposedAlias }
+    payload: {
+      taskId: openTask.taskId,
+      newCoordinator: proposedAlias,
+      effectiveCoordinatorAliasesAfter: desiredEffectiveCoordinatorAliases
+    }
   });
 
   return NextResponse.json({ message: "Voorstel geaccepteerd" }, { status: 200 });

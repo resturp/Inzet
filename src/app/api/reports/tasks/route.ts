@@ -2,7 +2,7 @@ import { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/api-session";
-import { resolveEffectiveCoordinatorAlias } from "@/lib/authorization";
+import { primaryCoordinatorAlias, resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 
 const querySchema = z.object({
@@ -41,23 +41,32 @@ export async function GET(request: Request) {
     }
   });
 
-  const withEffectiveCoordinator = await Promise.all(
-    tasks.map(async (task) => ({
-      id: task.id,
-      title: task.title,
-      status: task.status,
-      date: task.date,
-      endTime: task.endTime,
-      points: task.points,
-      coordinatorAlias: await resolveEffectiveCoordinatorAlias(task.id)
-    }))
+  const withEffectiveCoordinators = await Promise.all(
+    tasks.map(async (task) => {
+      const coordinatorAliases = await resolveEffectiveCoordinatorAliases(task.id);
+      const points = Number(task.points.toString());
+      const pointsPerCoordinator =
+        coordinatorAliases.length > 0 ? points / coordinatorAliases.length : 0;
+
+      return {
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        date: task.date,
+        endTime: task.endTime,
+        points: task.points,
+        coordinatorAliases,
+        coordinatorAlias: primaryCoordinatorAlias(coordinatorAliases),
+        pointsPerCoordinator
+      };
+    })
   );
 
   const visible =
     sessionUser.role === UserRole.BESTUUR
-      ? withEffectiveCoordinator
-      : withEffectiveCoordinator.filter(
-          (task) => task.coordinatorAlias === sessionUser.alias
+      ? withEffectiveCoordinators
+      : withEffectiveCoordinators.filter((task) =>
+          task.coordinatorAliases.includes(sessionUser.alias)
         );
 
   return NextResponse.json({ data: visible }, { status: 200 });

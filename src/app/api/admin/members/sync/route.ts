@@ -3,7 +3,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
-import { isRootOwner, resolveEffectiveCoordinatorAlias } from "@/lib/authorization";
+import {
+  isRootOwner,
+  resolveEffectiveCoordinatorAliases
+} from "@/lib/authorization";
 import { writeAllowedBondsnummers } from "@/lib/member-allowlist";
 import { prisma } from "@/lib/prisma";
 
@@ -44,21 +47,6 @@ export async function POST(request: Request) {
   const deactivated: string[] = [];
   const reassignedTasks: string[] = [];
 
-  async function resolveFallbackCoordinatorForParent(
-    parentId: string | null,
-    aliasBeingRemoved: string,
-    defaultAlias: string
-  ): Promise<string> {
-    if (!parentId) {
-      return defaultAlias;
-    }
-    const parentEffective = await resolveEffectiveCoordinatorAlias(parentId);
-    if (parentEffective && parentEffective !== aliasBeingRemoved) {
-      return parentEffective;
-    }
-    return defaultAlias;
-  }
-
   for (const bondsnummer of desired) {
     const existing = existingByBondsnummer.get(bondsnummer);
     if (!existing) {
@@ -83,23 +71,36 @@ export async function POST(request: Request) {
       continue;
     }
 
-    const ownedTasks = await prisma.task.findMany({
-      where: { ownCoordinatorAlias: user.alias },
-      select: { id: true, parentId: true }
-    });
+    const ownedTaskIds = Array.from(
+      new Set(
+        (
+          await prisma.taskCoordinator.findMany({
+            where: { userAlias: user.alias },
+            select: { taskId: true }
+          })
+        ).map((item) => item.taskId)
+      )
+    );
 
-    for (const task of ownedTasks) {
-      const fallbackCoordinator = await resolveFallbackCoordinatorForParent(
-        task.parentId,
-        user.alias,
-        activeBestuur?.alias ?? sessionUser.alias
-      );
-
-      await prisma.task.update({
-        where: { id: task.id },
-        data: { ownCoordinatorAlias: fallbackCoordinator }
+    for (const taskId of ownedTaskIds) {
+      await prisma.taskCoordinator.deleteMany({
+        where: {
+          taskId,
+          userAlias: user.alias
+        }
       });
-      reassignedTasks.push(task.id);
+
+      const effectiveAfterRemoval = await resolveEffectiveCoordinatorAliases(taskId);
+      if (effectiveAfterRemoval.length === 0) {
+        await prisma.taskCoordinator.create({
+          data: {
+            taskId,
+            userAlias: activeBestuur?.alias ?? sessionUser.alias
+          }
+        });
+      }
+
+      reassignedTasks.push(taskId);
     }
 
     await prisma.user.update({

@@ -19,6 +19,17 @@ function isAssignedStatus(status) {
   return status === "TOEGEWEZEN" || status === "GEREED";
 }
 
+function getTaskCoordinatorAliases(task) {
+  if (Array.isArray(task.coordinatorAliases) && task.coordinatorAliases.length > 0) {
+    return task.coordinatorAliases;
+  }
+  return task.coordinatorAlias ? [task.coordinatorAlias] : [];
+}
+
+function taskHasCoordinator(task, alias) {
+  return getTaskCoordinatorAliases(task).includes(alias);
+}
+
 function assertOrThrow(condition, message) {
   if (!condition) {
     throw new Error(message);
@@ -375,7 +386,7 @@ function buildChildrenByParentId(tasks) {
 function computeAssignedFilterView({ tasks, ownAlias, selectedAlias }) {
   const childrenByParentId = buildChildrenByParentId(tasks);
   const myAssignedRootTaskIds = tasks
-    .filter((task) => task.coordinatorAlias === ownAlias && isAssignedStatus(task.status))
+    .filter((task) => taskHasCoordinator(task, ownAlias) && isAssignedStatus(task.status))
     .map((task) => task.id);
 
   const subtreeTaskIds = collectSubtreeTaskIds(myAssignedRootTaskIds, childrenByParentId);
@@ -388,8 +399,8 @@ function computeAssignedFilterView({ tasks, ownAlias, selectedAlias }) {
     if (!isAssignedStatus(task.status)) {
       continue;
     }
-    if (task.coordinatorAlias) {
-      otherAliases.add(task.coordinatorAlias);
+    for (const coordinatorAlias of getTaskCoordinatorAliases(task)) {
+      otherAliases.add(coordinatorAlias);
     }
   }
 
@@ -403,7 +414,7 @@ function computeAssignedFilterView({ tasks, ownAlias, selectedAlias }) {
     (task) =>
       isAssignedStatus(task.status) &&
       subtreeTaskIds.has(task.id) &&
-      task.coordinatorAlias === selectedAlias
+      taskHasCoordinator(task, selectedAlias)
   );
 
   return { aliasOptions, visibleTasks, subtreeTaskIds };
@@ -435,7 +446,7 @@ async function main() {
   console.log(`Ingelogd als ${bestuur.alias}`);
 
   let tasksForBestuur = await getTasks(bestuur.cookie);
-  if (!tasksForBestuur.some((task) => task.coordinatorAlias === bestuur.alias && isAssignedStatus(task.status))) {
+  if (!tasksForBestuur.some((task) => taskHasCoordinator(task, bestuur.alias) && isAssignedStatus(task.status))) {
     const usersResult = await apiRequest("/api/users", { cookie: bestuur.cookie });
     assertOrThrow(usersResult.response.ok, formatApiError("Gebruikers ophalen mislukt", usersResult));
     const users = Array.isArray(usersResult.payload?.data) ? usersResult.payload.data : [];
@@ -453,7 +464,7 @@ async function main() {
           tasksForBestuur = await getTasks(bestuur.cookie);
           if (
             tasksForBestuur.some(
-              (task) => task.coordinatorAlias === bestuur.alias && isAssignedStatus(task.status)
+              (task) => taskHasCoordinator(task, bestuur.alias) && isAssignedStatus(task.status)
             )
           ) {
             console.log(`Overgeschakeld naar bestuurssessie: ${bestuur.alias}`);
@@ -467,7 +478,7 @@ async function main() {
   }
 
   assertOrThrow(
-    tasksForBestuur.some((task) => task.coordinatorAlias === bestuur.alias && isAssignedStatus(task.status)),
+    tasksForBestuur.some((task) => taskHasCoordinator(task, bestuur.alias) && isAssignedStatus(task.status)),
     "Geen toegewezen taak gevonden voor een bruikbare bestuurssessie."
   );
 
@@ -494,7 +505,7 @@ async function main() {
   try {
     const tasksBefore = tasksForBestuur;
     const parentTask = tasksBefore.find(
-      (task) => task.coordinatorAlias === bestuur.alias && isAssignedStatus(task.status)
+      (task) => taskHasCoordinator(task, bestuur.alias) && isAssignedStatus(task.status)
     );
     assertOrThrow(
       parentTask?.id,
@@ -585,7 +596,7 @@ async function main() {
       forAliasA.visibleTasks.every(
         (task) =>
           isAssignedStatus(task.status) &&
-          task.coordinatorAlias === aliasA &&
+          taskHasCoordinator(task, aliasA) &&
           forAliasA.subtreeTaskIds.has(task.id)
       ),
       "Resultaatset voor alias A bevat taken buiten de verwachte subtree/filter."

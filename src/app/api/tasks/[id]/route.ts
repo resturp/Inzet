@@ -108,7 +108,11 @@ export async function DELETE(
   const { id } = await context.params;
   const task = await prisma.task.findUnique({
     where: { id },
-    select: { id: true, title: true, parentId: true }
+    select: {
+      id: true,
+      title: true,
+      parentId: true
+    }
   });
   if (!task) {
     return NextResponse.json({ error: "Taak niet gevonden" }, { status: 404 });
@@ -117,9 +121,15 @@ export async function DELETE(
     return NextResponse.json({ error: "Root-taak kan niet worden verwijderd" }, { status: 409 });
   }
 
-  const canDelete = await canManageTaskByOwnership(sessionUser.alias, task.id);
-  if (!canDelete) {
-    return NextResponse.json({ error: "Geen rechten om deze taak te verwijderen" }, { status: 403 });
+  const [canManageTask, canManageParent] = await Promise.all([
+    canManageTaskByOwnership(sessionUser.alias, task.id),
+    canManageTaskByOwnership(sessionUser.alias, task.parentId)
+  ]);
+  if (!canManageTask || !canManageParent) {
+    return NextResponse.json(
+      { error: "Geen rechten om deze subtaak te verwijderen" },
+      { status: 403 }
+    );
   }
 
   const subtreeTaskIds = await collectSubtreeTaskIds(task.id);

@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "npm run test:rights",
+    "test:rights": "DATABASE_URL=postgresql://test:test@localhost:5432/inzet_test node --import tsx --test tests/*.test.ts",
     "docs:pdf": "node scripts/export-docs-pdf.mjs",
     "check:assigned-filter": "node scripts/check-assigned-filter.mjs",
     "dev:reset": "bash scripts/reset-dev.sh",

@@ -60,8 +60,9 @@ Na reset:
 ## Belangrijke MVP-regels die al in code zitten
 - `proposer == proposed` -> taakcoordinator beslist accept/reject.
 - `proposer != proposed` -> proposer beslist accept/reject.
-- Exact 1 coordinator per taak.
-- Subtaak zonder coordinator erft coordinator van parent.
+- Meerdere coordinators per taak mogelijk.
+- Subtaak zonder eigen coordinators erft coordinators van parent.
+- Punten worden bij meerdere coordinators gelijk verdeeld in rapportage/UI.
 - Leden sync kan eigenaarschap van verwijderde leden herverdelen naar parent-eigenaar.
 - API-afscherming via sessiecookie op alle private API-routes (middleware).
 - Uitzonderingen op API-auth: `/api/auth/request-magic-link`, `/api/auth/verify-magic-link`, `/api/health`.
