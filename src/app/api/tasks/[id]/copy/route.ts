@@ -28,7 +28,7 @@ type TaskNode = {
   description: string;
   teamName: string | null;
   parentId: string | null;
-  ownCoordinatorAlias: string | null;
+  ownCoordinatorAliases: string[];
   points: { toString: () => string };
   date: Date;
   startTime: Date | null;
@@ -36,6 +36,21 @@ type TaskNode = {
   location: string | null;
   templateId: string | null;
 };
+
+function uniqueSortedAliases(aliases: Iterable<string>): string[] {
+  return Array.from(new Set(Array.from(aliases).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right, "nl-NL")
+  );
+}
+
+function coordinatorCreateData(aliases: readonly string[]) {
+  if (aliases.length === 0) {
+    return undefined;
+  }
+  return {
+    create: aliases.map((userAlias) => ({ userAlias }))
+  };
+}
 
 export async function POST(
   request: Request,
@@ -52,21 +67,38 @@ export async function POST(
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  const canManageSource = await canManageTaskByOwnership(sessionUser.alias, sourceTaskId);
-  const canManageTarget = await canManageTaskByOwnership(
-    sessionUser.alias,
-    parsed.data.targetParentId
-  );
-  if (!canManageSource || !canManageTarget) {
+  const sourceTaskContext = await prisma.task.findUnique({
+    where: { id: sourceTaskId },
+    select: {
+      id: true,
+      parentId: true
+    }
+  });
+  if (!sourceTaskContext) {
+    return NextResponse.json({ error: "Bron-taak niet gevonden" }, { status: 404 });
+  }
+  if (!sourceTaskContext.parentId) {
     return NextResponse.json(
-      { error: "Geen rechten om deze taakboom te kopieren" },
+      { error: "Alleen subtaken kunnen worden gekopieerd" },
+      { status: 409 }
+    );
+  }
+
+  const [canManageSource, canManageSourceParent, canManageTarget] = await Promise.all([
+    canManageTaskByOwnership(sessionUser.alias, sourceTaskId),
+    canManageTaskByOwnership(sessionUser.alias, sourceTaskContext.parentId),
+    canManageTaskByOwnership(sessionUser.alias, parsed.data.targetParentId)
+  ]);
+  if (!canManageSource || !canManageSourceParent || !canManageTarget) {
+    return NextResponse.json(
+      { error: "Geen rechten om deze subtaak te kopieren" },
       { status: 403 }
     );
   }
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const [sourceTask, targetParent] = await Promise.all([
+      const [sourceTaskRaw, targetParent] = await Promise.all([
         tx.task.findUnique({
           where: { id: sourceTaskId },
           select: {
@@ -75,7 +107,9 @@ export async function POST(
             description: true,
             teamName: true,
             parentId: true,
-            ownCoordinatorAlias: true,
+            ownCoordinators: {
+              select: { userAlias: true }
+            },
             points: true,
             date: true,
             startTime: true,
@@ -90,12 +124,19 @@ export async function POST(
         })
       ]);
 
-      if (!sourceTask) {
+      if (!sourceTaskRaw) {
         throw new Error("SOURCE_NOT_FOUND");
       }
       if (!targetParent) {
         throw new Error("TARGET_NOT_FOUND");
       }
+
+      const sourceTask: TaskNode = {
+        ...sourceTaskRaw,
+        ownCoordinatorAliases: uniqueSortedAliases(
+          sourceTaskRaw.ownCoordinators.map((item) => item.userAlias)
+        )
+      };
 
       const nodes = new Map<string, TaskNode>([[sourceTask.id, sourceTask]]);
       let frontier = [sourceTask.id];
@@ -109,7 +150,9 @@ export async function POST(
             description: true,
             teamName: true,
             parentId: true,
-            ownCoordinatorAlias: true,
+            ownCoordinators: {
+              select: { userAlias: true }
+            },
             points: true,
             date: true,
             startTime: true,
@@ -121,7 +164,12 @@ export async function POST(
 
         frontier = [];
         for (const child of children) {
-          nodes.set(child.id, child);
+          nodes.set(child.id, {
+            ...child,
+            ownCoordinatorAliases: uniqueSortedAliases(
+              child.ownCoordinators.map((item) => item.userAlias)
+            )
+          });
           frontier.push(child.id);
         }
       }
@@ -149,7 +197,7 @@ export async function POST(
           teamName:
             override?.teamName === undefined ? sourceTask.teamName : override.teamName,
           parentId: targetParent.id,
-          ownCoordinatorAlias: sourceTask.ownCoordinatorAlias,
+          ownCoordinators: coordinatorCreateData(sourceTask.ownCoordinatorAliases),
           points:
             override?.points !== undefined
               ? override.points.toString()
@@ -179,7 +227,7 @@ export async function POST(
               description: child.description,
               teamName: child.teamName,
               parentId: newParentId,
-              ownCoordinatorAlias: child.ownCoordinatorAlias,
+              ownCoordinators: coordinatorCreateData(child.ownCoordinatorAliases),
               points: child.points.toString(),
               date: child.date,
               startTime: child.startTime,

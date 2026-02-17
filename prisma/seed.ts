@@ -63,8 +63,7 @@ async function ensureTask(input: EnsureTaskInput) {
         endTime: input.endTime,
         location: input.location ?? null,
         templateId: input.templateId ?? null,
-        status: input.status,
-        ownCoordinatorAlias: null
+        status: input.status
       }
     });
   }
@@ -88,8 +87,7 @@ async function ensureTask(input: EnsureTaskInput) {
         endTime: input.endTime,
         location: input.location ?? null,
         templateId: input.templateId ?? null,
-        status: input.status,
-        ownCoordinatorAlias: null
+        status: input.status
       }
     });
   }
@@ -173,6 +171,20 @@ async function main() {
     endTime: rootEnd,
     templateId: topTemplate.id,
     status: TaskStatus.TOEGEWEZEN
+  });
+
+  await prisma.taskCoordinator.upsert({
+    where: {
+      taskId_userAlias: {
+        taskId: rootTask.id,
+        userAlias: "Bestuur"
+      }
+    },
+    update: {},
+    create: {
+      taskId: rootTask.id,
+      userAlias: "Bestuur"
+    }
   });
 
   const seasonTask = await ensureTask({

@@ -2,7 +2,7 @@ import { OpenTaskStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
-import { resolveEffectiveCoordinatorAlias } from "@/lib/authorization";
+import { resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import { canActorDecideProposal } from "@/lib/rules";
 
@@ -31,12 +31,12 @@ export async function POST(
     );
   }
 
-  const effectiveCoordinatorAlias = await resolveEffectiveCoordinatorAlias(openTask.taskId);
+  const effectiveCoordinatorAliases = await resolveEffectiveCoordinatorAliases(openTask.taskId);
   const allowed = canActorDecideProposal({
     proposerAlias: openTask.proposerAlias,
     proposedAlias: openTask.proposedAlias,
     actorAlias: sessionUser.alias,
-    effectiveCoordinatorAlias: effectiveCoordinatorAlias ?? ""
+    effectiveCoordinatorAliases
   });
   if (!allowed) {
     return NextResponse.json({ error: "Geen rechten om voorstel af te wijzen" }, { status: 403 });

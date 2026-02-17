@@ -2,6 +2,7 @@ import { TaskStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
+import { canOpenTaskByOwnership } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(
@@ -18,6 +19,10 @@ export async function POST(
 
   if (!task) {
     return NextResponse.json({ error: "Taak niet gevonden" }, { status: 404 });
+  }
+  const canOpen = await canOpenTaskByOwnership(sessionUser.alias, task.id);
+  if (!canOpen) {
+    return NextResponse.json({ error: "Geen recht om deze taak te openen" }, { status: 403 });
   }
   if (task.status !== TaskStatus.BESCHIKBAAR) {
     return NextResponse.json({ error: "Taak is niet beschikbaar voor inschrijving" }, { status: 409 });

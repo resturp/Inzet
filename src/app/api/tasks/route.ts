@@ -5,8 +5,10 @@ import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import {
   canManageTaskByOwnership,
+  hasTaskPermissionFromMap,
   isRootOwner,
-  resolveEffectiveCoordinatorAliasFromMap
+  primaryCoordinatorAlias,
+  resolveEffectiveCoordinatorAliasesFromMap
 } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 
@@ -22,6 +24,12 @@ const createTaskSchema = z.object({
   location: z.string().trim().optional(),
   templateId: z.string().trim().optional()
 });
+
+function uniqueSortedAliases(aliases: Iterable<string>): string[] {
+  return Array.from(new Set(Array.from(aliases).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right, "nl-NL")
+  );
+}
 
 export async function GET() {
   const sessionUser = await getSessionUser();
@@ -44,7 +52,9 @@ export async function GET() {
           teamName: true
         }
       },
-      ownCoordinatorAlias: true,
+      ownCoordinators: {
+        select: { userAlias: true }
+      },
       points: true,
       date: true,
       startTime: true,
@@ -60,19 +70,43 @@ export async function GET() {
       {
         id: task.id,
         parentId: task.parentId,
-        ownCoordinatorAlias: task.ownCoordinatorAlias
+        ownCoordinatorAliases: uniqueSortedAliases(task.ownCoordinators.map((item) => item.userAlias))
       }
     ])
   );
 
-  const tasksWithEffectiveCoordinator = tasks.map((task) => ({
-    ...task,
-    coordinatorAlias: resolveEffectiveCoordinatorAliasFromMap(task.id, byId)
-  }));
+  const tasksWithEffectiveCoordinators = tasks.map((task) => {
+    const ownCoordinatorAliases = uniqueSortedAliases(task.ownCoordinators.map((item) => item.userAlias));
+    const coordinatorAliases = resolveEffectiveCoordinatorAliasesFromMap(task.id, byId);
+    const canRead = hasTaskPermissionFromMap(sessionUser.alias, task.id, "READ", byId);
+    const canOpen = hasTaskPermissionFromMap(sessionUser.alias, task.id, "OPEN", byId);
+    const canManage = hasTaskPermissionFromMap(sessionUser.alias, task.id, "MANAGE", byId);
+
+    return {
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      teamName: task.teamName,
+      parentId: task.parentId,
+      parent: task.parent,
+      points: task.points,
+      date: task.date,
+      startTime: task.startTime,
+      endTime: task.endTime,
+      location: task.location,
+      status: task.status,
+      ownCoordinatorAliases,
+      coordinatorAliases,
+      coordinatorAlias: primaryCoordinatorAlias(coordinatorAliases),
+      canRead,
+      canOpen,
+      canManage
+    };
+  });
 
   const ownedTaskIds = new Set(
-    tasksWithEffectiveCoordinator
-      .filter((task) => task.coordinatorAlias === sessionUser.alias)
+    tasksWithEffectiveCoordinators
+      .filter((task) => task.canManage)
       .map((task) => task.id)
   );
 
@@ -95,11 +129,11 @@ export async function GET() {
     return false;
   }
 
-  const ownedOrOpen = tasksWithEffectiveCoordinator.filter(
-    (task) => task.status === TaskStatus.BESCHIKBAAR || isOwnedBranchTask(task.id)
+  const readableOrOwnedBranch = tasksWithEffectiveCoordinators.filter(
+    (task) => task.canRead || task.canOpen || isOwnedBranchTask(task.id)
   );
 
-  return NextResponse.json({ data: ownedOrOpen }, { status: 200 });
+  return NextResponse.json({ data: readableOrOwnedBranch }, { status: 200 });
 }
 
 export async function POST(request: Request) {
@@ -113,17 +147,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  let parentTask = null;
+  let parentTask: { id: string } | null = null;
   if (parsed.data.parentId) {
-    parentTask = await prisma.task.findUnique({ where: { id: parsed.data.parentId } });
+    parentTask = await prisma.task.findUnique({
+      where: { id: parsed.data.parentId },
+      select: { id: true }
+    });
+
     if (!parentTask) {
       return NextResponse.json({ error: "Parent-taak niet gevonden" }, { status: 404 });
     }
 
-    const canCreateUnderParent = await canManageTaskByOwnership(
-      sessionUser.alias,
-      parentTask.id
-    );
+    const canCreateUnderParent = await canManageTaskByOwnership(sessionUser.alias, parentTask.id);
     if (!canCreateUnderParent) {
       return NextResponse.json(
         { error: "Alleen de coordinator van de parent-taak mag subtaken maken" },
@@ -142,7 +177,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const ownCoordinatorAlias = parentTask ? null : sessionUser.alias;
+  const ownCoordinatorAliases = parentTask ? [] : [sessionUser.alias];
 
   const task = await prisma.task.create({
     data: {
@@ -150,7 +185,12 @@ export async function POST(request: Request) {
       description: parsed.data.description,
       teamName: parsed.data.teamName,
       parentId: parsed.data.parentId,
-      ownCoordinatorAlias,
+      ownCoordinators:
+        ownCoordinatorAliases.length > 0
+          ? {
+              create: ownCoordinatorAliases.map((userAlias) => ({ userAlias }))
+            }
+          : undefined,
       points: parsed.data.points.toString(),
       date: new Date(parsed.data.date),
       startTime: parsed.data.startTime ? new Date(parsed.data.startTime) : null,
@@ -166,7 +206,7 @@ export async function POST(request: Request) {
     actionType: "TASK_CREATED",
     entityType: "Task",
     entityId: task.id,
-    payload: { parentId: task.parentId, ownCoordinatorAlias: task.ownCoordinatorAlias }
+    payload: { parentId: task.parentId, ownCoordinatorAliases }
   });
 
   return NextResponse.json({ data: task }, { status: 201 });

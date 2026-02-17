@@ -12,6 +12,8 @@ type ApiTask = {
   teamName: string | null;
   parentId: string | null;
   parent: { id: string; title: string; teamName: string | null } | null;
+  ownCoordinatorAliases: string[];
+  coordinatorAliases: string[];
   coordinatorAlias: string | null;
   points: string | number;
   status: "BESCHIKBAAR" | "TOEGEWEZEN" | "GEREED";
@@ -19,6 +21,9 @@ type ApiTask = {
   startTime: string | null;
   endTime: string;
   location: string | null;
+  canRead: boolean;
+  canOpen: boolean;
+  canManage: boolean;
 };
 
 type ApiOpenTask = {
@@ -116,6 +121,37 @@ function parseTaskPoints(value: string | number): number {
     return 0;
   }
   return parsed;
+}
+
+function uniqueSortedAliases(aliases: readonly string[]): string[] {
+  return Array.from(new Set(aliases.filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right, "nl-NL")
+  );
+}
+
+function getTaskCoordinatorAliases(task: ApiTask): string[] {
+  if (task.coordinatorAliases.length > 0) {
+    return uniqueSortedAliases(task.coordinatorAliases);
+  }
+  return task.coordinatorAlias ? [task.coordinatorAlias] : [];
+}
+
+function getTaskOwnCoordinatorAliases(task: ApiTask): string[] {
+  return uniqueSortedAliases(task.ownCoordinatorAliases);
+}
+
+function taskHasCoordinator(task: ApiTask, alias: string): boolean {
+  return getTaskCoordinatorAliases(task).includes(alias);
+}
+
+function labelForPermission(task: ApiTask): string {
+  if (task.canManage) {
+    return "beheren";
+  }
+  if (task.canOpen || task.canRead) {
+    return "lezen/openen";
+  }
+  return "geen";
 }
 
 function toDateValue(value: string | null): string {
@@ -262,8 +298,8 @@ export function TasksClient({ alias }: { alias: string }) {
   );
 
   const myCoordinatedTasks = useMemo(
-    () => sortedTasks.filter((task) => task.coordinatorAlias === alias),
-    [alias, sortedTasks]
+    () => sortedTasks.filter((task) => task.canManage),
+    [sortedTasks]
   );
 
   const tasksById = useMemo(
@@ -293,9 +329,9 @@ export function TasksClient({ alias }: { alias: string }) {
   const myAssignedRootTaskIds = useMemo(
     () =>
       sortedTasks
-        .filter((task) => task.coordinatorAlias === alias && isAssignedStatus(task.status))
+        .filter((task) => task.canManage && isAssignedStatus(task.status))
         .map((task) => task.id),
-    [alias, sortedTasks]
+    [sortedTasks]
   );
 
   const myAssignedSubtreeTaskIds = useMemo(() => {
@@ -324,8 +360,9 @@ export function TasksClient({ alias }: { alias: string }) {
       if (!myAssignedSubtreeTaskIds.has(task.id) || !isAssignedStatus(task.status)) {
         continue;
       }
-      if (task.coordinatorAlias) {
-        aliases.add(task.coordinatorAlias);
+      const coordinatorAliases = getTaskCoordinatorAliases(task);
+      for (const coordinatorAlias of coordinatorAliases) {
+        aliases.add(coordinatorAlias);
       }
     }
 
@@ -340,10 +377,10 @@ export function TasksClient({ alias }: { alias: string }) {
   const manageableTaskIds = useMemo(() => {
     return new Set(
       sortedTasks
-        .filter((task) => task.coordinatorAlias === alias)
+        .filter((task) => task.canManage)
         .map((task) => task.id)
     );
-  }, [alias, sortedTasks]);
+  }, [sortedTasks]);
 
   const manageableTasks = useMemo(
     () => sortedTasks.filter((task) => manageableTaskIds.has(task.id)),
@@ -384,7 +421,7 @@ export function TasksClient({ alias }: { alias: string }) {
           return (
             isAssignedStatus(task.status) &&
             myAssignedSubtreeTaskIds.has(task.id) &&
-            task.coordinatorAlias === assignedAliasFilter
+            taskHasCoordinator(task, assignedAliasFilter)
           );
         }
         return task.status === taskMenuView;
@@ -976,7 +1013,7 @@ export function TasksClient({ alias }: { alias: string }) {
       (candidate) =>
         candidate.id !== task.id &&
         !descendants.has(candidate.id) &&
-        candidate.coordinatorAlias === task.coordinatorAlias &&
+        manageableTaskIds.has(candidate.id) &&
         (candidate.teamName === null || candidate.teamName === task.teamName)
     );
     setMoveTargetParentId(firstCandidate?.id ?? "");
@@ -1337,6 +1374,8 @@ export function TasksClient({ alias }: { alias: string }) {
           const isMovingTask = movingTaskId === task.id;
           const isCreatingSubtask = creatingSubtaskForTaskId === task.id;
           const subtasks = childrenByParentId.get(task.id) ?? [];
+          const taskOwnCoordinatorAliases = getTaskOwnCoordinatorAliases(task);
+          const taskCoordinatorAliases = getTaskCoordinatorAliases(task);
           const taskPath = buildTaskPath(task, tasksById);
           const descendants = isMovingTask
             ? collectDescendantIds(task.id, childrenByParentId)
@@ -1346,7 +1385,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 (candidate) =>
                   candidate.id !== task.id &&
                   !descendants.has(candidate.id) &&
-                  candidate.coordinatorAlias === task.coordinatorAlias &&
+                  manageableTaskIds.has(candidate.id) &&
                   (candidate.teamName === null || candidate.teamName === task.teamName)
               )
             : [];
@@ -1358,12 +1397,18 @@ export function TasksClient({ alias }: { alias: string }) {
             : [];
           const calculatedTaskPoints =
             calculatedPointsByTaskId.get(task.id) ?? parseTaskPoints(task.points);
+          const pointsPerCoordinator =
+            taskCoordinatorAliases.length > 0
+              ? calculatedTaskPoints / taskCoordinatorAliases.length
+              : calculatedTaskPoints;
           const totalSubtaskInputPoints = subtasks.reduce(
             (sum, subtask) => sum + parseTaskPoints(subtask.points),
             0
           );
-          const canDeleteTask = canManageTask && task.parentId !== null;
-          const canRegisterTask = task.status === "BESCHIKBAAR" && !isCreatingSubtask;
+          const canManageTaskParent = task.parentId ? manageableTaskIds.has(task.parentId) : false;
+          const canMoveTask = canManageTask && canManageTaskParent;
+          const canDeleteTask = canManageTask && canManageTaskParent;
+          const canRegisterTask = task.canOpen && task.status === "BESCHIKBAAR" && !isCreatingSubtask;
           const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
           const showInlineTaskActions = canRegisterTask || canReleaseTask || canProposeTask;
 
@@ -1372,20 +1417,27 @@ export function TasksClient({ alias }: { alias: string }) {
               <h2>{task.title}</h2>
               <p className="muted">{task.description}</p>
               <p className="muted">
-                Coordinator (effectief): {task.coordinatorAlias ?? "-"} | Status:{" "}
+                Coordinatoren (effectief):{" "}
+                {taskCoordinatorAliases.length > 0 ? taskCoordinatorAliases.join(", ") : "-"} | Status:{" "}
                 {labelForStatus(task.status)}
               </p>
               <p className="muted">
+                Coordinatoren (expliciet):{" "}
+                {taskOwnCoordinatorAliases.length > 0 ? taskOwnCoordinatorAliases.join(", ") : "-"}
+              </p>
+              <p className="muted">Jouw recht: {labelForPermission(task)}</p>
+              <p className="muted">
                 Start: {new Date(task.date).toLocaleString("nl-NL")} | Einde:{" "}
                 {new Date(task.endTime).toLocaleString("nl-NL")} | Waarde (berekend):{" "}
-                {formatPoints(calculatedTaskPoints)}
+                {formatPoints(calculatedTaskPoints)} | Per coordinator:{" "}
+                {formatPoints(pointsPerCoordinator)}
               </p>
 
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <button
                   type="button"
                   onClick={() => onOpenTask(task.id)}
-                  disabled={focusedTaskId === task.id}
+                  disabled={focusedTaskId === task.id || !task.canOpen}
                 >
                   {focusedTaskId === task.id ? "Geopend" : "Open taak"}
                 </button>
@@ -1401,7 +1453,7 @@ export function TasksClient({ alias }: { alias: string }) {
                     <button
                       type="button"
                       onClick={() => onStartMove(task)}
-                      disabled={activeTaskId === task.id || isMovingTask}
+                      disabled={activeTaskId === task.id || isMovingTask || !canMoveTask}
                     >
                       {isMovingTask ? "Verplaatsen actief" : "Verplaats"}
                     </button>
@@ -1552,7 +1604,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 <div className="grid">
                   <h3>Taak verplaatsen</h3>
                   <p className="muted">
-                    Alleen parents met dezelfde coordinator en hetzelfde team of zonder team zijn toegestaan.
+                    Alleen parents waarop je beheersrechten hebt en met hetzelfde team of zonder team zijn toegestaan.
                   </p>
                   <p className="muted">Huidige context: {taskPath.join(" > ")}</p>
                   {moveCandidates.length === 0 ? (
@@ -1634,8 +1686,10 @@ export function TasksClient({ alias }: { alias: string }) {
                         >
                           {subtasks.map((subtask) => {
                             const canManageSubtask = manageableTaskIds.has(subtask.id);
+                            const canManageSubtaskFromParent = canManageTask && canManageSubtask;
                             const canDeleteSubtask =
-                              canManageSubtask && subtask.parentId !== null;
+                              canManageSubtaskFromParent && subtask.parentId !== null;
+                            const canCopySubtask = canManageSubtaskFromParent;
                             return (
                               <li
                                 key={subtask.id}
@@ -1663,10 +1717,11 @@ export function TasksClient({ alias }: { alias: string }) {
                                     type="button"
                                     style={{ minWidth: "6.25rem" }}
                                     onClick={() => onOpenTask(subtask.id)}
+                                    disabled={!subtask.canOpen}
                                   >
                                     Open
                                   </button>
-                                  {canManageSubtask ? (
+                                  {canCopySubtask ? (
                                     <button
                                       type="button"
                                       style={{ minWidth: "6.25rem" }}

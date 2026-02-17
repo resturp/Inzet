@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/api-session";
-import { canManageTaskByOwnership, resolveEffectiveCoordinatorAlias } from "@/lib/authorization";
+import { canManageTaskByOwnership } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
@@ -76,23 +76,28 @@ export async function POST(
   if (!targetParent) {
     return NextResponse.json({ error: "Doel-parent niet gevonden" }, { status: 404 });
   }
-
-  const canManage = await canManageTaskByOwnership(sessionUser.alias, task.id);
-  if (!canManage) {
-    return NextResponse.json({ error: "Geen rechten om taak te verplaatsen" }, { status: 403 });
+  if (!task.parentId) {
+    return NextResponse.json(
+      { error: "Alleen subtaken kunnen worden verplaatst" },
+      { status: 409 }
+    );
   }
 
-  // Requirement: alleen naar parent van hetzelfde lid en met hetzelfde team,
-  // of naar een parent zonder team.
-  const [taskCoordinatorAlias, targetCoordinatorAlias] = await Promise.all([
-    resolveEffectiveCoordinatorAlias(task.id),
-    resolveEffectiveCoordinatorAlias(targetParent.id)
+  const [canManageSource, canManageSourceParent, canManageTarget] = await Promise.all([
+    canManageTaskByOwnership(sessionUser.alias, task.id),
+    canManageTaskByOwnership(sessionUser.alias, task.parentId),
+    canManageTaskByOwnership(sessionUser.alias, targetParent.id)
   ]);
-
-  if (!taskCoordinatorAlias || !targetCoordinatorAlias || taskCoordinatorAlias !== targetCoordinatorAlias) {
+  if (!canManageSource || !canManageSourceParent) {
     return NextResponse.json(
-      { error: "Taak kan alleen naar een parent met dezelfde eigenaar worden verplaatst" },
-      { status: 409 }
+      { error: "Geen rechten om deze subtaak te verplaatsen" },
+      { status: 403 }
+    );
+  }
+  if (!canManageTarget) {
+    return NextResponse.json(
+      { error: "Subtaak kan alleen naar een parent waarop je beheersrechten hebt worden verplaatst" },
+      { status: 403 }
     );
   }
 

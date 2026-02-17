@@ -1,7 +1,7 @@
 import { OpenTaskStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/api-session";
-import { resolveEffectiveCoordinatorAlias } from "@/lib/authorization";
+import { resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
 import { canActorDecideProposal } from "@/lib/rules";
 import { prisma } from "@/lib/prisma";
 
@@ -28,21 +28,21 @@ export async function GET() {
   });
 
   const taskIds = Array.from(new Set(openTasks.map((item) => item.taskId)));
-  const effectiveCoordinatorByTaskId = new Map(
+  const effectiveCoordinatorsByTaskId = new Map(
     await Promise.all(
-      taskIds.map(async (taskId) => [taskId, await resolveEffectiveCoordinatorAlias(taskId)] as const)
+      taskIds.map(async (taskId) => [taskId, await resolveEffectiveCoordinatorAliases(taskId)] as const)
     )
   );
 
   const visible = openTasks
     .map((item) => {
-      const effectiveCoordinatorAlias = effectiveCoordinatorByTaskId.get(item.taskId) ?? null;
+      const effectiveCoordinatorAliases = effectiveCoordinatorsByTaskId.get(item.taskId) ?? [];
       const canDecide = item.proposedAlias
         ? canActorDecideProposal({
             proposerAlias: item.proposerAlias,
             proposedAlias: item.proposedAlias,
             actorAlias: sessionUser.alias,
-            effectiveCoordinatorAlias: effectiveCoordinatorAlias ?? ""
+            effectiveCoordinatorAliases
           })
         : false;
 
@@ -50,7 +50,7 @@ export async function GET() {
         canDecide ||
         item.proposerAlias === sessionUser.alias ||
         item.proposedAlias === sessionUser.alias ||
-        effectiveCoordinatorAlias === sessionUser.alias;
+        effectiveCoordinatorAliases.includes(sessionUser.alias);
 
       if (!isRelevant) {
         return null;
