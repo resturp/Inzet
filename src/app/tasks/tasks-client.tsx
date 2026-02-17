@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatPoints } from "@/lib/points";
+import { formatPoints, snapNearInteger } from "@/lib/points";
 import { LogoutButton } from "@/components/logout-button";
 
 type ApiTask = {
@@ -120,7 +120,7 @@ function parseTaskPoints(value: string | number): number {
   if (!Number.isFinite(parsed) || parsed < 0) {
     return 0;
   }
-  return parsed;
+  return snapNearInteger(parsed);
 }
 
 function uniqueSortedAliases(aliases: readonly string[]): string[] {
@@ -276,6 +276,7 @@ export function TasksClient({ alias }: { alias: string }) {
   const [applyParentTaskId, setApplyParentTaskId] = useState("");
   const [isTaskMenuOpen, setIsTaskMenuOpen] = useState(false);
   const [taskMenuView, setTaskMenuView] = useState<TaskMenuView>("BESCHIKBAAR");
+  const [didAutoOpenProposals, setDidAutoOpenProposals] = useState(false);
   const [assignedAliasFilter, setAssignedAliasFilter] = useState<string>(alias);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [creatingSubtaskForTaskId, setCreatingSubtaskForTaskId] = useState<string | null>(null);
@@ -430,48 +431,6 @@ export function TasksClient({ alias }: { alias: string }) {
     [assignedAliasFilter, isTaskListView, myAssignedSubtreeTaskIds, sortedTasks, taskMenuView]
   );
 
-  const calculatedPointsByTaskId = useMemo(() => {
-    const calculated = new Map<string, number>();
-    const roots = sortedTasks.filter((task) => !task.parentId || !tasksById.has(task.parentId));
-    const queue = roots.map((task) => ({
-      task,
-      calculatedPoints: parseTaskPoints(task.points)
-    }));
-    const seen = new Set<string>();
-
-    while (queue.length > 0) {
-      const current = queue.shift();
-      if (!current || seen.has(current.task.id)) {
-        continue;
-      }
-      seen.add(current.task.id);
-      calculated.set(current.task.id, current.calculatedPoints);
-
-      const children = childrenByParentId.get(current.task.id) ?? [];
-      const totalSiblingWeights = children.reduce(
-        (sum, child) => sum + parseTaskPoints(child.points),
-        0
-      );
-
-      for (const child of children) {
-        const childWeight = parseTaskPoints(child.points);
-        const childCalculatedPoints =
-          totalSiblingWeights > 0
-            ? current.calculatedPoints * (childWeight / totalSiblingWeights)
-            : 0;
-        queue.push({ task: child, calculatedPoints: childCalculatedPoints });
-      }
-    }
-
-    for (const task of sortedTasks) {
-      if (!calculated.has(task.id)) {
-        calculated.set(task.id, parseTaskPoints(task.points));
-      }
-    }
-
-    return calculated;
-  }, [childrenByParentId, sortedTasks, tasksById]);
-
   const otherAliases = useMemo(
     () => users.map((user) => user.alias).filter((candidate) => candidate !== alias),
     [users, alias]
@@ -600,6 +559,17 @@ export function TasksClient({ alias }: { alias: string }) {
       setTaskMenuView("BESCHIKBAAR");
     }
   }, [canManageTemplates, taskMenuView]);
+
+  useEffect(() => {
+    if (isLoading || didAutoOpenProposals) {
+      return;
+    }
+    const hasIncomingProposal = openTasks.some((item) => item.proposedAlias === alias);
+    if (hasIncomingProposal) {
+      setTaskMenuView("OPEN_VOORSTELLEN");
+    }
+    setDidAutoOpenProposals(true);
+  }, [alias, didAutoOpenProposals, isLoading, openTasks]);
 
   useEffect(() => {
     if (!isTaskListView && focusedTaskId) {
@@ -1377,6 +1347,8 @@ export function TasksClient({ alias }: { alias: string }) {
           const taskOwnCoordinatorAliases = getTaskOwnCoordinatorAliases(task);
           const taskCoordinatorAliases = getTaskCoordinatorAliases(task);
           const taskPath = buildTaskPath(task, tasksById);
+          const taskChain = buildTaskChain(task, tasksById);
+          const parentTaskChain = taskChain.slice(0, -1);
           const descendants = isMovingTask
             ? collectDescendantIds(task.id, childrenByParentId)
             : new Set<string>();
@@ -1395,78 +1367,158 @@ export function TasksClient({ alias }: { alias: string }) {
           const nextPath = selectedMoveParent
             ? [...buildTaskPath(selectedMoveParent, tasksById), task.title]
             : [];
-          const calculatedTaskPoints =
-            calculatedPointsByTaskId.get(task.id) ?? parseTaskPoints(task.points);
-          const pointsPerCoordinator =
-            taskCoordinatorAliases.length > 0
-              ? calculatedTaskPoints / taskCoordinatorAliases.length
-              : calculatedTaskPoints;
-          const totalSubtaskInputPoints = subtasks.reduce(
+          const taskPoints = parseTaskPoints(task.points);
+          const totalSubtaskPoints = subtasks.reduce(
             (sum, subtask) => sum + parseTaskPoints(subtask.points),
             0
           );
+          const availableTaskPoints = taskPoints - totalSubtaskPoints;
+          const pointsPerCoordinator =
+            taskCoordinatorAliases.length > 0
+              ? availableTaskPoints / taskCoordinatorAliases.length
+              : availableTaskPoints;
           const canManageTaskParent = task.parentId ? manageableTaskIds.has(task.parentId) : false;
-          const canMoveTask = canManageTask && canManageTaskParent;
-          const canDeleteTask = canManageTask && canManageTaskParent;
+          const canMoveTask = canManageTaskParent;
+          const canDeleteTask = canManageTaskParent;
           const canRegisterTask = task.canOpen && task.status === "BESCHIKBAAR" && !isCreatingSubtask;
           const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
           const showInlineTaskActions = canRegisterTask || canReleaseTask || canProposeTask;
+          const isOpenTasksListView = taskMenuView === "BESCHIKBAAR" && !focusedTaskId;
 
           return (
             <article key={task.id} className="card">
-              <h2>{task.title}</h2>
+              <h2>
+                {parentTaskChain.length > 0 ? (
+                  <span style={{ fontSize: "0.95rem", fontWeight: 400 }}>
+                    {parentTaskChain.map((node, index) => (
+                      <span key={node.id}>
+                        <button
+                          type="button"
+                          onClick={() => onOpenTask(node.id)}
+                          style={{
+                            background: "transparent",
+                            color: "inherit",
+                            padding: 0,
+                            borderRadius: 0,
+                            textDecoration: "underline"
+                          }}
+                        >
+                          {node.title}
+                        </button>
+                        {index < parentTaskChain.length - 1 ? " > " : ""}
+                      </span>
+                    ))}
+                    {" > "}
+                  </span>
+                ) : null}
+                {task.title}
+              </h2>
               <p className="muted">{task.description}</p>
               <p className="muted">
-                Coordinatoren (effectief):{" "}
+                Coordinatoren (expliciet):{" "}
+                {taskOwnCoordinatorAliases.length > 0 ? taskOwnCoordinatorAliases.join(", ") : "-"}{" "}
+                | Coordinatoren (effectief):{" "}
                 {taskCoordinatorAliases.length > 0 ? taskCoordinatorAliases.join(", ") : "-"} | Status:{" "}
                 {labelForStatus(task.status)}
-              </p>
-              <p className="muted">
-                Coordinatoren (expliciet):{" "}
-                {taskOwnCoordinatorAliases.length > 0 ? taskOwnCoordinatorAliases.join(", ") : "-"}
               </p>
               <p className="muted">Jouw recht: {labelForPermission(task)}</p>
               <p className="muted">
                 Start: {new Date(task.date).toLocaleString("nl-NL")} | Einde:{" "}
-                {new Date(task.endTime).toLocaleString("nl-NL")} | Waarde (berekend):{" "}
-                {formatPoints(calculatedTaskPoints)} | Per coordinator:{" "}
-                {formatPoints(pointsPerCoordinator)}
+                {new Date(task.endTime).toLocaleString("nl-NL")}
               </p>
+              {isOpenTasksListView ? (
+                <p className="muted">Per coordinator: {formatPoints(pointsPerCoordinator)}</p>
+              ) : (
+                <div
+                  style={{
+                    marginTop: "0.25rem",
+                    display: "grid",
+                    rowGap: "0.15rem",
+                    justifyItems: "end",
+                    textAlign: "right"
+                  }}
+                >
+                  <p className="muted" style={{ margin: 0 }}>
+                    Punten (eigen): {formatPoints(taskPoints)}
+                  </p>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Uitgegeven subtaken: {formatPoints(totalSubtaskPoints)}
+                  </p>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Beschikbaar: {formatPoints(availableTaskPoints)}
+                  </p>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Per coordinator: {formatPoints(pointsPerCoordinator)}
+                  </p>
+                </div>
+              )}
 
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "inline-grid",
+                  gridAutoFlow: "column",
+                  columnGap: "0.5rem",
+                  alignItems: "center",
+                  width: "max-content",
+                  maxWidth: "100%",
+                  overflowX: "auto"
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => onOpenTask(task.id)}
                   disabled={focusedTaskId === task.id || !task.canOpen}
+                  style={{ whiteSpace: "nowrap" }}
                 >
-                  {focusedTaskId === task.id ? "Geopend" : "Open taak"}
+                  {focusedTaskId === task.id ? "Geopend" : "Open"}
                 </button>
                 {canManageTask ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onStartEdit(task)}
-                      disabled={activeTaskId === task.id || isEditingTask}
-                    >
-                      {isEditingTask ? "Bewerken actief" : "Bewerk"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onStartMove(task)}
-                      disabled={activeTaskId === task.id || isMovingTask || !canMoveTask}
-                    >
-                      {isMovingTask ? "Verplaatsen actief" : "Verplaats"}
-                    </button>
-                    {canDeleteTask ? (
-                      <button
-                        type="button"
-                        onClick={() => onDeleteTask(task)}
-                        disabled={activeTaskId === task.id}
-                      >
-                        {activeTaskId === task.id ? "Verwijderen..." : "Verwijder"}
-                      </button>
-                    ) : null}
-                  </>
+                  <button
+                    type="button"
+                    onClick={() => onStartEdit(task)}
+                    disabled={activeTaskId === task.id || isEditingTask}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {isEditingTask ? "Bewerken actief" : "Bewerk"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onStartMove(task)}
+                  disabled={activeTaskId === task.id || isMovingTask || !canMoveTask}
+                  style={{ whiteSpace: "nowrap" }}
+                >
+                  {isMovingTask ? "Verplaatsen actief" : "Verplaats"}
+                </button>
+                {canDeleteTask ? (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteTask(task)}
+                    disabled={activeTaskId === task.id}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {activeTaskId === task.id ? "Verwijderen..." : "Verwijder"}
+                  </button>
+                ) : null}
+                {isOpenTasksListView && canRegisterTask ? (
+                  <button
+                    type="button"
+                    onClick={() => onRegister(task.id)}
+                    disabled={activeTaskId === task.id}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {activeTaskId === task.id ? "Inschrijven..." : "Schrijf in"}
+                  </button>
+                ) : null}
+                {isOpenTasksListView && canProposeTask ? (
+                  <button
+                    type="button"
+                    onClick={() => onStartPropose(task)}
+                    disabled={activeTaskId === task.id}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {activeTaskId === task.id ? "Voorstellen..." : "Stel voor"}
+                  </button>
                 ) : null}
               </div>
 
@@ -1635,7 +1687,7 @@ export function TasksClient({ alias }: { alias: string }) {
                         onClick={() => onMoveTask(task.id)}
                         disabled={activeTaskId === task.id || !moveTargetParentId}
                       >
-                        {activeTaskId === task.id ? "Verplaatsen..." : "Verplaats taak"}
+                        {activeTaskId === task.id ? "Verplaatsen..." : "Verplaats"}
                       </button>
                     </>
                   )}
@@ -1645,7 +1697,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 </div>
               ) : null}
 
-              {isEditingTask || isMovingTask ? null : (
+              {isEditingTask || isMovingTask || isOpenTasksListView ? null : (
                 <>
                   <div className="grid" style={{ gap: "0.5rem" }}>
                     <div
@@ -1685,8 +1737,7 @@ export function TasksClient({ alias }: { alias: string }) {
                           }}
                         >
                           {subtasks.map((subtask) => {
-                            const canManageSubtask = manageableTaskIds.has(subtask.id);
-                            const canManageSubtaskFromParent = canManageTask && canManageSubtask;
+                            const canManageSubtaskFromParent = canManageTask;
                             const canDeleteSubtask =
                               canManageSubtaskFromParent && subtask.parentId !== null;
                             const canCopySubtask = canManageSubtaskFromParent;
@@ -1701,7 +1752,7 @@ export function TasksClient({ alias }: { alias: string }) {
                                 }}
                               >
                                 <span>
-                                  • {subtask.title} | {labelForStatus(subtask.status)} | Invoerpunten:{" "}
+                                  • {subtask.title} | {labelForStatus(subtask.status)} | Punten:{" "}
                                   {formatPoints(parseTaskPoints(subtask.points))} |{" "}
                                   {new Date(subtask.date).toLocaleDateString("nl-NL")}
                                 </span>
@@ -1747,7 +1798,7 @@ export function TasksClient({ alias }: { alias: string }) {
                           })}
                         </ul>
                         <p className="muted">
-                          Totaal invoerpunten subtaken: {formatPoints(totalSubtaskInputPoints)}
+                          Totaal punten subtaken: {formatPoints(totalSubtaskPoints)}
                         </p>
                       </>
                     )}
@@ -1890,7 +1941,7 @@ export function TasksClient({ alias }: { alias: string }) {
                             {activeTaskId === task.id
                               ? "Opslaan..."
                               : subtaskFormMode === "copy"
-                                ? "Kopieer taak"
+                                ? "Kopieer"
                                 : "Subtaak aanmaken"}
                           </button>
                           <button
@@ -1908,7 +1959,7 @@ export function TasksClient({ alias }: { alias: string }) {
                               disabled={activeTaskId === task.id}
                               style={{ whiteSpace: "nowrap" }}
                             >
-                              {activeTaskId === task.id ? "Inschrijven..." : "Schrijf in op taak"}
+                              {activeTaskId === task.id ? "Inschrijven..." : "Schrijf in"}
                             </button>
                           ) : null}
                         </div>
@@ -1916,7 +1967,7 @@ export function TasksClient({ alias }: { alias: string }) {
                     ) : null}
                   </div>
 
-                  {showInlineTaskActions ? (
+                  {!isOpenTasksListView && showInlineTaskActions ? (
                     <div
                       style={{
                         display: "inline-grid",
@@ -1935,7 +1986,7 @@ export function TasksClient({ alias }: { alias: string }) {
                           disabled={activeTaskId === task.id}
                           style={{ whiteSpace: "nowrap" }}
                         >
-                          {activeTaskId === task.id ? "Inschrijven..." : "Schrijf in op taak"}
+                          {activeTaskId === task.id ? "Inschrijven..." : "Schrijf in"}
                         </button>
                       ) : null}
 
@@ -1946,7 +1997,7 @@ export function TasksClient({ alias }: { alias: string }) {
                           disabled={activeTaskId === task.id}
                           style={{ whiteSpace: "nowrap" }}
                         >
-                          {activeTaskId === task.id ? "Beschikbaar stellen..." : "Stel taak beschikbaar"}
+                          {activeTaskId === task.id ? "Beschikbaar stellen..." : "Stel beschikbaar"}
                         </button>
                       ) : null}
 
@@ -1957,7 +2008,7 @@ export function TasksClient({ alias }: { alias: string }) {
                           disabled={activeTaskId === task.id}
                           style={{ whiteSpace: "nowrap" }}
                         >
-                          {activeTaskId === task.id ? "Voorstellen..." : "Stel taak voor aan lid"}
+                          {activeTaskId === task.id ? "Voorstellen..." : "Stel voor"}
                         </button>
                       ) : null}
                     </div>
