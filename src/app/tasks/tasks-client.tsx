@@ -1387,32 +1387,29 @@ export function TasksClient({ alias }: { alias: string }) {
 
           return (
             <article key={task.id} className="card">
-              <h2>
-                {parentTaskChain.length > 0 ? (
-                  <span style={{ fontSize: "0.95rem", fontWeight: 400 }}>
-                    {parentTaskChain.map((node, index) => (
-                      <span key={node.id}>
-                        <button
-                          type="button"
-                          onClick={() => onOpenTask(node.id)}
-                          style={{
-                            background: "transparent",
-                            color: "inherit",
-                            padding: 0,
-                            borderRadius: 0,
-                            textDecoration: "underline"
-                          }}
-                        >
-                          {node.title}
-                        </button>
-                        {index < parentTaskChain.length - 1 ? " > " : ""}
-                      </span>
-                    ))}
-                    {" > "}
-                  </span>
-                ) : null}
-                {task.title}
-              </h2>
+              <h2>{task.title}</h2>
+              {parentTaskChain.length > 0 ? (
+                <p className="muted" style={{ marginTop: "-0.35rem" }}>
+                  {parentTaskChain.map((node, index) => (
+                    <span key={node.id}>
+                      <button
+                        type="button"
+                        onClick={() => onOpenTask(node.id)}
+                        style={{
+                          background: "transparent",
+                          color: "inherit",
+                          padding: 0,
+                          borderRadius: 0,
+                          textDecoration: "underline"
+                        }}
+                      >
+                        {node.title}
+                      </button>
+                      {index < parentTaskChain.length - 1 ? " > " : ""}
+                    </span>
+                  ))}
+                </p>
+              ) : null}
               <p className="muted">{task.description}</p>
               <p className="muted">
                 Coordinatoren (expliciet):{" "}
