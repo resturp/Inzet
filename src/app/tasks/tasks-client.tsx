@@ -1406,8 +1406,8 @@ export function TasksClient({ alias }: { alias: string }) {
             0
           );
           const canManageTaskParent = task.parentId ? manageableTaskIds.has(task.parentId) : false;
-          const canMoveTask = canManageTask && canManageTaskParent;
-          const canDeleteTask = canManageTask && canManageTaskParent;
+          const canMoveTask = canManageTaskParent;
+          const canDeleteTask = canManageTaskParent;
           const canRegisterTask = task.canOpen && task.status === "BESCHIKBAAR" && !isCreatingSubtask;
           const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
           const showInlineTaskActions = canRegisterTask || canReleaseTask || canProposeTask;
@@ -1442,31 +1442,29 @@ export function TasksClient({ alias }: { alias: string }) {
                   {focusedTaskId === task.id ? "Geopend" : "Open taak"}
                 </button>
                 {canManageTask ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onStartEdit(task)}
-                      disabled={activeTaskId === task.id || isEditingTask}
-                    >
-                      {isEditingTask ? "Bewerken actief" : "Bewerk"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onStartMove(task)}
-                      disabled={activeTaskId === task.id || isMovingTask || !canMoveTask}
-                    >
-                      {isMovingTask ? "Verplaatsen actief" : "Verplaats"}
-                    </button>
-                    {canDeleteTask ? (
-                      <button
-                        type="button"
-                        onClick={() => onDeleteTask(task)}
-                        disabled={activeTaskId === task.id}
-                      >
-                        {activeTaskId === task.id ? "Verwijderen..." : "Verwijder"}
-                      </button>
-                    ) : null}
-                  </>
+                  <button
+                    type="button"
+                    onClick={() => onStartEdit(task)}
+                    disabled={activeTaskId === task.id || isEditingTask}
+                  >
+                    {isEditingTask ? "Bewerken actief" : "Bewerk"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onStartMove(task)}
+                  disabled={activeTaskId === task.id || isMovingTask || !canMoveTask}
+                >
+                  {isMovingTask ? "Verplaatsen actief" : "Verplaats"}
+                </button>
+                {canDeleteTask ? (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteTask(task)}
+                    disabled={activeTaskId === task.id}
+                  >
+                    {activeTaskId === task.id ? "Verwijderen..." : "Verwijder"}
+                  </button>
                 ) : null}
               </div>
 
@@ -1685,8 +1683,7 @@ export function TasksClient({ alias }: { alias: string }) {
                           }}
                         >
                           {subtasks.map((subtask) => {
-                            const canManageSubtask = manageableTaskIds.has(subtask.id);
-                            const canManageSubtaskFromParent = canManageTask && canManageSubtask;
+                            const canManageSubtaskFromParent = canManageTask;
                             const canDeleteSubtask =
                               canManageSubtaskFromParent && subtask.parentId !== null;
                             const canCopySubtask = canManageSubtaskFromParent;

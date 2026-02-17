@@ -121,11 +121,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Root-taak kan niet worden verwijderd" }, { status: 409 });
   }
 
-  const [canManageTask, canManageParent] = await Promise.all([
-    canManageTaskByOwnership(sessionUser.alias, task.id),
-    canManageTaskByOwnership(sessionUser.alias, task.parentId)
-  ]);
-  if (!canManageTask || !canManageParent) {
+  const canManageParent = await canManageTaskByOwnership(sessionUser.alias, task.parentId);
+  if (!canManageParent) {
     return NextResponse.json(
       { error: "Geen rechten om deze subtaak te verwijderen" },
       { status: 403 }

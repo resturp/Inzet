@@ -84,12 +84,11 @@ export async function POST(
     );
   }
 
-  const [canManageSource, canManageSourceParent, canManageTarget] = await Promise.all([
-    canManageTaskByOwnership(sessionUser.alias, sourceTaskId),
+  const [canManageSourceParent, canManageTarget] = await Promise.all([
     canManageTaskByOwnership(sessionUser.alias, sourceTaskContext.parentId),
     canManageTaskByOwnership(sessionUser.alias, parsed.data.targetParentId)
   ]);
-  if (!canManageSource || !canManageSourceParent || !canManageTarget) {
+  if (!canManageSourceParent || !canManageTarget) {
     return NextResponse.json(
       { error: "Geen rechten om deze subtaak te kopieren" },
       { status: 403 }

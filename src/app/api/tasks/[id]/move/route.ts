@@ -83,12 +83,11 @@ export async function POST(
     );
   }
 
-  const [canManageSource, canManageSourceParent, canManageTarget] = await Promise.all([
-    canManageTaskByOwnership(sessionUser.alias, task.id),
+  const [canManageSourceParent, canManageTarget] = await Promise.all([
     canManageTaskByOwnership(sessionUser.alias, task.parentId),
     canManageTaskByOwnership(sessionUser.alias, targetParent.id)
   ]);
-  if (!canManageSource || !canManageSourceParent) {
+  if (!canManageSourceParent) {
     return NextResponse.json(
       { error: "Geen rechten om deze subtaak te verplaatsen" },
       { status: 403 }
