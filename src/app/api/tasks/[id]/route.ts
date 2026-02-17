@@ -4,6 +4,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import { canManageTaskByOwnership } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import { pointsToStorage } from "@/lib/task-points";
 
 const patchTaskSchema = z.object({
   title: z.string().trim().min(2).optional(),
@@ -57,32 +58,36 @@ export async function PATCH(
     return NextResponse.json({ error: "Geen rechten op deze taak" }, { status: 403 });
   }
 
-  const updated = await prisma.task.update({
+  const baseUpdateData = {
+    title: parsed.data.title,
+    description: parsed.data.description,
+    teamName:
+      parsed.data.teamName === undefined
+        ? undefined
+        : parsed.data.teamName
+          ? parsed.data.teamName
+          : null,
+    date: parsed.data.date ? new Date(parsed.data.date) : undefined,
+    startTime:
+      parsed.data.startTime === undefined
+        ? undefined
+        : parsed.data.startTime
+          ? new Date(parsed.data.startTime)
+          : null,
+    endTime: parsed.data.endTime ? new Date(parsed.data.endTime) : undefined,
+    location:
+      parsed.data.location === undefined
+        ? undefined
+        : parsed.data.location
+          ? parsed.data.location
+          : null
+  };
+
+  const updatedTask = await prisma.task.update({
     where: { id },
     data: {
-      title: parsed.data.title,
-      description: parsed.data.description,
-      teamName:
-        parsed.data.teamName === undefined
-          ? undefined
-          : parsed.data.teamName
-            ? parsed.data.teamName
-            : null,
-      points: parsed.data.points?.toString(),
-      date: parsed.data.date ? new Date(parsed.data.date) : undefined,
-      startTime:
-        parsed.data.startTime === undefined
-          ? undefined
-          : parsed.data.startTime
-            ? new Date(parsed.data.startTime)
-            : null,
-      endTime: parsed.data.endTime ? new Date(parsed.data.endTime) : undefined,
-      location:
-        parsed.data.location === undefined
-          ? undefined
-          : parsed.data.location
-            ? parsed.data.location
-            : null
+      ...baseUpdateData,
+      points: parsed.data.points === undefined ? undefined : pointsToStorage(parsed.data.points)
     }
   });
 
@@ -90,10 +95,10 @@ export async function PATCH(
     actorAlias: sessionUser.alias,
     actionType: "TASK_UPDATED",
     entityType: "Task",
-    entityId: updated.id
+    entityId: updatedTask.id
   });
 
-  return NextResponse.json({ data: updated }, { status: 200 });
+  return NextResponse.json({ data: updatedTask }, { status: 200 });
 }
 
 export async function DELETE(
@@ -131,14 +136,14 @@ export async function DELETE(
 
   const subtreeTaskIds = await collectSubtreeTaskIds(task.id);
 
-  await prisma.$transaction([
-    prisma.openTask.deleteMany({
+  await prisma.$transaction(async (tx) => {
+    await tx.openTask.deleteMany({
       where: { taskId: { in: subtreeTaskIds } }
-    }),
-    prisma.task.deleteMany({
+    });
+    await tx.task.deleteMany({
       where: { id: { in: subtreeTaskIds } }
-    })
-  ]);
+    });
+  });
 
   await writeAuditLog({
     actorAlias: sessionUser.alias,

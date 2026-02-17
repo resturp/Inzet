@@ -82,6 +82,12 @@ export async function POST(
       { status: 409 }
     );
   }
+  if (task.parentId === targetParent.id) {
+    return NextResponse.json(
+      { error: "Subtaak staat al onder deze parent" },
+      { status: 409 }
+    );
+  }
 
   const [canManageSourceParent, canManageTarget] = await Promise.all([
     canManageTaskByOwnership(sessionUser.alias, task.parentId),

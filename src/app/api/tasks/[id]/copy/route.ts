@@ -5,6 +5,13 @@ import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import { canManageTaskByOwnership } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import {
+  allocatePointsFromParent,
+  parseStoredPoints,
+  pointsToStorage,
+  remainingOwnPoints,
+  sumStoredPoints
+} from "@/lib/task-points";
 
 const copySchema = z.object({
   targetParentId: z.string().trim().min(1),
@@ -119,7 +126,7 @@ export async function POST(
         }),
         tx.task.findUnique({
           where: { id: parsed.data.targetParentId },
-          select: { id: true }
+          select: { id: true, points: true }
         })
       ]);
 
@@ -188,6 +195,28 @@ export async function POST(
 
       const override = parsed.data.rootOverride;
       const createdIds: string[] = [];
+      const requestedRootPoints =
+        override?.points !== undefined ? override.points : parseStoredPoints(sourceTask.points);
+      const rootDirectChildren = childrenByParent.get(sourceTask.id) ?? [];
+      const requestedRootChildPoints = sumStoredPoints(
+        rootDirectChildren.map((child) => child.points)
+      );
+      const targetDirectSubtasks = await tx.task.findMany({
+        where: { parentId: targetParent.id },
+        select: { points: true }
+      });
+      const targetAvailablePoints = remainingOwnPoints({
+        ownPoints: parseStoredPoints(targetParent.points),
+        issuedToDirectSubtasks: sumStoredPoints(
+          targetDirectSubtasks.map((subtask) => subtask.points)
+        )
+      });
+      const rootAllocation = allocatePointsFromParent({
+        availablePoints: targetAvailablePoints,
+        requestedPoints: requestedRootPoints
+      });
+      const shouldZeroSubtree =
+        rootAllocation.zeroed || requestedRootChildPoints > requestedRootPoints;
 
       const rootCopy = await tx.task.create({
         data: {
@@ -197,10 +226,7 @@ export async function POST(
             override?.teamName === undefined ? sourceTask.teamName : override.teamName,
           parentId: targetParent.id,
           ownCoordinators: coordinatorCreateData(sourceTask.ownCoordinatorAliases),
-          points:
-            override?.points !== undefined
-              ? override.points.toString()
-              : sourceTask.points.toString(),
+          points: shouldZeroSubtree ? "0" : pointsToStorage(requestedRootPoints),
           date: override?.date ? new Date(override.date) : sourceTask.date,
           startTime:
             override?.startTime === undefined
@@ -227,7 +253,7 @@ export async function POST(
               teamName: child.teamName,
               parentId: newParentId,
               ownCoordinators: coordinatorCreateData(child.ownCoordinatorAliases),
-              points: child.points.toString(),
+              points: shouldZeroSubtree ? "0" : child.points.toString(),
               date: child.date,
               startTime: child.startTime,
               endTime: child.endTime,
@@ -245,7 +271,8 @@ export async function POST(
 
       return {
         rootId: rootCopy.id,
-        createdCount: createdIds.length
+        createdCount: createdIds.length,
+        pointsZeroed: shouldZeroSubtree
       };
     });
 

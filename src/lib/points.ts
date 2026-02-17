@@ -9,6 +9,14 @@ export function calculateSubtaskPoints(
   return parentPoints * (subtaskWeight / totalSiblingWeight);
 }
 
+export function snapNearInteger(points: number): number {
+  const nearestInteger = Math.round(points);
+  if (Math.abs(points - nearestInteger) <= 0.05) {
+    return nearestInteger;
+  }
+  return points;
+}
+
 export function formatPoints(points: number): string {
-  return points.toFixed(2);
+  return snapNearInteger(points).toFixed(2);
 }

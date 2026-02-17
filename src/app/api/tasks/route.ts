@@ -11,6 +11,13 @@ import {
   resolveEffectiveCoordinatorAliasesFromMap
 } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import {
+  allocatePointsFromParent,
+  parseStoredPoints,
+  pointsToStorage,
+  remainingOwnPoints,
+  sumStoredPoints
+} from "@/lib/task-points";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2),
@@ -147,11 +154,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  let parentTask: { id: string } | null = null;
+  let parentTask: { id: string; points: { toString: () => string } } | null = null;
   if (parsed.data.parentId) {
     parentTask = await prisma.task.findUnique({
       where: { id: parsed.data.parentId },
-      select: { id: true }
+      select: { id: true, points: true }
     });
 
     if (!parentTask) {
@@ -179,26 +186,47 @@ export async function POST(request: Request) {
 
   const ownCoordinatorAliases = parentTask ? [] : [sessionUser.alias];
 
-  const task = await prisma.task.create({
-    data: {
-      title: parsed.data.title,
-      description: parsed.data.description,
-      teamName: parsed.data.teamName,
-      parentId: parsed.data.parentId,
-      ownCoordinators:
-        ownCoordinatorAliases.length > 0
-          ? {
-              create: ownCoordinatorAliases.map((userAlias) => ({ userAlias }))
-            }
-          : undefined,
-      points: parsed.data.points.toString(),
-      date: new Date(parsed.data.date),
-      startTime: parsed.data.startTime ? new Date(parsed.data.startTime) : null,
-      endTime: new Date(parsed.data.endTime),
-      location: parsed.data.location,
-      templateId: parsed.data.templateId,
-      status: TaskStatus.BESCHIKBAAR
+  const task = await prisma.$transaction(async (tx) => {
+    let pointsToAssign = parsed.data.points;
+
+    if (parentTask) {
+      const directSubtasks = await tx.task.findMany({
+        where: { parentId: parentTask.id },
+        select: { points: true }
+      });
+      const parentAvailablePoints = remainingOwnPoints({
+        ownPoints: parseStoredPoints(parentTask.points),
+        issuedToDirectSubtasks: sumStoredPoints(directSubtasks.map((subtask) => subtask.points))
+      });
+      const allocation = allocatePointsFromParent({
+        availablePoints: parentAvailablePoints,
+        requestedPoints: parsed.data.points
+      });
+
+      pointsToAssign = allocation.assignedPoints;
     }
+
+    return tx.task.create({
+      data: {
+        title: parsed.data.title,
+        description: parsed.data.description,
+        teamName: parsed.data.teamName,
+        parentId: parsed.data.parentId,
+        ownCoordinators:
+          ownCoordinatorAliases.length > 0
+            ? {
+                create: ownCoordinatorAliases.map((userAlias) => ({ userAlias }))
+              }
+            : undefined,
+        points: pointsToStorage(pointsToAssign),
+        date: new Date(parsed.data.date),
+        startTime: parsed.data.startTime ? new Date(parsed.data.startTime) : null,
+        endTime: new Date(parsed.data.endTime),
+        location: parsed.data.location,
+        templateId: parsed.data.templateId,
+        status: TaskStatus.BESCHIKBAAR
+      }
+    });
   });
 
   await writeAuditLog({
