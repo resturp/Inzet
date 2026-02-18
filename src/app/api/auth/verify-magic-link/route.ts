@@ -9,7 +9,7 @@ import { SESSION_COOKIE_NAME } from "@/lib/session";
 const verifySchema = z.object({
   alias: z.string().trim().min(1),
   token: z.string().trim().min(20),
-  setPassword: z.string().min(8)
+  setPassword: z.string().min(8).optional()
 });
 
 export async function POST(request: Request) {
@@ -39,10 +39,31 @@ export async function POST(request: Request) {
     data: { usedAt: new Date() }
   });
 
-  const passwordHash = await hashPassword(parsed.data.setPassword);
+  const user = await prisma.user.findUnique({
+    where: { alias: parsed.data.alias },
+    select: { alias: true, passwordHash: true }
+  });
+  if (!user) {
+    return NextResponse.json({ error: "Gebruiker niet gevonden" }, { status: 404 });
+  }
+
+  if (!parsed.data.setPassword && !user.passwordHash) {
+    return NextResponse.json(
+      { error: "Wachtwoord instellen is verplicht voor eerste activatie" },
+      { status: 400 }
+    );
+  }
+
+  const passwordHash = parsed.data.setPassword
+    ? await hashPassword(parsed.data.setPassword)
+    : undefined;
+
   await prisma.user.update({
     where: { alias: parsed.data.alias },
-    data: { passwordHash }
+    data: {
+      passwordHash,
+      emailVerifiedAt: new Date()
+    }
   });
 
   await ensureGovernanceBootstrap(parsed.data.alias);

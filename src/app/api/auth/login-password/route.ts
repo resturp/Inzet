@@ -6,8 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 
 const loginSchema = z.object({
-  alias: z.string().trim().min(1),
-  password: z.string().min(8)
+  login: z.string().trim().min(1),
+  password: z.string().min(1)
 });
 
 export async function POST(request: Request) {
@@ -16,14 +16,54 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { alias: parsed.data.alias } });
+  const login = parsed.data.login.trim();
+  const isEmailLogin = login.includes("@");
+
+  const user = isEmailLogin
+    ? await prisma.user.findUnique({ where: { email: login } })
+    : await prisma.user.findUnique({ where: { alias: login } });
+
   if (!user || !user.isActive || !user.passwordHash) {
-    return NextResponse.json({ error: "Alias of wachtwoord is onjuist" }, { status: 401 });
+    return NextResponse.json({ error: "Inloggegevens zijn onjuist" }, { status: 401 });
   }
 
   const ok = await verifyPassword(parsed.data.password, user.passwordHash);
   if (!ok) {
-    return NextResponse.json({ error: "Alias of wachtwoord is onjuist" }, { status: 401 });
+    return NextResponse.json({ error: "Inloggegevens zijn onjuist" }, { status: 401 });
+  }
+
+  if (isEmailLogin) {
+    if (!user.emailVerifiedAt) {
+      return NextResponse.json(
+        {
+          error: "Je e-mailadres is nog niet bevestigd. Controleer je mailbox voor de magic link.",
+          code: "EMAIL_NOT_VERIFIED",
+          alias: user.alias,
+          email: user.email
+        },
+        { status: 428 }
+      );
+    }
+  } else {
+    if (!user.email) {
+      return NextResponse.json(
+        {
+          error: "Vul eerst je e-mailadres in en bevestig via magic link.",
+          code: "EMAIL_REQUIRED",
+          alias: user.alias
+        },
+        { status: 428 }
+      );
+    }
+    return NextResponse.json(
+      {
+        error: "Gebruik je e-mailadres om in te loggen.",
+        code: "USE_EMAIL_LOGIN",
+        alias: user.alias,
+        email: user.email
+      },
+      { status: 409 }
+    );
   }
 
   await ensureGovernanceBootstrap(user.alias);

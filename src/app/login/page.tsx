@@ -7,6 +7,9 @@ type LoginMode = "password" | "request" | "magic";
 type ApiPayload = {
   message?: string;
   error?: string;
+  code?: "EMAIL_REQUIRED" | "USE_EMAIL_LOGIN" | "EMAIL_NOT_VERIFIED";
+  alias?: string;
+  email?: string;
   debugAlias?: string;
   debugToken?: string;
   debugMagicLink?: string;
@@ -29,9 +32,10 @@ async function readApiPayload(response: Response): Promise<ApiPayload> {
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<LoginMode>("password");
-  const [bondsnummer, setBondsnummer] = useState("");
-  const [requestedAlias, setRequestedAlias] = useState("");
   const [email, setEmail] = useState("");
+  const [loginId, setLoginId] = useState("");
+  const [pendingAlias, setPendingAlias] = useState("");
+  const [pendingPassword, setPendingPassword] = useState("");
   const [alias, setAlias] = useState("");
   const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
@@ -87,10 +91,31 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/login-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ alias, password })
+        body: JSON.stringify({ login: loginId, password })
       });
       const payload = await readApiPayload(response);
       if (!response.ok) {
+        const code = payload.code;
+        if (code === "EMAIL_REQUIRED" || code === "EMAIL_NOT_VERIFIED") {
+          const resolvedAlias = payload.alias ?? loginId;
+          setPendingAlias(resolvedAlias);
+          setPendingPassword(password);
+          setAlias(resolvedAlias);
+          setEmail(payload.email ?? "");
+          setMode("request");
+          setStatus(
+            payload.error ??
+              "Vul je e-mailadres in en bevestig met de magic link om je account te activeren."
+          );
+          return;
+        }
+        if (code === "USE_EMAIL_LOGIN") {
+          if (payload.email) {
+            setLoginId(payload.email);
+          }
+          setStatus(payload.error ?? "Gebruik je e-mailadres om in te loggen.");
+          return;
+        }
         setStatus(payload.error ?? `Inloggen met wachtwoord mislukt (${response.status})`);
       } else {
         setStatus(payload.message ?? "Ingelogd");
@@ -103,27 +128,35 @@ export default function LoginPage() {
     }
   }
 
-  async function onRequestMagicLink(event: FormEvent<HTMLFormElement>) {
+  async function onRequestEmailVerification(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsLoading(true);
     setStatus(null);
 
+    const aliasForVerification = pendingAlias || alias || loginId;
+    const passwordForVerification = pendingPassword || password;
+    if (!aliasForVerification || !passwordForVerification) {
+      setStatus("Log eerst in met alias + wachtwoord om e-mailverificatie te starten.");
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch("/api/auth/request-magic-link", {
+      const response = await fetch("/api/auth/request-email-verification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          bondsnummer,
-          email,
-          alias: requestedAlias || undefined
+          alias: aliasForVerification,
+          password: passwordForVerification,
+          email
         })
       });
       const payload = await readApiPayload(response);
       if (!response.ok) {
-        setStatus(payload.error ?? `Aanvraag mislukt (${response.status})`);
+        setStatus(payload.error ?? `Verificatiemail sturen mislukt (${response.status})`);
       } else {
-        setStatus(payload.message ?? "Magic link verzonden");
-        setAlias(payload.debugAlias ?? requestedAlias);
+        setStatus(payload.message ?? "Verificatiemail verzonden");
+        setAlias(payload.debugAlias ?? aliasForVerification);
         setToken(payload.debugToken ?? "");
         setMagicLink(payload.debugMagicLink ?? "");
         setMode("magic");
@@ -140,7 +173,8 @@ export default function LoginPage() {
     setIsVerifying(true);
     setStatus(null);
 
-    if (!validatePasswordPair(magicSetPassword, magicSetPasswordConfirm)) {
+    const hasPasswordUpdate = magicSetPassword.length > 0 || magicSetPasswordConfirm.length > 0;
+    if (hasPasswordUpdate && !validatePasswordPair(magicSetPassword, magicSetPasswordConfirm)) {
       setIsVerifying(false);
       return;
     }
@@ -152,7 +186,7 @@ export default function LoginPage() {
         body: JSON.stringify({
           alias,
           token,
-          setPassword: magicSetPassword
+          setPassword: hasPasswordUpdate ? magicSetPassword : undefined
         })
       });
       const payload = await readApiPayload(response);
@@ -179,7 +213,7 @@ export default function LoginPage() {
             Login met wachtwoord
           </button>
           <button type="button" onClick={() => setMode("request")}>
-            Vraag magic link
+            Koppel e-mail
           </button>
           <button type="button" onClick={() => setMode("magic")}>
             Gebruik magic link
@@ -189,14 +223,14 @@ export default function LoginPage() {
 
       {mode === "password" && (
         <form className="card grid" onSubmit={onPasswordLogin}>
-          <h2>Login met alias + wachtwoord</h2>
+          <h2>Login met e-mail + wachtwoord</h2>
           <label>
-            Alias
+            E-mail (of alias als je nog geen e-mail hebt gekoppeld)
             <input
               type="text"
-              value={alias}
-              onChange={(e) => setAlias(e.target.value)}
-              placeholder="bijv. JanA2"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
+              placeholder="bijv. jan@email.nl of JanA2"
               required
             />
           </label>
@@ -216,25 +250,23 @@ export default function LoginPage() {
       )}
 
       {mode === "request" && (
-        <form className="card grid" onSubmit={onRequestMagicLink}>
-          <h2>Magic link aanvragen</h2>
+        <form className="card grid" onSubmit={onRequestEmailVerification}>
+          <h2>E-mail koppelen en bevestigen</h2>
+          <p className="muted">
+            Na bevestiging met magic link log je voortaan in met e-mailadres + wachtwoord.
+          </p>
           <label>
-            Bondsnummer
+            Alias
             <input
               type="text"
-              value={bondsnummer}
-              onChange={(e) => setBondsnummer(e.target.value)}
-              placeholder="bijv. ab27386"
-              required
-            />
-          </label>
-          <label>
-            Alias (verplicht bij eerste keer account aanmaken)
-            <input
-              type="text"
-              value={requestedAlias}
-              onChange={(e) => setRequestedAlias(e.target.value)}
+              value={pendingAlias || alias}
+              onChange={(e) => {
+                setPendingAlias(e.target.value);
+                setAlias(e.target.value);
+              }}
               placeholder="bijv. JanA2"
+              required
+              readOnly={Boolean(pendingAlias)}
             />
           </label>
           <label>
@@ -248,7 +280,7 @@ export default function LoginPage() {
             />
           </label>
           <button type="submit" disabled={isLoading}>
-            {isLoading ? "Versturen..." : "Stuur magic link"}
+            {isLoading ? "Versturen..." : "Stuur verificatiemail"}
           </button>
         </form>
       )}
@@ -277,21 +309,19 @@ export default function LoginPage() {
             />
           </label>
           <label>
-            Nieuw wachtwoord
+            Nieuw wachtwoord (optioneel)
             <input
               type="password"
               value={magicSetPassword}
               onChange={(e) => setMagicSetPassword(e.target.value)}
-              required
             />
           </label>
           <label>
-            Herhaal nieuw wachtwoord
+            Herhaal nieuw wachtwoord (optioneel)
             <input
               type="password"
               value={magicSetPasswordConfirm}
               onChange={(e) => setMagicSetPasswordConfirm(e.target.value)}
-              required
             />
           </label>
           <button type="submit" disabled={isVerifying}>

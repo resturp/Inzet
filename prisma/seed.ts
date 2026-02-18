@@ -1,383 +1,455 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { PrismaClient, TaskStatus, UserRole } from "@prisma/client";
+import { hashPassword } from "../src/lib/password";
 
 const prisma = new PrismaClient();
 
-type EnsureTaskInput = {
-  title: string;
-  description: string;
-  teamName?: string | null;
-  parentId: string | null;
-  points: string;
-  date: Date;
-  startTime?: Date | null;
-  endTime: Date;
-  location?: string | null;
-  templateId?: string | null;
-  status: TaskStatus;
+type CsvUser = {
+  alias: string;
+  password: string;
+  email: string | null;
 };
 
-async function ensureTemplate(input: {
+type TaskNode = {
   title: string;
-  description: string;
-  parentTemplateId: string | null;
-  defaultPoints?: string | null;
-}) {
-  const existing = await prisma.taskTemplate.findFirst({
-    where: {
-      title: input.title,
-      parentTemplateId: input.parentTemplateId
-    }
-  });
+  parentTitle: string | null;
+  points: number;
+  coordinatorAliases: Set<string>;
+};
 
+function parseCsvRows(raw: string): string[][] {
+  const rows: string[][] = [];
+  let currentCell = "";
+  let currentRow: string[] = [];
+  let inQuotes = false;
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+
+    if (char === "\"") {
+      const next = raw[index + 1];
+      if (inQuotes && next === "\"") {
+        currentCell += "\"";
+        index += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (!inQuotes && char === ",") {
+      currentRow.push(currentCell.trim());
+      currentCell = "";
+      continue;
+    }
+
+    if (!inQuotes && (char === "\n" || char === "\r")) {
+      if (char === "\r" && raw[index + 1] === "\n") {
+        index += 1;
+      }
+      currentRow.push(currentCell.trim());
+      const hasValues = currentRow.some((cell) => cell.length > 0);
+      if (hasValues) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentCell = "";
+      continue;
+    }
+
+    currentCell += char;
+  }
+
+  if (currentCell.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentCell.trim());
+    const hasValues = currentRow.some((cell) => cell.length > 0);
+    if (hasValues) {
+      rows.push(currentRow);
+    }
+  }
+
+  return rows;
+}
+
+async function readCsvFromFirstExisting(paths: string[]): Promise<string> {
+  for (const candidate of paths) {
+    try {
+      return await fs.readFile(candidate, "utf8");
+    } catch {
+      // Try next path.
+    }
+  }
+  return "";
+}
+
+function normalizeAlias(value: string): string {
+  return value.trim();
+}
+
+function toSafeIdFragment(value: string): string {
+  const normalized = value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized.length > 0 ? normalized.slice(0, 20) : "user";
+}
+
+function generatedBondsnummer(alias: string, index: number): string {
+  return `CSV-${toSafeIdFragment(alias)}-${String(index + 1).padStart(3, "0")}`;
+}
+
+async function seedUsersFromCsv(): Promise<Map<string, CsvUser>> {
+  const raw = await readCsvFromFirstExisting([
+    path.join(process.cwd(), "data", "user.csv"),
+    path.join(process.cwd(), "data", "users.csv")
+  ]);
+
+  const rows = parseCsvRows(raw);
+  const usersByAlias = new Map<string, CsvUser>();
+  const usedEmails = new Set<string>();
+
+  for (const row of rows) {
+    const alias = normalizeAlias(row[0] ?? "");
+    const password = (row[1] ?? "").trim();
+    const emailRaw = (row[2] ?? "").trim().toLowerCase();
+    const email = emailRaw.length > 0 ? emailRaw : null;
+
+    if (!alias || !password) {
+      continue;
+    }
+
+    const existing = usersByAlias.get(alias);
+    const chosenEmail =
+      email && (!usedEmails.has(email) || existing?.email === email) ? email : existing?.email ?? null;
+    if (chosenEmail) {
+      usedEmails.add(chosenEmail);
+    }
+
+    usersByAlias.set(alias, {
+      alias,
+      password,
+      email: chosenEmail
+    });
+  }
+
+  const aliases = Array.from(usersByAlias.keys()).sort((left, right) =>
+    left.localeCompare(right, "nl-NL")
+  );
+
+  for (let index = 0; index < aliases.length; index += 1) {
+    const alias = aliases[index];
+    const user = usersByAlias.get(alias);
+    if (!user) {
+      continue;
+    }
+
+    const passwordHash = await hashPassword(user.password);
+    await prisma.user.upsert({
+      where: { alias },
+      update: {
+        isActive: true,
+        passwordHash,
+        email: user.email,
+        emailVerifiedAt: user.email ? new Date() : null
+      },
+      create: {
+        alias,
+        bondsnummer: generatedBondsnummer(alias, index),
+        role: UserRole.LID,
+        isActive: true,
+        passwordHash,
+        email: user.email,
+        emailVerifiedAt: user.email ? new Date() : null
+      }
+    });
+  }
+
+  return usersByAlias;
+}
+
+async function ensureUserExists(alias: string, indexHint: number): Promise<void> {
+  if (!alias) {
+    return;
+  }
+  const existing = await prisma.user.findUnique({ where: { alias } });
   if (existing) {
-    return existing;
+    return;
   }
-
-  return prisma.taskTemplate.create({
+  await prisma.user.create({
     data: {
-      title: input.title,
-      description: input.description,
-      parentTemplateId: input.parentTemplateId,
-      defaultPoints: input.defaultPoints ?? null
-    }
-  });
-}
-
-async function ensureTask(input: EnsureTaskInput) {
-  const existingAtParent = await prisma.task.findFirst({
-    where: {
-      title: input.title,
-      parentId: input.parentId
-    }
-  });
-
-  if (existingAtParent) {
-    return prisma.task.update({
-      where: { id: existingAtParent.id },
-      data: {
-        description: input.description,
-        teamName: input.teamName ?? null,
-        points: input.points,
-        date: input.date,
-        startTime: input.startTime ?? null,
-        endTime: input.endTime,
-        location: input.location ?? null,
-        templateId: input.templateId ?? null,
-        status: input.status
-      }
-    });
-  }
-
-  const sameTitle = await prisma.task.findMany({
-    where: { title: input.title },
-    orderBy: { createdAt: "asc" },
-    take: 2
-  });
-
-  if (sameTitle.length === 1) {
-    return prisma.task.update({
-      where: { id: sameTitle[0].id },
-      data: {
-        parentId: input.parentId,
-        description: input.description,
-        teamName: input.teamName ?? null,
-        points: input.points,
-        date: input.date,
-        startTime: input.startTime ?? null,
-        endTime: input.endTime,
-        location: input.location ?? null,
-        templateId: input.templateId ?? null,
-        status: input.status
-      }
-    });
-  }
-
-  return prisma.task.create({
-    data: {
-      title: input.title,
-      description: input.description,
-      teamName: input.teamName ?? null,
-      parentId: input.parentId,
-      points: input.points,
-      date: input.date,
-      startTime: input.startTime ?? null,
-      endTime: input.endTime,
-      location: input.location ?? null,
-      templateId: input.templateId ?? null,
-      status: input.status
-    }
-  });
-}
-
-async function main() {
-  await prisma.openTask.deleteMany();
-
-  await prisma.user.upsert({
-    where: { alias: "Bestuur" },
-    update: { role: UserRole.BESTUUR },
-    create: {
-      alias: "Bestuur",
-      bondsnummer: "BESTUUR-SEED",
-      role: UserRole.BESTUUR,
+      alias,
+      bondsnummer: generatedBondsnummer(alias, indexHint),
+      role: UserRole.LID,
       isActive: true
     }
   });
+}
 
-  const topTemplate = await ensureTemplate({
-    title: "Top level Sjabloon",
-    description: "Root sjabloon voor verenigingstaken",
-    parentTemplateId: null
-  });
+async function seedTasksFromCsv(rootTemplateId: string | null): Promise<void> {
+  const taskRaw = await readCsvFromFirstExisting([
+    path.join(process.cwd(), "data", "task.csv"),
+    path.join(process.cwd(), "data", "tasks.csv")
+  ]);
+  const coordRaw = await readCsvFromFirstExisting([
+    path.join(process.cwd(), "data", "coord.csv"),
+    path.join(process.cwd(), "data", "coords.csv")
+  ]);
 
-  const teamTemplate = await ensureTemplate({
-    title: "Coachen team",
-    description: "Sjabloon voor taken rond coaching van een team.",
-    parentTemplateId: topTemplate.id,
-    defaultPoints: "100"
-  });
+  const taskRows = parseCsvRows(taskRaw);
+  const coordRows = parseCsvRows(coordRaw);
 
-  await ensureTemplate({
-    title: "Teamfoto maken",
-    description: "Maak en verstuur de teamfoto.",
-    parentTemplateId: teamTemplate.id,
-    defaultPoints: "30"
-  });
-  await ensureTemplate({
-    title: "Rijden",
-    description: "Regel en/of uitvoer van vervoer.",
-    parentTemplateId: teamTemplate.id,
-    defaultPoints: "20"
-  });
-  await ensureTemplate({
-    title: "Wassen",
-    description: "Wasschema beheren en uitvoeren.",
-    parentTemplateId: teamTemplate.id,
-    defaultPoints: "15"
-  });
+  const taskNodesByTitle = new Map<string, TaskNode>();
+  const ensureNode = (title: string): TaskNode => {
+    const normalizedTitle = title.trim();
+    const existing = taskNodesByTitle.get(normalizedTitle);
+    if (existing) {
+      return existing;
+    }
+    const created: TaskNode = {
+      title: normalizedTitle,
+      parentTitle: null,
+      points: 20,
+      coordinatorAliases: new Set<string>()
+    };
+    taskNodesByTitle.set(normalizedTitle, created);
+    return created;
+  };
+
+  for (const row of taskRows) {
+    const title = (row[0] ?? "").trim();
+    const parentTitle = (row[1] ?? "").trim();
+    const rawPoints = Number((row[2] ?? "").trim());
+    const points = Number.isFinite(rawPoints) ? Math.max(20, Math.round(rawPoints)) : 20;
+
+    if (!title) {
+      continue;
+    }
+
+    const node = ensureNode(title);
+    if (parentTitle) {
+      if (node.parentTitle && node.parentTitle !== parentTitle) {
+        console.warn(
+          `Parent-conflict voor taak "${title}": "${node.parentTitle}" blijft staan, "${parentTitle}" genegeerd`
+        );
+      } else {
+        node.parentTitle = parentTitle;
+      }
+      ensureNode(parentTitle);
+    }
+    node.points = points;
+  }
+
+  for (const row of coordRows) {
+    const title = (row[0] ?? "").trim();
+    const coordinatorAlias = normalizeAlias(row[1] ?? "");
+    if (!title) {
+      continue;
+    }
+    const node = ensureNode(title);
+    if (coordinatorAlias) {
+      node.coordinatorAliases.add(coordinatorAlias);
+    }
+  }
+
+  const rootTitle = "2025-2026";
+  const rootNode = ensureNode(rootTitle);
+  rootNode.parentTitle = null;
+
+  for (const node of taskNodesByTitle.values()) {
+    if (!node.parentTitle) {
+      continue;
+    }
+    ensureNode(node.parentTitle);
+  }
+
+  const bestuurNode = taskNodesByTitle.get("Bestuur");
+  const rootOwnerAlias =
+    bestuurNode && bestuurNode.coordinatorAliases.size > 0
+      ? Array.from(bestuurNode.coordinatorAliases).sort((left, right) =>
+          left.localeCompare(right, "nl-NL")
+        )[0] ?? "Bestuur"
+      : "Bestuur";
+  if (rootNode.coordinatorAliases.size === 0) {
+    rootNode.coordinatorAliases.add(rootOwnerAlias);
+  }
+
+  const orderedTitles = Array.from(taskNodesByTitle.keys()).sort((left, right) =>
+    left.localeCompare(right, "nl-NL")
+  );
+  let coordinatorIndex = 10_000;
+  for (const node of taskNodesByTitle.values()) {
+    for (const coordinatorAlias of node.coordinatorAliases) {
+      await ensureUserExists(coordinatorAlias, coordinatorIndex);
+      coordinatorIndex += 1;
+    }
+  }
 
   const seasonStart = new Date("2025-06-30T22:00:00.000Z");
   const seasonEnd = new Date("2026-06-30T21:59:00.000Z");
   const rootEnd = new Date("2029-12-31T23:00:00.000Z");
-  const teamfotoDate = new Date("2026-03-01T09:00:00.000Z");
-  const teamfotoEnd = new Date("2026-03-01T12:00:00.000Z");
 
-  const rootTask = await ensureTask({
-    title: "Besturen vereniging",
-    description: "Root taak voor bestuur",
-    parentId: null,
-    points: "3000",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: rootEnd,
-    templateId: topTemplate.id,
-    status: TaskStatus.TOEGEWEZEN
-  });
+  const createdByTitle = new Map<string, { id: string }>();
+  const unresolved = new Set(orderedTitles);
 
-  await prisma.taskCoordinator.upsert({
-    where: {
-      taskId_userAlias: {
-        taskId: rootTask.id,
-        userAlias: "Bestuur"
-      }
-    },
-    update: {},
-    create: {
-      taskId: rootTask.id,
-      userAlias: "Bestuur"
+  const endTimeForTitle = (title: string): Date => (title === rootTitle ? rootEnd : seasonEnd);
+  const descriptionForTitle = (title: string): string => {
+    if (title === rootTitle) {
+      return "Het besturen van de vereniging tijdens seizoen 2025-2026";
     }
-  });
+    return `Taak: ${title}`;
+  };
 
-  const seasonTask = await ensureTask({
-    title: "2025-2026",
-    description: "Het besturen van de vereniging tijdens seizoen 2025-2026",
-    parentId: rootTask.id,
-    points: "3000",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.TOEGEWEZEN
-  });
+  while (unresolved.size > 0) {
+    let progressed = false;
 
-  await ensureTask({
-    title: "Algemeen bestuurslid",
-    description: "Medeverantwoordelijk voor het besturen van de vereniging",
-    parentId: seasonTask.id,
-    points: "400",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
+    for (const title of Array.from(unresolved)) {
+      const node = taskNodesByTitle.get(title);
+      if (!node) {
+        unresolved.delete(title);
+        continue;
+      }
+      if (node.parentTitle && !createdByTitle.has(node.parentTitle)) {
+        continue;
+      }
 
-  const penningmeesterTask = await ensureTask({
-    title: "Penningmeester",
-    description: "Verantwoordelijk voor de penningen van de vereniging",
-    parentId: seasonTask.id,
-    points: "600",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.TOEGEWEZEN
-  });
+      const parentId = node.parentTitle ? createdByTitle.get(node.parentTitle)?.id ?? null : null;
+      const task = await prisma.task.create({
+        data: {
+          title: node.title,
+          description: descriptionForTitle(node.title),
+          parentId,
+          points: node.points,
+          date: seasonStart,
+          startTime: seasonStart,
+          endTime: endTimeForTitle(node.title),
+          templateId: node.title === rootTitle ? rootTemplateId : null,
+          status:
+            node.coordinatorAliases.size > 0 ? TaskStatus.TOEGEWEZEN : TaskStatus.BESCHIKBAAR
+        },
+        select: { id: true }
+      });
+      createdByTitle.set(node.title, { id: task.id });
+      unresolved.delete(title);
+      progressed = true;
+    }
 
-  const voorzitterTask = await ensureTask({
-    title: "Voorzitter",
-    description: "Verantwoordelijk voor het voorzitten van het bestuur van de vereniging",
-    parentId: seasonTask.id,
-    points: "800",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.TOEGEWEZEN
-  });
+    if (progressed) {
+      continue;
+    }
 
-  const secretarisTask = await ensureTask({
-    title: "Secretaris",
-    description: "Verantwoordelijk voor het secretariaat van de vereniging",
-    parentId: seasonTask.id,
-    points: "600",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
+    // Fallback voor ongeldige parent-ketens: hang onder root.
+    const fallbackTitle = unresolved.values().next().value as string | undefined;
+    if (!fallbackTitle) {
+      break;
+    }
+    const fallbackNode = taskNodesByTitle.get(fallbackTitle);
+    if (!fallbackNode) {
+      unresolved.delete(fallbackTitle);
+      continue;
+    }
+    fallbackNode.parentTitle = rootTitle;
+  }
 
-  await ensureTask({
-    title: "Communicatie commissie",
-    description: "Verantwoordelijk voor het communiceren over activiteiten van de vereniging",
-    parentId: secretarisTask.id,
-    points: "100",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
+  const coordinatorLinks: Array<{ taskId: string; userAlias: string }> = [];
+  const allCoordinatorAliases = new Set<string>();
+  for (const node of taskNodesByTitle.values()) {
+    const task = createdByTitle.get(node.title);
+    if (!task) {
+      continue;
+    }
+    for (const alias of node.coordinatorAliases) {
+      if (!alias) {
+        continue;
+      }
+      coordinatorLinks.push({ taskId: task.id, userAlias: alias });
+      allCoordinatorAliases.add(alias);
+    }
+  }
 
-  await ensureTask({
-    title: "Ledenadministratie",
-    description: "Verantwoordelijk voor het bijhouden van de ledenadministratie in sportlink",
-    parentId: secretarisTask.id,
-    points: "100",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
+  if (coordinatorLinks.length > 0) {
+    await prisma.taskCoordinator.createMany({
+      data: coordinatorLinks,
+      skipDuplicates: true
+    });
+  }
 
-  await ensureTask({
-    title: "Kascommissie",
-    description: "Verantwoordelijk voor de controle van de financiën van de vereniging",
-    parentId: penningmeesterTask.id,
-    points: "100",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
+  if (allCoordinatorAliases.size > 0) {
+    await prisma.user.updateMany({
+      where: {
+        alias: { in: Array.from(allCoordinatorAliases) },
+        role: UserRole.LID
+      },
+      data: { role: UserRole.COORDINATOR }
+    });
+  }
+  await prisma.user.update({
+    where: { alias: rootOwnerAlias },
+    data: { role: UserRole.BESTUUR }
   });
+}
 
-  const technischeCommissie = await ensureTask({
-    title: "Technische commissie",
-    description: "Verantwoordelijk voor het aansturen van de TC's",
-    parentId: voorzitterTask.id,
-    points: "300",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
+async function ensureTemplates() {
+  const topTemplate =
+    (await prisma.taskTemplate.findFirst({
+      where: { title: "Top level Sjabloon", parentTemplateId: null }
+    })) ??
+    (await prisma.taskTemplate.create({
+      data: {
+        title: "Top level Sjabloon",
+        description: "Root sjabloon voor verenigingstaken"
+      }
+    }));
 
-  await ensureTask({
-    title: "Vrijwilligers commissie",
-    description: "Verantwoordelijk voor het coördineren van vrijwilligers",
-    parentId: voorzitterTask.id,
-    points: "100",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
+  const teamTemplate =
+    (await prisma.taskTemplate.findFirst({
+      where: { title: "Coachen team", parentTemplateId: topTemplate.id }
+    })) ??
+    (await prisma.taskTemplate.create({
+      data: {
+        title: "Coachen team",
+        description: "Sjabloon voor taken rond coaching van een team.",
+        parentTemplateId: topTemplate.id,
+        defaultPoints: 100
+      }
+    }));
 
-  await ensureTask({
-    title: "TC Volleystars",
-    description: "Technische commissie van de Vollestars",
-    parentId: technischeCommissie.id,
-    points: "100",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
+  const defaultTeamSubtemplates = [
+    { title: "Teamfoto maken", description: "Maak en verstuur de teamfoto.", defaultPoints: 30 },
+    { title: "Rijden", description: "Regel en/of uitvoer van vervoer.", defaultPoints: 20 },
+    { title: "Wassen", description: "Wasschema beheren en uitvoeren.", defaultPoints: 15 }
+  ];
+  for (const subtemplate of defaultTeamSubtemplates) {
+    const exists = await prisma.taskTemplate.findFirst({
+      where: { title: subtemplate.title, parentTemplateId: teamTemplate.id }
+    });
+    if (!exists) {
+      await prisma.taskTemplate.create({
+        data: {
+          title: subtemplate.title,
+          description: subtemplate.description,
+          defaultPoints: subtemplate.defaultPoints,
+          parentTemplateId: teamTemplate.id
+        }
+      });
+    }
+  }
 
-  await ensureTask({
-    title: "TC Dames",
-    description: "Technische commissie van de Dames",
-    parentId: technischeCommissie.id,
-    points: "100",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
+  return topTemplate.id;
+}
 
-  const tcMeiden = await ensureTask({
-    title: "TC Meiden",
-    description: "Technische commissie van de Meiden",
-    parentId: technischeCommissie.id,
-    points: "100",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
+async function main() {
+  await prisma.magicLinkToken.deleteMany();
+  await prisma.openTask.deleteMany();
+  await prisma.taskCoordinator.deleteMany();
+  await prisma.task.deleteMany();
+  await prisma.user.deleteMany();
 
-  const coachenMeidenA2 = await ensureTask({
-    title: "Coachen Meiden A2",
-    description: "Coordinatietaak voor team Meiden A2",
-    teamName: "Meiden A2",
-    parentId: tcMeiden.id,
-    points: "40",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    templateId: teamTemplate.id,
-    status: TaskStatus.BESCHIKBAAR
-  });
-
-  await ensureTask({
-    title: "Teamfoto maken",
-    description: "Maak en verstuur de teamfoto.",
-    teamName: "Meiden A2",
-    parentId: coachenMeidenA2.id,
-    points: "6",
-    date: teamfotoDate,
-    startTime: null,
-    endTime: teamfotoEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
-
-  const rijdenTask = await ensureTask({
-    title: "Rijden",
-    description: "Iedere uitwedstrijd 2 auto's",
-    teamName: "Meiden A2",
-    parentId: coachenMeidenA2.id,
-    points: "20",
-    date: seasonStart,
-    startTime: seasonStart,
-    endTime: seasonEnd,
-    status: TaskStatus.BESCHIKBAAR
-  });
-
-  await ensureTask({
-    title: "Rijden eerste wedstrijd",
-    description: "Uitwedstrijd bij Lemelerveld",
-    teamName: "Meiden A2",
-    parentId: rijdenTask.id,
-    points: "4",
-    date: new Date("2025-10-04T07:00:00.000Z"),
-    startTime: new Date("2025-10-04T07:00:00.000Z"),
-    endTime: new Date("2026-10-04T10:00:00.000Z"),
-    status: TaskStatus.BESCHIKBAAR
-  });
+  await seedUsersFromCsv();
+  const rootTemplateId = await ensureTemplates();
+  await seedTasksFromCsv(rootTemplateId);
 }
 
 main()

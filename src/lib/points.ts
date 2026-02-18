@@ -10,13 +10,12 @@ export function calculateSubtaskPoints(
 }
 
 export function snapNearInteger(points: number): number {
-  const nearestInteger = Math.round(points);
-  if (Math.abs(points - nearestInteger) <= 0.05) {
-    return nearestInteger;
+  if (!Number.isFinite(points) || points < 0) {
+    return 0;
   }
-  return points;
+  return Math.round(points);
 }
 
 export function formatPoints(points: number): string {
-  return snapNearInteger(points).toFixed(2);
+  return snapNearInteger(points).toString();
 }

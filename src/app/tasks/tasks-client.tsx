@@ -15,7 +15,7 @@ type ApiTask = {
   ownCoordinatorAliases: string[];
   coordinatorAliases: string[];
   coordinatorAlias: string | null;
-  points: string | number;
+  points: number;
   status: "BESCHIKBAAR" | "TOEGEWEZEN" | "GEREED";
   date: string;
   startTime: string | null;
@@ -33,6 +33,7 @@ type ApiOpenTask = {
   teamName: string | null;
   proposerAlias: string;
   proposedAlias: string | null;
+  status: "OPEN" | "AFGEWEZEN";
   canDecide: boolean;
   createdAt: string;
 };
@@ -47,7 +48,7 @@ type ApiTemplate = {
   title: string;
   description: string;
   parentTemplateId: string | null;
-  defaultPoints: string | null;
+  defaultPoints: number | null;
 };
 
 type DraftSubtask = {
@@ -76,6 +77,17 @@ type TaskEditDraft = {
   location: string;
 };
 
+type ReleaseDialogTask = {
+  id: string;
+  title: string;
+};
+
+type DeleteDialogTask = {
+  id: string;
+  title: string;
+  message: string;
+};
+
 const initialSubtask: DraftSubtask = {
   title: "",
   description: "",
@@ -86,6 +98,21 @@ const initialSubtask: DraftSubtask = {
   endDate: "",
   endTime: ""
 };
+
+const ICON_SAVE = "🖫";
+const ICON_OPEN = "✎";
+const ICON_EDIT = "✎...";
+const ICON_COPY = "⧉";
+const ICON_DELETE = "🗑";
+const ICON_MOVE = "↕";
+const ICON_REGISTER = "✓";
+const ICON_PROPOSE = "⊕";
+const ICON_RELEASE = "⇡";
+const ICON_CANCEL = "✕";
+const ICON_ADD = "+";
+const ICON_BACK = "↩";
+const ICON_ACCEPT = "✓";
+const ICON_REJECT = "✕";
 
 function labelForStatus(status: ApiTask["status"]): string {
   switch (status) {
@@ -111,6 +138,10 @@ function labelForMenuView(view: TaskMenuView): string {
   }
 }
 
+function labelForOpenTaskStatus(status: ApiOpenTask["status"]): string {
+  return status === "AFGEWEZEN" ? "afgewezen" : "open";
+}
+
 function isAssignedStatus(status: ApiTask["status"]): boolean {
   return status === "TOEGEWEZEN" || status === "GEREED";
 }
@@ -121,6 +152,14 @@ function parseTaskPoints(value: string | number): number {
     return 0;
   }
   return snapNearInteger(parsed);
+}
+
+function parseNonNegativeIntegerInput(value: string): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
 }
 
 function uniqueSortedAliases(aliases: readonly string[]): string[] {
@@ -289,6 +328,10 @@ export function TasksClient({ alias }: { alias: string }) {
   const [moveTargetParentId, setMoveTargetParentId] = useState("");
   const [proposeDialogTask, setProposeDialogTask] = useState<{ id: string; title: string } | null>(null);
   const [proposeDialogAlias, setProposeDialogAlias] = useState("");
+  const [registerSuccessTaskTitle, setRegisterSuccessTaskTitle] = useState<string | null>(null);
+  const [releaseDialogTask, setReleaseDialogTask] = useState<ReleaseDialogTask | null>(null);
+  const [deleteDialogTask, setDeleteDialogTask] = useState<DeleteDialogTask | null>(null);
+  const [subtaskPointsDraftById, setSubtaskPointsDraftById] = useState<Record<string, string>>({});
 
   const sortedTasks = useMemo(
     () =>
@@ -484,6 +527,7 @@ export function TasksClient({ alias }: { alias: string }) {
       setOpenTasks(openTasksPayload.data ?? []);
       setUsers(usersPayload.data ?? []);
       setTemplates(templatesPayload.data ?? []);
+      setSubtaskPointsDraftById({});
     } catch {
       setError("Netwerkfout bij laden van gegevens.");
     } finally {
@@ -589,6 +633,7 @@ export function TasksClient({ alias }: { alias: string }) {
   }, [focusedTaskId, isTaskListView, taskMenuView, visibleTasks]);
 
   async function onRegister(taskId: string) {
+    const taskTitle = tasksById.get(taskId)?.title ?? taskId;
     setActiveTaskId(taskId);
     setError(null);
     try {
@@ -603,6 +648,7 @@ export function TasksClient({ alias }: { alias: string }) {
         return;
       }
       await loadAll();
+      setRegisterSuccessTaskTitle(taskTitle);
     } catch {
       setError("Netwerkfout bij inschrijven.");
     } finally {
@@ -610,7 +656,20 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
-  async function onRelease(taskId: string) {
+  function onRelease(taskId: string) {
+    const taskTitle = tasksById.get(taskId)?.title ?? taskId;
+    setReleaseDialogTask({ id: taskId, title: taskTitle });
+  }
+
+  function onCancelReleaseDialog() {
+    setReleaseDialogTask(null);
+  }
+
+  async function onConfirmRelease() {
+    if (!releaseDialogTask) {
+      return;
+    }
+    const taskId = releaseDialogTask.id;
     setActiveTaskId(taskId);
     setError(null);
     try {
@@ -624,6 +683,7 @@ export function TasksClient({ alias }: { alias: string }) {
         setError(payload.error ?? "Taak kon niet worden vrijgegeven.");
         return;
       }
+      setReleaseDialogTask(null);
       await loadAll();
     } catch {
       setError("Netwerkfout bij vrijgeven van taak.");
@@ -645,6 +705,10 @@ export function TasksClient({ alias }: { alias: string }) {
   function onCancelProposeDialog() {
     setProposeDialogTask(null);
     setProposeDialogAlias("");
+  }
+
+  function onCloseRegisterSuccessDialog() {
+    setRegisterSuccessTaskTitle(null);
   }
 
   async function onConfirmPropose() {
@@ -702,8 +766,35 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
+  async function onAcknowledgeRejectedOpenTask(openTaskId: string) {
+    setActiveTaskId(openTaskId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/open-tasks/${openTaskId}/acknowledge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error ?? "Melding sluiten mislukt.");
+        return;
+      }
+      await loadAll();
+    } catch {
+      setError("Netwerkfout bij sluiten van melding.");
+    } finally {
+      setActiveTaskId(null);
+    }
+  }
+
   async function onCreateSubtask(event: FormEvent<HTMLFormElement>, parentTaskId: string) {
     event.preventDefault();
+    const draftPoints = parseNonNegativeIntegerInput(subtaskDraft.points);
+    if (draftPoints === null) {
+      setError("Punten moeten een geheel getal van 0 of hoger zijn.");
+      return;
+    }
     const startAt = combineDateAndTime(subtaskDraft.startDate, subtaskDraft.startTime);
     const endAt = combineDateAndTime(subtaskDraft.endDate, subtaskDraft.endTime);
     if (!startAt || !endAt) {
@@ -724,7 +815,7 @@ export function TasksClient({ alias }: { alias: string }) {
                   title: subtaskDraft.title,
                   description: subtaskDraft.description,
                   teamName: subtaskDraft.teamName || null,
-                  points: Number(subtaskDraft.points),
+                  points: draftPoints,
                   date: startAt,
                   startTime: startAt,
                   endTime: endAt
@@ -739,7 +830,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 description: subtaskDraft.description,
                 teamName: subtaskDraft.teamName || undefined,
                 parentId: parentTaskId,
-                points: Number(subtaskDraft.points),
+                points: draftPoints,
                 date: startAt,
                 startTime: startAt,
                 endTime: endAt
@@ -765,6 +856,11 @@ export function TasksClient({ alias }: { alias: string }) {
 
   async function onCreateTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const defaultPoints = parseNonNegativeIntegerInput(templatePoints);
+    if (defaultPoints === null) {
+      setError("Standaard punten moeten een geheel getal van 0 of hoger zijn.");
+      return;
+    }
     setError(null);
     try {
       const response = await fetch("/api/templates", {
@@ -774,7 +870,7 @@ export function TasksClient({ alias }: { alias: string }) {
           title: templateTitle,
           description: templateDescription,
           parentTemplateId: templateParentId || undefined,
-          defaultPoints: Number(templatePoints)
+          defaultPoints
         })
       });
       const payload = (await response.json()) as { error?: string };
@@ -929,10 +1025,20 @@ export function TasksClient({ alias }: { alias: string }) {
       return;
     }
 
-    const points = Number(editDraft.points);
-    if (!Number.isFinite(points) || points < 0) {
-      setError("Punten moeten een positief getal zijn.");
+    const task = tasksById.get(taskId);
+    if (!task) {
+      setError("Taak niet gevonden.");
       return;
+    }
+    const canEditOwnPoints = !task.parentId;
+
+    let points: number | undefined;
+    if (canEditOwnPoints) {
+      points = Number(editDraft.points);
+      if (!Number.isFinite(points) || !Number.isInteger(points) || points < 0) {
+        setError("Punten moeten een geheel getal van 0 of hoger zijn.");
+        return;
+      }
     }
 
     setActiveTaskId(taskId);
@@ -962,6 +1068,54 @@ export function TasksClient({ alias }: { alias: string }) {
       await loadAll();
     } catch {
       setError("Netwerkfout bij bewerken van taak.");
+    } finally {
+      setActiveTaskId(null);
+    }
+  }
+
+  async function onSaveSubtaskPoints(subtaskId: string, value: string, currentPoints: number) {
+    const trimmedValue = value.trim();
+    if (trimmedValue === "") {
+      setSubtaskPointsDraftById((current) => ({
+        ...current,
+        [subtaskId]: currentPoints.toString()
+      }));
+      return;
+    }
+
+    const points = Number(trimmedValue);
+    if (!Number.isFinite(points) || !Number.isInteger(points) || points < 0) {
+      setError("Punten moeten een geheel getal van 0 of hoger zijn.");
+      return;
+    }
+    if (points === currentPoints) {
+      return;
+    }
+
+    setActiveTaskId(subtaskId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/tasks/${subtaskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ points })
+      });
+      const payload = (await response.json()) as { error?: string; data?: { points?: number } };
+      if (!response.ok) {
+        setError(payload.error ?? "Punten bijwerken mislukt.");
+        return;
+      }
+      const savedPoints = Number(payload.data?.points);
+      const nextPoints = Number.isFinite(savedPoints) ? savedPoints : points;
+      setTasks((current) =>
+        current.map((task) => (task.id === subtaskId ? { ...task, points: nextPoints } : task))
+      );
+      setSubtaskPointsDraftById((current) => ({
+        ...current,
+        [subtaskId]: nextPoints.toString()
+      }));
+    } catch {
+      setError("Netwerkfout bij bijwerken van punten.");
     } finally {
       setActiveTaskId(null);
     }
@@ -1022,22 +1176,34 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
-  async function onDeleteTask(task: ApiTask) {
+  function onDeleteTask(task: ApiTask) {
     const descendantCount = collectDescendantIds(task.id, childrenByParentId).size;
     const totalDeleteCount = descendantCount + 1;
     const confirmationText =
       totalDeleteCount > 1
         ? `Je staat op het punt ${totalDeleteCount} (sub)taken te verwijderen. Weet je zeker dat je wilt doorgaan?`
         : "Weet je zeker dat je deze taak wilt verwijderen?";
+    setDeleteDialogTask({
+      id: task.id,
+      title: task.title,
+      message: confirmationText
+    });
+  }
 
-    if (!window.confirm(confirmationText)) {
+  function onCancelDeleteDialog() {
+    setDeleteDialogTask(null);
+  }
+
+  async function onConfirmDeleteTask() {
+    if (!deleteDialogTask) {
       return;
     }
+    const taskId = deleteDialogTask.id;
 
-    setActiveTaskId(task.id);
+    setActiveTaskId(taskId);
     setError(null);
     try {
-      const response = await fetch(`/api/tasks/${task.id}`, {
+      const response = await fetch(`/api/tasks/${taskId}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: "{}"
@@ -1047,24 +1213,25 @@ export function TasksClient({ alias }: { alias: string }) {
         setError(payload.error ?? "Taak verwijderen mislukt.");
         return;
       }
-      if (focusedTaskId === task.id) {
+      if (focusedTaskId === taskId) {
         setFocusedTaskId(null);
       }
-      if (editingTaskId === task.id) {
+      if (editingTaskId === taskId) {
         setEditingTaskId(null);
         setEditDraft(null);
       }
-      if (movingTaskId === task.id) {
+      if (movingTaskId === taskId) {
         setMovingTaskId(null);
         setMoveTargetParentId("");
       }
-      if (creatingSubtaskForTaskId === task.id) {
+      if (creatingSubtaskForTaskId === taskId) {
         setCreatingSubtaskForTaskId(null);
         setSubtaskDraft(initialSubtask);
         setSubtaskFormMode("new");
         setCopySourceTaskId(null);
         setCopySourceTitle(null);
       }
+      setDeleteDialogTask(null);
       await loadAll();
     } catch {
       setError("Netwerkfout bij verwijderen van taak.");
@@ -1176,23 +1343,41 @@ export function TasksClient({ alias }: { alias: string }) {
                 </p>
                 <p className="muted">
                   Van: {item.proposerAlias} | Aan: {item.proposedAlias ?? "open"} |{" "}
+                  Status: {labelForOpenTaskStatus(item.status)} |{" "}
                   {new Date(item.createdAt).toLocaleString("nl-NL")}
                 </p>
-                {item.canDecide ? (
+                {item.status === "AFGEWEZEN" ? (
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                    <p className="muted">Dit voorstel is afgewezen.</p>
+                    <button
+                      type="button"
+                      disabled={activeTaskId === item.id}
+                      onClick={() => onAcknowledgeRejectedOpenTask(item.id)}
+                      title="Gezien"
+                      aria-label="Gezien"
+                    >
+                      {activeTaskId === item.id ? `${ICON_ACCEPT}...` : ICON_ACCEPT}
+                    </button>
+                  </div>
+                ) : item.canDecide ? (
                   <div style={{ display: "flex", gap: "0.5rem" }}>
                     <button
                       type="button"
                       disabled={activeTaskId === item.id}
                       onClick={() => onOpenTaskDecision(item.id, "accept")}
+                      title="Accepteren"
+                      aria-label="Accepteren"
                     >
-                      Accepteren
+                      {ICON_ACCEPT}
                     </button>
                     <button
                       type="button"
                       disabled={activeTaskId === item.id}
                       onClick={() => onOpenTaskDecision(item.id, "reject")}
+                      title="Afwijzen"
+                      aria-label="Afwijzen"
                     >
-                      Afwijzen
+                      {ICON_REJECT}
                     </button>
                   </div>
                 ) : (
@@ -1244,7 +1429,7 @@ export function TasksClient({ alias }: { alias: string }) {
               <input
                 type="number"
                 min="0"
-                step="0.01"
+                step="1"
                 value={templatePoints}
                 onChange={(event) => setTemplatePoints(event.target.value)}
                 required
@@ -1305,8 +1490,13 @@ export function TasksClient({ alias }: { alias: string }) {
           {focusedTask ? (
             <section className="card grid">
               <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-                <button type="button" onClick={() => setFocusedTaskId(null)}>
-                  Terug naar lijst
+                <button
+                  type="button"
+                  onClick={() => setFocusedTaskId(null)}
+                  title="Terug naar lijst"
+                  aria-label="Terug naar lijst"
+                >
+                  {ICON_BACK}
                 </button>
                 <p className="muted">
                   Pad:
@@ -1466,8 +1656,10 @@ export function TasksClient({ alias }: { alias: string }) {
                   onClick={() => onOpenTask(task.id)}
                   disabled={focusedTaskId === task.id || !task.canOpen}
                   style={{ whiteSpace: "nowrap" }}
+                  title="Open"
+                  aria-label="Open"
                 >
-                  {focusedTaskId === task.id ? "Geopend" : "Open"}
+                  {ICON_OPEN}
                 </button>
                 {canManageTask ? (
                   <button
@@ -1475,8 +1667,10 @@ export function TasksClient({ alias }: { alias: string }) {
                     onClick={() => onStartEdit(task)}
                     disabled={activeTaskId === task.id || isEditingTask}
                     style={{ whiteSpace: "nowrap" }}
+                    title="Bewerk"
+                    aria-label="Bewerk"
                   >
-                    {isEditingTask ? "Bewerken actief" : "Bewerk"}
+                    {ICON_EDIT}
                   </button>
                 ) : null}
                 <button
@@ -1484,8 +1678,10 @@ export function TasksClient({ alias }: { alias: string }) {
                   onClick={() => onStartMove(task)}
                   disabled={activeTaskId === task.id || isMovingTask || !canMoveTask}
                   style={{ whiteSpace: "nowrap" }}
+                  title="Verplaats"
+                  aria-label="Verplaats"
                 >
-                  {isMovingTask ? "Verplaatsen actief" : "Verplaats"}
+                  {ICON_MOVE}
                 </button>
                 {canDeleteTask ? (
                   <button
@@ -1493,8 +1689,10 @@ export function TasksClient({ alias }: { alias: string }) {
                     onClick={() => onDeleteTask(task)}
                     disabled={activeTaskId === task.id}
                     style={{ whiteSpace: "nowrap" }}
+                    title="Verwijder"
+                    aria-label="Verwijder"
                   >
-                    {activeTaskId === task.id ? "Verwijderen..." : "Verwijder"}
+                    {activeTaskId === task.id ? `${ICON_DELETE}...` : ICON_DELETE}
                   </button>
                 ) : null}
                 {isOpenTasksListView && canRegisterTask ? (
@@ -1503,8 +1701,10 @@ export function TasksClient({ alias }: { alias: string }) {
                     onClick={() => onRegister(task.id)}
                     disabled={activeTaskId === task.id}
                     style={{ whiteSpace: "nowrap" }}
+                    title="Schrijf in"
+                    aria-label="Schrijf in"
                   >
-                    {activeTaskId === task.id ? "Inschrijven..." : "Schrijf in"}
+                    {activeTaskId === task.id ? `${ICON_REGISTER}...` : ICON_REGISTER}
                   </button>
                 ) : null}
                 {isOpenTasksListView && canProposeTask ? (
@@ -1513,8 +1713,10 @@ export function TasksClient({ alias }: { alias: string }) {
                     onClick={() => onStartPropose(task)}
                     disabled={activeTaskId === task.id}
                     style={{ whiteSpace: "nowrap" }}
+                    title="Stel voor"
+                    aria-label="Stel voor"
                   >
-                    {activeTaskId === task.id ? "Voorstellen..." : "Stel voor"}
+                    {activeTaskId === task.id ? `${ICON_PROPOSE}...` : ICON_PROPOSE}
                   </button>
                 ) : null}
               </div>
@@ -1560,21 +1762,27 @@ export function TasksClient({ alias }: { alias: string }) {
                       }
                     />
                   </label>
-                  <label>
-                    Punten
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={editDraft.points}
-                      onChange={(event) =>
-                        setEditDraft((current) =>
-                          current ? { ...current, points: event.target.value } : current
-                        )
-                      }
-                      required
-                    />
-                  </label>
+                  {!task.parentId ? (
+                    <label>
+                      Punten
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={editDraft.points}
+                        onChange={(event) =>
+                          setEditDraft((current) =>
+                            current ? { ...current, points: event.target.value } : current
+                          )
+                        }
+                        required
+                      />
+                    </label>
+                  ) : (
+                    <p className="muted">
+                      Punten van subtaken beheer je bij de parent-taak in de subtakenlijst.
+                    </p>
+                  )}
                   <label>
                     Begindatum
                     <input
@@ -1639,11 +1847,22 @@ export function TasksClient({ alias }: { alias: string }) {
                     />
                   </label>
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <button type="submit" disabled={activeTaskId === task.id}>
-                      {activeTaskId === task.id ? "Opslaan..." : "Opslaan"}
+                    <button
+                      type="submit"
+                      disabled={activeTaskId === task.id}
+                      title="Opslaan"
+                      aria-label="Opslaan"
+                    >
+                      {activeTaskId === task.id ? `${ICON_SAVE}...` : ICON_SAVE}
                     </button>
-                    <button type="button" onClick={onCancelEdit} disabled={activeTaskId === task.id}>
-                      Annuleren
+                    <button
+                      type="button"
+                      onClick={onCancelEdit}
+                      disabled={activeTaskId === task.id}
+                      title="Annuleren"
+                      aria-label="Annuleren"
+                    >
+                      {ICON_CANCEL}
                     </button>
                   </div>
                 </form>
@@ -1683,13 +1902,21 @@ export function TasksClient({ alias }: { alias: string }) {
                         type="button"
                         onClick={() => onMoveTask(task.id)}
                         disabled={activeTaskId === task.id || !moveTargetParentId}
+                        title="Verplaats"
+                        aria-label="Verplaats"
                       >
-                        {activeTaskId === task.id ? "Verplaatsen..." : "Verplaats"}
+                        {activeTaskId === task.id ? `${ICON_MOVE}...` : ICON_MOVE}
                       </button>
                     </>
                   )}
-                  <button type="button" onClick={onCancelMove} disabled={activeTaskId === task.id}>
-                    Sluit verplaatsen
+                  <button
+                    type="button"
+                    onClick={onCancelMove}
+                    disabled={activeTaskId === task.id}
+                    title="Sluit verplaatsen"
+                    aria-label="Sluit verplaatsen"
+                  >
+                    {ICON_CANCEL}
                   </button>
                 </div>
               ) : null}
@@ -1714,8 +1941,10 @@ export function TasksClient({ alias }: { alias: string }) {
                             isCreatingSubtask ? onCancelSubtask() : onStartSubtask(task)
                           }
                           disabled={activeTaskId === task.id}
+                          title={isCreatingSubtask ? "Subtaakformulier sluiten" : "Subtaak toevoegen"}
+                          aria-label={isCreatingSubtask ? "Subtaakformulier sluiten" : "Subtaak toevoegen"}
                         >
-                          {isCreatingSubtask ? "Sluit +" : "+ Subtaak"}
+                          {isCreatingSubtask ? ICON_CANCEL : ICON_ADD}
                         </button>
                       ) : null}
                     </div>
@@ -1738,6 +1967,10 @@ export function TasksClient({ alias }: { alias: string }) {
                             const canDeleteSubtask =
                               canManageSubtaskFromParent && subtask.parentId !== null;
                             const canCopySubtask = canManageSubtaskFromParent;
+                            const subtaskCurrentPoints = parseTaskPoints(subtask.points);
+                            const subtaskPointsDraft =
+                              subtaskPointsDraftById[subtask.id] ??
+                              subtaskCurrentPoints.toString();
                             return (
                               <li
                                 key={subtask.id}
@@ -1745,7 +1978,8 @@ export function TasksClient({ alias }: { alias: string }) {
                                   display: "flex",
                                   justifyContent: "space-between",
                                   alignItems: "center",
-                                  gap: "0.75rem"
+                                  gap: "0.75rem",
+                                  flexWrap: "wrap"
                                 }}
                               >
                                 <span>
@@ -1756,37 +1990,74 @@ export function TasksClient({ alias }: { alias: string }) {
                                 <span
                                   style={{
                                     display: "flex",
-                                    gap: "0.5rem",
+                                    gap: "0.35rem",
                                     justifyContent: "flex-end",
-                                    minWidth: "13.5rem"
+                                    flexWrap: "wrap",
+                                    alignItems: "center"
                                   }}
                                 >
+                                  {canManageSubtaskFromParent ? (
+                                    <>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        style={{ width: "4.75rem" }}
+                                        value={subtaskPointsDraft}
+                                        disabled={activeTaskId === subtask.id}
+                                        onChange={(event) =>
+                                          setSubtaskPointsDraftById((current) => ({
+                                            ...current,
+                                            [subtask.id]: event.target.value
+                                          }))
+                                        }
+                                        onBlur={(event) =>
+                                          void onSaveSubtaskPoints(
+                                            subtask.id,
+                                            event.currentTarget.value,
+                                            subtaskCurrentPoints
+                                          )
+                                        }
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter") {
+                                            event.preventDefault();
+                                            event.currentTarget.blur();
+                                          }
+                                        }}
+                                      />
+                                    </>
+                                  ) : null}
                                   <button
                                     type="button"
-                                    style={{ minWidth: "6.25rem" }}
                                     onClick={() => onOpenTask(subtask.id)}
                                     disabled={!subtask.canOpen}
+                                    title="Open"
+                                    aria-label="Open"
                                   >
-                                    Open
+                                    {ICON_OPEN}
                                   </button>
                                   {canCopySubtask ? (
                                     <button
                                       type="button"
-                                      style={{ minWidth: "6.25rem" }}
                                       onClick={() => onStartSubtask(task, subtask)}
                                       disabled={activeTaskId === subtask.id}
+                                      title="Kopieer"
+                                      aria-label="Kopieer"
                                     >
-                                      Kopieer
+                                      {ICON_COPY}
                                     </button>
                                   ) : null}
                                   {canDeleteSubtask ? (
                                     <button
                                       type="button"
-                                      style={{ minWidth: "6.25rem" }}
                                       onClick={() => onDeleteTask(subtask)}
                                       disabled={activeTaskId === subtask.id}
+                                      title="Verwijder"
+                                      aria-label="Verwijder"
                                     >
-                                      {activeTaskId === subtask.id ? "Verwijderen..." : "Verwijder"}
+                                      {activeTaskId === subtask.id
+                                        ? `${ICON_DELETE}...`
+                                        : ICON_DELETE}
                                     </button>
                                   ) : null}
                                 </span>
@@ -1855,7 +2126,7 @@ export function TasksClient({ alias }: { alias: string }) {
                           <input
                             type="number"
                             min="0"
-                            step="0.01"
+                            step="1"
                             value={subtaskDraft.points}
                             onChange={(event) =>
                               setSubtaskDraft((current) => ({
@@ -1934,11 +2205,13 @@ export function TasksClient({ alias }: { alias: string }) {
                             type="submit"
                             disabled={activeTaskId === task.id}
                             style={{ whiteSpace: "nowrap" }}
+                            title={subtaskFormMode === "copy" ? "Kopieer" : "Opslaan"}
+                            aria-label={subtaskFormMode === "copy" ? "Kopieer" : "Opslaan"}
                           >
                             {activeTaskId === task.id
-                              ? "Opslaan..."
+                              ? `${ICON_SAVE}...`
                               : subtaskFormMode === "copy"
-                                ? "Kopieer"
+                                ? ICON_COPY
                                 : "Subtaak aanmaken"}
                           </button>
                           <button
@@ -1946,8 +2219,10 @@ export function TasksClient({ alias }: { alias: string }) {
                             onClick={onCancelSubtask}
                             disabled={activeTaskId === task.id}
                             style={{ whiteSpace: "nowrap" }}
+                            title="Annuleren"
+                            aria-label="Annuleren"
                           >
-                            Annuleren
+                            {ICON_CANCEL}
                           </button>
                           {task.status === "BESCHIKBAAR" ? (
                             <button
@@ -1955,8 +2230,10 @@ export function TasksClient({ alias }: { alias: string }) {
                               onClick={() => onRegister(task.id)}
                               disabled={activeTaskId === task.id}
                               style={{ whiteSpace: "nowrap" }}
+                              title="Schrijf in"
+                              aria-label="Schrijf in"
                             >
-                              {activeTaskId === task.id ? "Inschrijven..." : "Schrijf in"}
+                              {activeTaskId === task.id ? `${ICON_REGISTER}...` : ICON_REGISTER}
                             </button>
                           ) : null}
                         </div>
@@ -1982,8 +2259,10 @@ export function TasksClient({ alias }: { alias: string }) {
                           onClick={() => onRegister(task.id)}
                           disabled={activeTaskId === task.id}
                           style={{ whiteSpace: "nowrap" }}
+                          title="Schrijf in"
+                          aria-label="Schrijf in"
                         >
-                          {activeTaskId === task.id ? "Inschrijven..." : "Schrijf in"}
+                          {activeTaskId === task.id ? `${ICON_REGISTER}...` : ICON_REGISTER}
                         </button>
                       ) : null}
 
@@ -1993,8 +2272,10 @@ export function TasksClient({ alias }: { alias: string }) {
                           onClick={() => onRelease(task.id)}
                           disabled={activeTaskId === task.id}
                           style={{ whiteSpace: "nowrap" }}
+                          title="Stel beschikbaar"
+                          aria-label="Stel beschikbaar"
                         >
-                          {activeTaskId === task.id ? "Beschikbaar stellen..." : "Stel beschikbaar"}
+                          {activeTaskId === task.id ? `${ICON_RELEASE}...` : ICON_RELEASE}
                         </button>
                       ) : null}
 
@@ -2004,8 +2285,10 @@ export function TasksClient({ alias }: { alias: string }) {
                           onClick={() => onStartPropose(task)}
                           disabled={activeTaskId === task.id}
                           style={{ whiteSpace: "nowrap" }}
+                          title="Stel voor"
+                          aria-label="Stel voor"
                         >
-                          {activeTaskId === task.id ? "Voorstellen..." : "Stel voor"}
+                          {activeTaskId === task.id ? `${ICON_PROPOSE}...` : ICON_PROPOSE}
                         </button>
                       ) : null}
                     </div>
@@ -2059,15 +2342,152 @@ export function TasksClient({ alias }: { alias: string }) {
                 type="button"
                 onClick={onCancelProposeDialog}
                 disabled={activeTaskId === proposeDialogTask.id}
+                title="Annuleren"
+                aria-label="Annuleren"
               >
-                Annuleren
+                {ICON_CANCEL}
               </button>
               <button
                 type="button"
                 onClick={onConfirmPropose}
                 disabled={activeTaskId === proposeDialogTask.id || !proposeDialogAlias}
+                title="Stel voor"
+                aria-label="Stel voor"
               >
-                {activeTaskId === proposeDialogTask.id ? "Voorstellen..." : "Stel voor"}
+                {activeTaskId === proposeDialogTask.id ? `${ICON_PROPOSE}...` : ICON_PROPOSE}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {registerSuccessTaskTitle ? (
+        <div
+          onClick={onCloseRegisterSuccessDialog}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Inschrijving ontvangen"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "34rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3>Inschrijving ontvangen</h3>
+            <p>
+              Dank voor je inschrijving op de taak: <strong>{registerSuccessTaskTitle}</strong>.
+              Zodra een coordinator je inschrijving accepteert kun je aan de slag.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={onCloseRegisterSuccessDialog}
+                title="Sluiten"
+                aria-label="Sluiten"
+              >
+                {ICON_ACCEPT}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {releaseDialogTask ? (
+        <div
+          onClick={activeTaskId === releaseDialogTask.id ? undefined : onCancelReleaseDialog}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Stel beschikbaar bevestigen"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "34rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3>Stel beschikbaar</h3>
+            <p>
+              Weet je zeker dat je wil stoppen met: <strong>{releaseDialogTask.title}</strong>?
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={onCancelReleaseDialog}
+                disabled={activeTaskId === releaseDialogTask.id}
+                title="Annuleren"
+                aria-label="Annuleren"
+              >
+                {ICON_CANCEL}
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmRelease}
+                disabled={activeTaskId === releaseDialogTask.id}
+                title="Stel beschikbaar"
+                aria-label="Stel beschikbaar"
+              >
+                {activeTaskId === releaseDialogTask.id ? `${ICON_RELEASE}...` : ICON_RELEASE}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteDialogTask ? (
+        <div
+          onClick={activeTaskId === deleteDialogTask.id ? undefined : onCancelDeleteDialog}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Taak verwijderen bevestigen"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "34rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3>Verwijderen bevestigen</h3>
+            <p>
+              <strong>{deleteDialogTask.title}</strong>
+            </p>
+            <p>{deleteDialogTask.message}</p>
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={onCancelDeleteDialog}
+                disabled={activeTaskId === deleteDialogTask.id}
+                title="Annuleren"
+                aria-label="Annuleren"
+              >
+                {ICON_CANCEL}
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmDeleteTask}
+                disabled={activeTaskId === deleteDialogTask.id}
+                title="Verwijder"
+                aria-label="Verwijder"
+              >
+                {activeTaskId === deleteDialogTask.id ? `${ICON_DELETE}...` : ICON_DELETE}
               </button>
             </div>
           </div>

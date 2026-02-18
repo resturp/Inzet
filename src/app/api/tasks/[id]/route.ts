@@ -10,7 +10,7 @@ const patchTaskSchema = z.object({
   title: z.string().trim().min(2).optional(),
   description: z.string().trim().min(2).optional(),
   teamName: z.string().trim().max(100).nullable().optional(),
-  points: z.number().finite().nonnegative().optional(),
+  points: z.number().finite().int().nonnegative().optional(),
   date: z.string().datetime().optional(),
   startTime: z.string().datetime().nullable().optional(),
   endTime: z.string().datetime().optional(),
@@ -53,9 +53,34 @@ export async function PATCH(
     return NextResponse.json({ error: "Taak niet gevonden" }, { status: 404 });
   }
 
-  const canEdit = await canManageTaskByOwnership(sessionUser.alias, task.id);
-  if (!canEdit) {
-    return NextResponse.json({ error: "Geen rechten op deze taak" }, { status: 403 });
+  const canEditTask = await canManageTaskByOwnership(sessionUser.alias, task.id);
+  const hasPointsUpdate = parsed.data.points !== undefined;
+  const hasOtherUpdates =
+    parsed.data.title !== undefined ||
+    parsed.data.description !== undefined ||
+    parsed.data.teamName !== undefined ||
+    parsed.data.date !== undefined ||
+    parsed.data.startTime !== undefined ||
+    parsed.data.endTime !== undefined ||
+    parsed.data.location !== undefined;
+
+  let canManageParent = false;
+  if (task.parentId && hasPointsUpdate) {
+    canManageParent = await canManageTaskByOwnership(sessionUser.alias, task.parentId);
+  }
+
+  if (!canEditTask) {
+    const mayOnlyUpdateSubtaskPoints = Boolean(task.parentId && hasPointsUpdate && !hasOtherUpdates);
+    if (!mayOnlyUpdateSubtaskPoints || !canManageParent) {
+      return NextResponse.json({ error: "Geen rechten op deze taak" }, { status: 403 });
+    }
+  }
+
+  if (task.parentId && hasPointsUpdate && !canManageParent) {
+    return NextResponse.json(
+      { error: "Punten van een subtaak kunnen alleen via de parent-taak worden aangepast" },
+      { status: 403 }
+    );
   }
 
   const baseUpdateData = {
@@ -85,10 +110,15 @@ export async function PATCH(
 
   const updatedTask = await prisma.task.update({
     where: { id },
-    data: {
-      ...baseUpdateData,
-      points: parsed.data.points === undefined ? undefined : pointsToStorage(parsed.data.points)
-    }
+    data:
+      canEditTask || !hasPointsUpdate
+        ? {
+            ...baseUpdateData,
+            points: parsed.data.points === undefined ? undefined : pointsToStorage(parsed.data.points)
+          }
+        : {
+            points: pointsToStorage(parsed.data.points!)
+          }
   });
 
   await writeAuditLog({

@@ -92,7 +92,7 @@ export async function POST(
   });
 
   const childDefaultPoints = childTemplates.map((child) =>
-    parseStoredPoints(child.defaultPoints?.toString() ?? "10")
+    parseStoredPoints(child.defaultPoints ?? 10)
   );
   const totalChildDefaultPoints = childDefaultPoints.reduce((sum, points) => sum + points, 0);
   const zeroSubtree = rootAllocation.zeroed || totalChildDefaultPoints > requestedRootPoints;
@@ -104,7 +104,7 @@ export async function POST(
         description: `Coordinatietaak voor team ${parsed.data.teamName}`,
         teamName: parsed.data.teamName,
         parentId: parentTask.id,
-        points: zeroSubtree ? "0" : pointsToStorage(requestedRootPoints),
+        points: zeroSubtree ? 0 : pointsToStorage(requestedRootPoints),
         date: baseDate,
         endTime,
         templateId: template.id,
@@ -122,7 +122,7 @@ export async function POST(
           description: child.description,
           teamName: parsed.data.teamName,
           parentId: coordinatorTask.id,
-          points: zeroSubtree ? "0" : pointsToStorage(childPoints),
+          points: zeroSubtree ? 0 : pointsToStorage(childPoints),
           date: baseDate,
           endTime,
           templateId: child.id,

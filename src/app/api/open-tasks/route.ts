@@ -12,7 +12,15 @@ export async function GET() {
   }
 
   const openTasks = await prisma.openTask.findMany({
-    where: { status: OpenTaskStatus.OPEN },
+    where: {
+      OR: [
+        { status: OpenTaskStatus.OPEN },
+        {
+          status: OpenTaskStatus.AFGEWEZEN,
+          proposerAlias: sessionUser.alias
+        }
+      ]
+    },
     include: {
       task: {
         select: {
@@ -37,7 +45,7 @@ export async function GET() {
   const visible = openTasks
     .map((item) => {
       const effectiveCoordinatorAliases = effectiveCoordinatorsByTaskId.get(item.taskId) ?? [];
-      const canDecide = item.proposedAlias
+      const canDecide = item.status === OpenTaskStatus.OPEN && item.proposedAlias
         ? canActorDecideProposal({
             proposerAlias: item.proposerAlias,
             proposedAlias: item.proposedAlias,
@@ -47,10 +55,12 @@ export async function GET() {
         : false;
 
       const isRelevant =
-        canDecide ||
-        item.proposerAlias === sessionUser.alias ||
-        item.proposedAlias === sessionUser.alias ||
-        effectiveCoordinatorAliases.includes(sessionUser.alias);
+        item.status === OpenTaskStatus.AFGEWEZEN
+          ? item.proposerAlias === sessionUser.alias
+          : canDecide ||
+            item.proposerAlias === sessionUser.alias ||
+            item.proposedAlias === sessionUser.alias ||
+            effectiveCoordinatorAliases.includes(sessionUser.alias);
 
       if (!isRelevant) {
         return null;
@@ -63,6 +73,7 @@ export async function GET() {
         teamName: item.task.teamName,
         proposerAlias: item.proposerAlias,
         proposedAlias: item.proposedAlias,
+        status: item.status,
         canDecide,
         createdAt: item.createdAt
       };

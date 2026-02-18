@@ -53,6 +53,7 @@ export async function POST(request: Request) {
         alias: requestedAlias,
         bondsnummer,
         email,
+        emailVerifiedAt: null,
         role: UserRole.LID,
         isActive: true
       }
@@ -67,7 +68,8 @@ export async function POST(request: Request) {
       where: { alias: user.alias },
       data: {
         alias: requestedAlias,
-        email
+        email,
+        emailVerifiedAt: null
       }
     });
   }
@@ -79,7 +81,7 @@ export async function POST(request: Request) {
   await prisma.$transaction([
     prisma.user.update({
       where: { alias: user.alias },
-      data: { email }
+      data: { email, emailVerifiedAt: null }
     }),
     prisma.magicLinkToken.create({
       data: {

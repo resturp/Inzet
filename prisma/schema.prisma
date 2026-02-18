@@ -28,6 +28,7 @@ model User {
   alias             String            @id
   bondsnummer       String            @unique
   email             String?           @unique
+  emailVerifiedAt   DateTime?
   passwordHash      String?
   role              UserRole          @default(LID)
   isActive          Boolean           @default(true)
@@ -42,7 +43,7 @@ model TaskTemplate {
   id               String         @id @default(cuid())
   title            String
   description      String
-  defaultPoints    Decimal?       @db.Decimal(20, 8)
+  defaultPoints    Int?
   parentTemplateId String?
   parentTemplate   TaskTemplate?  @relation("TemplateParent", fields: [parentTemplateId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   childTemplates   TaskTemplate[] @relation("TemplateParent")
@@ -59,7 +60,7 @@ model Task {
   parent          Task?             @relation("TaskParent", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   children        Task[]            @relation("TaskParent")
   ownCoordinators TaskCoordinator[]
-  points          Decimal           @db.Decimal(20, 8)
+  points          Int
   date            DateTime
   startTime       DateTime?
   endTime         DateTime

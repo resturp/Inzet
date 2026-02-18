@@ -20,7 +20,7 @@ const copySchema = z.object({
       title: z.string().trim().min(2).optional(),
       description: z.string().trim().min(2).optional(),
       teamName: z.string().trim().max(100).nullable().optional(),
-      points: z.number().finite().nonnegative().optional(),
+      points: z.number().finite().int().nonnegative().optional(),
       date: z.string().datetime().optional(),
       startTime: z.string().datetime().nullable().optional(),
       endTime: z.string().datetime().optional(),
@@ -36,7 +36,7 @@ type TaskNode = {
   teamName: string | null;
   parentId: string | null;
   ownCoordinatorAliases: string[];
-  points: { toString: () => string };
+  points: number;
   date: Date;
   startTime: Date | null;
   endTime: Date;
@@ -226,7 +226,7 @@ export async function POST(
             override?.teamName === undefined ? sourceTask.teamName : override.teamName,
           parentId: targetParent.id,
           ownCoordinators: coordinatorCreateData(sourceTask.ownCoordinatorAliases),
-          points: shouldZeroSubtree ? "0" : pointsToStorage(requestedRootPoints),
+          points: shouldZeroSubtree ? 0 : pointsToStorage(requestedRootPoints),
           date: override?.date ? new Date(override.date) : sourceTask.date,
           startTime:
             override?.startTime === undefined
@@ -253,7 +253,7 @@ export async function POST(
               teamName: child.teamName,
               parentId: newParentId,
               ownCoordinators: coordinatorCreateData(child.ownCoordinatorAliases),
-              points: shouldZeroSubtree ? "0" : child.points.toString(),
+              points: shouldZeroSubtree ? 0 : child.points,
               date: child.date,
               startTime: child.startTime,
               endTime: child.endTime,

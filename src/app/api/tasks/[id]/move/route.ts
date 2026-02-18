@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/api-session";
 import { canManageTaskByOwnership } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { transferPointsBetweenParents } from "@/lib/task-points";
 
 const moveSchema = z.object({
   targetParentId: z.string().trim().min(1)
@@ -56,6 +57,7 @@ export async function POST(
       select: {
         id: true,
         parentId: true,
+        points: true,
         teamName: true,
         title: true
       }
@@ -64,6 +66,7 @@ export async function POST(
       where: { id: parsed.data.targetParentId },
       select: {
         id: true,
+        points: true,
         teamName: true,
         title: true
       }
@@ -117,10 +120,67 @@ export async function POST(
     return NextResponse.json({ error: "Deze verplaatsing veroorzaakt een cycle" }, { status: 409 });
   }
 
-  const updated = await prisma.task.update({
-    where: { id: task.id },
-    data: { parentId: targetParent.id }
+  const sourceParent = await prisma.task.findUnique({
+    where: { id: task.parentId },
+    select: {
+      id: true,
+      points: true
+    }
   });
+  if (!sourceParent) {
+    return NextResponse.json({ error: "Bron-parent niet gevonden" }, { status: 404 });
+  }
+
+  const transferPreview = transferPointsBetweenParents({
+    sourceParentPoints: sourceParent.points,
+    targetParentPoints: targetParent.points,
+    movedTaskPoints: task.points
+  });
+  if (!transferPreview.transferable) {
+    return NextResponse.json(
+      { error: "Bron-parent heeft onvoldoende punten om deze taak te verplaatsen" },
+      { status: 409 }
+    );
+  }
+
+  let updated: { id: string; parentId: string | null };
+  try {
+    updated = await prisma.$transaction(async (tx) => {
+      const sourceParentUpdate = await tx.task.updateMany({
+        where: {
+          id: sourceParent.id,
+          points: { gte: task.points }
+        },
+        data: {
+          points: { decrement: task.points }
+        }
+      });
+      if (sourceParentUpdate.count !== 1) {
+        throw new Error("SOURCE_PARENT_POINTS_TOO_LOW");
+      }
+
+      await tx.task.update({
+        where: { id: targetParent.id },
+        data: {
+          points: { increment: task.points }
+        }
+      });
+
+      return tx.task.update({
+        where: { id: task.id },
+        data: { parentId: targetParent.id },
+        select: { id: true, parentId: true }
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "SOURCE_PARENT_POINTS_TOO_LOW") {
+      return NextResponse.json(
+        { error: "Bron-parent heeft onvoldoende punten om deze taak te verplaatsen" },
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 
   await writeAuditLog({
     actorAlias: sessionUser.alias,
@@ -131,7 +191,10 @@ export async function POST(
       fromParentId: task.parentId,
       toParentId: targetParent.id,
       taskTitle: task.title,
-      targetParentTitle: targetParent.title
+      targetParentTitle: targetParent.title,
+      movedPoints: task.points,
+      fromParentPointsAfter: transferPreview.sourceParentPointsAfter,
+      toParentPointsAfter: transferPreview.targetParentPointsAfter
     }
   });
 
