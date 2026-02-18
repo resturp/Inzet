@@ -4,6 +4,7 @@ import { PrismaClient, TaskStatus, UserRole } from "@prisma/client";
 import { hashPassword } from "../src/lib/password";
 
 const prisma = new PrismaClient();
+const IMPORT_TIME_ZONE = "Europe/Amsterdam";
 
 type CsvUser = {
   alias: string;
@@ -15,6 +16,9 @@ type TaskNode = {
   title: string;
   parentTitle: string | null;
   points: number;
+  description: string;
+  startAt: Date | null;
+  endAt: Date | null;
   coordinatorAliases: Set<string>;
 };
 
@@ -99,6 +103,108 @@ function toSafeIdFragment(value: string): string {
 
 function generatedBondsnummer(alias: string, index: number): string {
   return `CSV-${toSafeIdFragment(alias)}-${String(index + 1).padStart(3, "0")}`;
+}
+
+function dateTimePartsInTimeZone(
+  date: Date,
+  timeZone: string
+): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+  const parts = formatter.formatToParts(date);
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+
+  const year = Number(byType.get("year"));
+  const month = Number(byType.get("month"));
+  const day = Number(byType.get("day"));
+  const hour = Number(byType.get("hour"));
+  const minute = Number(byType.get("minute"));
+  const second = Number(byType.get("second"));
+
+  return { year, month, day, hour, minute, second };
+}
+
+function offsetMsForTimeZone(date: Date, timeZone: string): number {
+  const parts = dateTimePartsInTimeZone(date, timeZone);
+  const asUtc = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    0
+  );
+  return asUtc - date.getTime();
+}
+
+function parseDateTime(value: string): Date | null {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const match = normalized.match(
+    /^(\d{1,2})-(\d{1,2})-(\d{4})(?:[ T](\d{1,2}):(\d{2}))?$/
+  );
+  if (!match) {
+    return null;
+  }
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const hour = Number(match[4] ?? "0");
+  const minute = Number(match[5] ?? "0");
+
+  if (
+    !Number.isInteger(day) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(year) ||
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute)
+  ) {
+    return null;
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+
+  const guessedUtc = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  let parsed = new Date(guessedUtc);
+  let offsetMs = offsetMsForTimeZone(parsed, IMPORT_TIME_ZONE);
+  parsed = new Date(guessedUtc - offsetMs);
+
+  const correctedOffsetMs = offsetMsForTimeZone(parsed, IMPORT_TIME_ZONE);
+  if (correctedOffsetMs !== offsetMs) {
+    offsetMs = correctedOffsetMs;
+    parsed = new Date(guessedUtc - offsetMs);
+  }
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const zoned = dateTimePartsInTimeZone(parsed, IMPORT_TIME_ZONE);
+  if (
+    zoned.year !== year ||
+    zoned.month !== month ||
+    zoned.day !== day ||
+    zoned.hour !== hour ||
+    zoned.minute !== minute
+  ) {
+    return null;
+  }
+
+  return parsed;
 }
 
 async function seedUsersFromCsv(): Promise<Map<string, CsvUser>> {
@@ -212,6 +318,9 @@ async function seedTasksFromCsv(rootTemplateId: string | null): Promise<void> {
       title: normalizedTitle,
       parentTitle: null,
       points: 20,
+      description: "",
+      startAt: null,
+      endAt: null,
       coordinatorAliases: new Set<string>()
     };
     taskNodesByTitle.set(normalizedTitle, created);
@@ -223,6 +332,9 @@ async function seedTasksFromCsv(rootTemplateId: string | null): Promise<void> {
     const parentTitle = (row[1] ?? "").trim();
     const rawPoints = Number((row[2] ?? "").trim());
     const points = Number.isFinite(rawPoints) ? Math.max(20, Math.round(rawPoints)) : 20;
+    const description = (row[3] ?? "").trim();
+    const startAt = parseDateTime(row[4] ?? "");
+    const endAt = parseDateTime(row[5] ?? "");
 
     if (!title) {
       continue;
@@ -240,6 +352,15 @@ async function seedTasksFromCsv(rootTemplateId: string | null): Promise<void> {
       ensureNode(parentTitle);
     }
     node.points = points;
+    if (description) {
+      node.description = description;
+    }
+    if (startAt) {
+      node.startAt = startAt;
+    }
+    if (endAt) {
+      node.endAt = endAt;
+    }
   }
 
   for (const row of coordRows) {
@@ -316,15 +437,17 @@ async function seedTasksFromCsv(rootTemplateId: string | null): Promise<void> {
       }
 
       const parentId = node.parentTitle ? createdByTitle.get(node.parentTitle)?.id ?? null : null;
+      const startTime = node.startAt ?? seasonStart;
+      const endTime = node.endAt ?? endTimeForTitle(node.title);
       const task = await prisma.task.create({
         data: {
           title: node.title,
-          description: descriptionForTitle(node.title),
+          description: node.description || descriptionForTitle(node.title),
           parentId,
           points: node.points,
-          date: seasonStart,
-          startTime: seasonStart,
-          endTime: endTimeForTitle(node.title),
+          date: startTime,
+          startTime,
+          endTime,
           templateId: node.title === rootTitle ? rootTemplateId : null,
           status:
             node.coordinatorAliases.size > 0 ? TaskStatus.TOEGEWEZEN : TaskStatus.BESCHIKBAAR
