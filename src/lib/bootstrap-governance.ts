@@ -125,14 +125,14 @@ export async function ensureGovernanceBootstrap(loginAlias: string) {
         title: "Coachen team",
         description: "Sjabloon voor taken rond coaching van een team.",
         parentTemplateId: template.id,
-        defaultPoints: "100"
+        defaultPoints: 100
       }
     }));
 
   const defaultTeamSubtemplates = [
-    { title: "Teamfoto maken", description: "Maak en verstuur de teamfoto.", defaultPoints: "30" },
-    { title: "Rijden", description: "Regel en/of uitvoer van vervoer.", defaultPoints: "20" },
-    { title: "Wassen", description: "Wasschema beheren en uitvoeren.", defaultPoints: "15" }
+    { title: "Teamfoto maken", description: "Maak en verstuur de teamfoto.", defaultPoints: 30 },
+    { title: "Rijden", description: "Regel en/of uitvoer van vervoer.", defaultPoints: 20 },
+    { title: "Wassen", description: "Wasschema beheren en uitvoeren.", defaultPoints: 15 }
   ];
   for (const subtemplate of defaultTeamSubtemplates) {
     const exists = await prisma.taskTemplate.findFirst({
@@ -167,7 +167,7 @@ export async function ensureGovernanceBootstrap(loginAlias: string) {
         ownCoordinators: {
           create: [{ userAlias: bestuur.alias }]
         },
-        points: "1600",
+        points: 1600,
         date: new Date("2026-01-01T00:00:00.000Z"),
         endTime: new Date("2026-12-31T23:59:59.000Z"),
         templateId: template.id,

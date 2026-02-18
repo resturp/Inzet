@@ -44,7 +44,7 @@ export async function GET(request: Request) {
   const withEffectiveCoordinators = await Promise.all(
     tasks.map(async (task) => {
       const coordinatorAliases = await resolveEffectiveCoordinatorAliases(task.id);
-      const points = Number(task.points.toString());
+      const points = Number(task.points);
       const pointsPerCoordinator =
         coordinatorAliases.length > 0 ? points / coordinatorAliases.length : 0;
 

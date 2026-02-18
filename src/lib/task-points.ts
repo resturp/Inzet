@@ -2,7 +2,7 @@ function normalizePoints(value: number): number {
   if (!Number.isFinite(value) || value < 0) {
     return 0;
   }
-  return value;
+  return Math.round(value);
 }
 
 export function parseStoredPoints(value: { toString: () => string } | string | number): number {
@@ -10,9 +10,8 @@ export function parseStoredPoints(value: { toString: () => string } | string | n
   return normalizePoints(raw);
 }
 
-export function pointsToStorage(value: number): string {
-  const normalized = normalizePoints(value);
-  return normalized.toString();
+export function pointsToStorage(value: number): number {
+  return normalizePoints(value);
 }
 
 export function sumStoredPoints(values: Iterable<{ toString: () => string } | string | number>): number {
@@ -54,4 +53,32 @@ export function remainingOwnPoints(params: {
   issuedToDirectSubtasks: number;
 }): number {
   return normalizePoints(params.ownPoints) - normalizePoints(params.issuedToDirectSubtasks);
+}
+
+export function transferPointsBetweenParents(params: {
+  sourceParentPoints: number;
+  targetParentPoints: number;
+  movedTaskPoints: number;
+}): {
+  sourceParentPointsAfter: number;
+  targetParentPointsAfter: number;
+  transferable: boolean;
+} {
+  const sourceParentPoints = normalizePoints(params.sourceParentPoints);
+  const targetParentPoints = normalizePoints(params.targetParentPoints);
+  const movedTaskPoints = normalizePoints(params.movedTaskPoints);
+
+  if (movedTaskPoints > sourceParentPoints) {
+    return {
+      sourceParentPointsAfter: sourceParentPoints,
+      targetParentPointsAfter: targetParentPoints,
+      transferable: false
+    };
+  }
+
+  return {
+    sourceParentPointsAfter: sourceParentPoints - movedTaskPoints,
+    targetParentPointsAfter: targetParentPoints + movedTaskPoints,
+    transferable: true
+  };
 }

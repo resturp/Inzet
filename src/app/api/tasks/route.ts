@@ -24,7 +24,7 @@ const createTaskSchema = z.object({
   description: z.string().trim().min(2),
   teamName: z.string().trim().max(100).optional(),
   parentId: z.string().trim().optional(),
-  points: z.number().finite().nonnegative(),
+  points: z.number().finite().int().nonnegative(),
   date: z.string().datetime(),
   startTime: z.string().datetime().optional(),
   endTime: z.string().datetime(),
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  let parentTask: { id: string; points: { toString: () => string } } | null = null;
+  let parentTask: { id: string; points: number } | null = null;
   if (parsed.data.parentId) {
     parentTask = await prisma.task.findUnique({
       where: { id: parsed.data.parentId },

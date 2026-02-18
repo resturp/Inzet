@@ -5,7 +5,8 @@ import {
   parseStoredPoints,
   pointsToStorage,
   remainingOwnPoints,
-  sumStoredPoints
+  sumStoredPoints,
+  transferPointsBetweenParents
 } from "../src/lib/task-points";
 
 test("allocate op beschikbaar saldo trekt punten af bij voldoende ruimte", () => {
@@ -46,10 +47,10 @@ test("remaining own points berekent eigen min uitgegeven subtaken", () => {
 test("parse en storage normaliseren negatieve en ongeldige waarden", () => {
   assert.equal(parseStoredPoints("-10"), 0);
   assert.equal(parseStoredPoints("abc"), 0);
-  assert.equal(pointsToStorage(-99), "0");
+  assert.equal(pointsToStorage(-99), 0);
 });
 
-test("sum stored points telt Decimal/string/number veilig op", () => {
+test("sum stored points rondt af naar hele punten en telt veilig op", () => {
   const total = sumStoredPoints([
     { toString: () => "40.5" },
     "20",
@@ -57,5 +58,33 @@ test("sum stored points telt Decimal/string/number veilig op", () => {
     "abc"
   ]);
 
-  assert.equal(total, 60.5);
+  assert.equal(total, 61);
+});
+
+test("move verplaatst punten tussen parents met plus/min", () => {
+  const result = transferPointsBetweenParents({
+    sourceParentPoints: 600,
+    targetParentPoints: 300,
+    movedTaskPoints: 125
+  });
+
+  assert.deepEqual(result, {
+    sourceParentPointsAfter: 475,
+    targetParentPointsAfter: 425,
+    transferable: true
+  });
+});
+
+test("move faalt als bron-parent te weinig punten heeft", () => {
+  const result = transferPointsBetweenParents({
+    sourceParentPoints: 80,
+    targetParentPoints: 300,
+    movedTaskPoints: 125
+  });
+
+  assert.deepEqual(result, {
+    sourceParentPointsAfter: 80,
+    targetParentPointsAfter: 300,
+    transferable: false
+  });
 });

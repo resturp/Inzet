@@ -9,7 +9,7 @@ const createTemplateSchema = z.object({
   title: z.string().trim().min(2),
   description: z.string().trim().min(2),
   parentTemplateId: z.string().trim().optional(),
-  defaultPoints: z.number().nonnegative().optional()
+  defaultPoints: z.number().int().nonnegative().optional()
 });
 
 export async function GET() {
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       title: parsed.data.title,
       description: parsed.data.description,
       parentTemplateId: parsed.data.parentTemplateId,
-      defaultPoints: parsed.data.defaultPoints?.toString()
+      defaultPoints: parsed.data.defaultPoints
     }
   });
 
