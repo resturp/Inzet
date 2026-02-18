@@ -88,6 +88,15 @@ type DeleteDialogTask = {
   message: string;
 };
 
+type CopyDateShiftUnit = "hours" | "days" | "weeks" | "months" | "years";
+type CopyDateHandlingMode = "KEEP" | "SHIFT";
+type CopyDateDialogState = {
+  parentTaskId: string;
+};
+type CopyDateTimeHandlingPayload =
+  | { mode: "KEEP" }
+  | { mode: "SHIFT"; amount: number; unit: CopyDateShiftUnit };
+
 const initialSubtask: DraftSubtask = {
   title: "",
   description: "",
@@ -104,7 +113,7 @@ const ICON_OPEN = "✎";
 const ICON_EDIT = "✎...";
 const ICON_COPY = "⧉";
 const ICON_DELETE = "🗑";
-const ICON_MOVE = "↕";
+const ICON_MOVE = "|--\n|   |--\n|   |--\n|--";
 const ICON_REGISTER = "✓";
 const ICON_PROPOSE = "⊕";
 const ICON_RELEASE = "⇡";
@@ -113,6 +122,23 @@ const ICON_ADD = "+";
 const ICON_BACK = "↩";
 const ICON_ACCEPT = "✓";
 const ICON_REJECT = "✕";
+const MOVE_ICON_STYLE = {
+  whiteSpace: "pre",
+  fontFamily: "monospace",
+  fontSize: "0.55rem",
+  lineHeight: "0.3rem",
+  display: "inline-block",
+  textAlign: "left",
+  verticalAlign: "middle"
+} as const;
+
+const COPY_SHIFT_UNITS: Array<{ value: CopyDateShiftUnit; label: string }> = [
+  { value: "hours", label: "uren" },
+  { value: "days", label: "dagen" },
+  { value: "weeks", label: "weken" },
+  { value: "months", label: "maanden" },
+  { value: "years", label: "jaren" }
+];
 
 function labelForStatus(status: ApiTask["status"]): string {
   switch (status) {
@@ -144,6 +170,11 @@ function labelForOpenTaskStatus(status: ApiOpenTask["status"]): string {
 
 function isAssignedStatus(status: ApiTask["status"]): boolean {
   return status === "TOEGEWEZEN" || status === "GEREED";
+}
+
+function endsInFuture(task: ApiTask): boolean {
+  const endMs = new Date(task.endTime).getTime();
+  return Number.isFinite(endMs) && endMs > Date.now();
 }
 
 function parseTaskPoints(value: string | number): number {
@@ -322,6 +353,10 @@ export function TasksClient({ alias }: { alias: string }) {
   const [subtaskFormMode, setSubtaskFormMode] = useState<"new" | "copy">("new");
   const [copySourceTaskId, setCopySourceTaskId] = useState<string | null>(null);
   const [copySourceTitle, setCopySourceTitle] = useState<string | null>(null);
+  const [copyDateDialogState, setCopyDateDialogState] = useState<CopyDateDialogState | null>(null);
+  const [copyDateHandlingMode, setCopyDateHandlingMode] = useState<CopyDateHandlingMode>("KEEP");
+  const [copyDateShiftAmount, setCopyDateShiftAmount] = useState("1");
+  const [copyDateShiftUnit, setCopyDateShiftUnit] = useState<CopyDateShiftUnit>("days");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null);
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
@@ -468,7 +503,7 @@ export function TasksClient({ alias }: { alias: string }) {
             taskHasCoordinator(task, assignedAliasFilter)
           );
         }
-        return task.status === taskMenuView;
+        return task.status === taskMenuView && endsInFuture(task);
       });
     },
     [assignedAliasFilter, isTaskListView, myAssignedSubtreeTaskIds, sortedTasks, taskMenuView]
@@ -578,6 +613,19 @@ export function TasksClient({ alias }: { alias: string }) {
   }, [proposeDialogTask]);
 
   useEffect(() => {
+    if (!copyDateDialogState) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && activeTaskId !== copyDateDialogState.parentTaskId) {
+        setCopyDateDialogState(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeTaskId, copyDateDialogState]);
+
+  useEffect(() => {
     if (focusedTaskId && !tasksById.has(focusedTaskId)) {
       setFocusedTaskId(null);
     }
@@ -587,6 +635,7 @@ export function TasksClient({ alias }: { alias: string }) {
       setSubtaskFormMode("new");
       setCopySourceTaskId(null);
       setCopySourceTitle(null);
+      setCopyDateDialogState(null);
     }
     if (editingTaskId && !tasksById.has(editingTaskId)) {
       setEditingTaskId(null);
@@ -631,6 +680,13 @@ export function TasksClient({ alias }: { alias: string }) {
       setFocusedTaskId(null);
     }
   }, [focusedTaskId, isTaskListView, taskMenuView, visibleTasks]);
+
+  function resetCopyDateDialog() {
+    setCopyDateDialogState(null);
+    setCopyDateHandlingMode("KEEP");
+    setCopyDateShiftAmount("1");
+    setCopyDateShiftUnit("days");
+  }
 
   async function onRegister(taskId: string) {
     const taskTitle = tasksById.get(taskId)?.title ?? taskId;
@@ -788,8 +844,10 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
-  async function onCreateSubtask(event: FormEvent<HTMLFormElement>, parentTaskId: string) {
-    event.preventDefault();
+  async function submitSubtask(
+    parentTaskId: string,
+    copyDateTimeHandling?: CopyDateTimeHandlingPayload
+  ) {
     const draftPoints = parseNonNegativeIntegerInput(subtaskDraft.points);
     if (draftPoints === null) {
       setError("Punten moeten een geheel getal van 0 of hoger zijn.");
@@ -811,6 +869,7 @@ export function TasksClient({ alias }: { alias: string }) {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 targetParentId: parentTaskId,
+                dateTimeHandling: copyDateTimeHandling ?? { mode: "KEEP" },
                 rootOverride: {
                   title: subtaskDraft.title,
                   description: subtaskDraft.description,
@@ -846,12 +905,52 @@ export function TasksClient({ alias }: { alias: string }) {
       setSubtaskFormMode("new");
       setCopySourceTaskId(null);
       setCopySourceTitle(null);
+      resetCopyDateDialog();
       await loadAll();
     } catch {
       setError("Netwerkfout bij kopieren/aanmaken subtaak.");
     } finally {
       setActiveTaskId(null);
     }
+  }
+
+  function onCreateSubtask(event: FormEvent<HTMLFormElement>, parentTaskId: string) {
+    event.preventDefault();
+    if (subtaskFormMode === "copy" && copySourceTaskId) {
+      setError(null);
+      setCopyDateDialogState({ parentTaskId });
+      return;
+    }
+    void submitSubtask(parentTaskId);
+  }
+
+  function onCancelCopyDateDialog() {
+    if (!copyDateDialogState || activeTaskId === copyDateDialogState.parentTaskId) {
+      return;
+    }
+    setCopyDateDialogState(null);
+  }
+
+  async function onConfirmCopyDateDialog() {
+    if (!copyDateDialogState) {
+      return;
+    }
+    if (copyDateHandlingMode === "KEEP") {
+      await submitSubtask(copyDateDialogState.parentTaskId, { mode: "KEEP" });
+      return;
+    }
+
+    const amount = Number(copyDateShiftAmount);
+    if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
+      setError("Verplaatsing moet een geheel getal van 1 of hoger zijn.");
+      return;
+    }
+
+    await submitSubtask(copyDateDialogState.parentTaskId, {
+      mode: "SHIFT",
+      amount,
+      unit: copyDateShiftUnit
+    });
   }
 
   async function onCreateTemplate(event: FormEvent<HTMLFormElement>) {
@@ -933,6 +1032,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setSubtaskFormMode("new");
     setCopySourceTaskId(null);
     setCopySourceTitle(null);
+    resetCopyDateDialog();
   }
 
   function onStartSubtask(task: ApiTask, sourceTask?: ApiTask) {
@@ -945,6 +1045,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setSubtaskFormMode(sourceTask ? "copy" : "new");
     setCopySourceTaskId(sourceTask?.id ?? null);
     setCopySourceTitle(sourceTask?.title ?? null);
+    resetCopyDateDialog();
     if (sourceTask) {
       setSubtaskDraft({
         title: `${sourceTask.title} (kopie)`,
@@ -974,6 +1075,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setSubtaskFormMode("new");
     setCopySourceTaskId(null);
     setCopySourceTitle(null);
+    resetCopyDateDialog();
   }
 
   function onStartEdit(task: ApiTask) {
@@ -983,6 +1085,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setSubtaskFormMode("new");
     setCopySourceTaskId(null);
     setCopySourceTitle(null);
+    resetCopyDateDialog();
     setMovingTaskId(null);
     setMoveTargetParentId("");
     setEditingTaskId(task.id);
@@ -1128,6 +1231,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setSubtaskFormMode("new");
     setCopySourceTaskId(null);
     setCopySourceTitle(null);
+    resetCopyDateDialog();
     setEditingTaskId(null);
     setEditDraft(null);
     setMovingTaskId(task.id);
@@ -1230,6 +1334,7 @@ export function TasksClient({ alias }: { alias: string }) {
         setSubtaskFormMode("new");
         setCopySourceTaskId(null);
         setCopySourceTitle(null);
+        resetCopyDateDialog();
       }
       setDeleteDialogTask(null);
       await loadAll();
@@ -1281,6 +1386,7 @@ export function TasksClient({ alias }: { alias: string }) {
                     setSubtaskFormMode("new");
                     setCopySourceTaskId(null);
                     setCopySourceTitle(null);
+                    resetCopyDateDialog();
                   }}
                 >
                   {assignedAliasOptions.map((candidateAlias) => (
@@ -1316,6 +1422,7 @@ export function TasksClient({ alias }: { alias: string }) {
                   setSubtaskFormMode("new");
                   setCopySourceTaskId(null);
                   setCopySourceTitle(null);
+                  resetCopyDateDialog();
                 }}
                 disabled={taskMenuView === view}
               >
@@ -1681,7 +1788,7 @@ export function TasksClient({ alias }: { alias: string }) {
                   title="Verplaats"
                   aria-label="Verplaats"
                 >
-                  {ICON_MOVE}
+                  <span style={MOVE_ICON_STYLE}>{ICON_MOVE}</span>
                 </button>
                 {canDeleteTask ? (
                   <button
@@ -1905,7 +2012,9 @@ export function TasksClient({ alias }: { alias: string }) {
                         title="Verplaats"
                         aria-label="Verplaats"
                       >
-                        {activeTaskId === task.id ? `${ICON_MOVE}...` : ICON_MOVE}
+                        <span style={MOVE_ICON_STYLE}>
+                          {activeTaskId === task.id ? `${ICON_MOVE}\n...` : ICON_MOVE}
+                        </span>
                       </button>
                     </>
                   )}
@@ -2393,6 +2502,130 @@ export function TasksClient({ alias }: { alias: string }) {
                 aria-label="Sluiten"
               >
                 {ICON_ACCEPT}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {copyDateDialogState ? (
+        <div
+          onClick={
+            activeTaskId === copyDateDialogState.parentTaskId ? undefined : onCancelCopyDateDialog
+          }
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Datums en tijden kopieren"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "34rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3>Datums en tijden kopieren</h3>
+            <p>Kies wat er met begin- en einddatum/tijd van de kopie moet gebeuren.</p>
+            <div style={{ display: "flex", gap: "0.85rem", flexWrap: "wrap" }}>
+              <label
+                style={{
+                  display: "inline-flex",
+                  gap: "0.35rem",
+                  alignItems: "center",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                <input
+                  type="radio"
+                  name="copy-date-handling"
+                  checked={copyDateHandlingMode === "KEEP"}
+                  onChange={() => setCopyDateHandlingMode("KEEP")}
+                  disabled={activeTaskId === copyDateDialogState.parentTaskId}
+                  style={{ width: "auto", margin: 0 }}
+                />
+                Laat staan
+              </label>
+              <label
+                style={{
+                  display: "inline-flex",
+                  gap: "0.35rem",
+                  alignItems: "center",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                <input
+                  type="radio"
+                  name="copy-date-handling"
+                  checked={copyDateHandlingMode === "SHIFT"}
+                  onChange={() => setCopyDateHandlingMode("SHIFT")}
+                  disabled={activeTaskId === copyDateDialogState.parentTaskId}
+                  style={{ width: "auto", margin: 0 }}
+                />
+                Verplaats
+              </label>
+            </div>
+            {copyDateHandlingMode === "SHIFT" ? (
+              <>
+                <p className="muted">Schuif begin- en einddatum/tijd vooruit met:</p>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    alignItems: "center",
+                    flexWrap: "wrap"
+                  }}
+                >
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={copyDateShiftAmount}
+                    onChange={(event) => setCopyDateShiftAmount(event.target.value)}
+                    disabled={activeTaskId === copyDateDialogState.parentTaskId}
+                    style={{ width: "6rem" }}
+                  />
+                  <select
+                    value={copyDateShiftUnit}
+                    onChange={(event) =>
+                      setCopyDateShiftUnit(event.target.value as CopyDateShiftUnit)
+                    }
+                    disabled={activeTaskId === copyDateDialogState.parentTaskId}
+                  >
+                    {COPY_SHIFT_UNITS.map((unit) => (
+                      <option key={unit.value} value={unit.value}>
+                        {unit.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="muted">vooruit</span>
+                </div>
+              </>
+            ) : null}
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={onCancelCopyDateDialog}
+                disabled={activeTaskId === copyDateDialogState.parentTaskId}
+                title="Annuleren"
+                aria-label="Annuleren"
+              >
+                {ICON_CANCEL}
+              </button>
+              <button
+                type="button"
+                onClick={() => void onConfirmCopyDateDialog()}
+                disabled={activeTaskId === copyDateDialogState.parentTaskId}
+                title="Kopieer"
+                aria-label="Kopieer"
+              >
+                {activeTaskId === copyDateDialogState.parentTaskId ? `${ICON_COPY}...` : ICON_COPY}
               </button>
             </div>
           </div>

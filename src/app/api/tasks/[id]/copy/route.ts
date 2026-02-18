@@ -15,6 +15,18 @@ import {
 
 const copySchema = z.object({
   targetParentId: z.string().trim().min(1),
+  dateTimeHandling: z
+    .union([
+      z.object({
+        mode: z.literal("KEEP")
+      }),
+      z.object({
+        mode: z.literal("SHIFT"),
+        amount: z.number().finite().int().positive(),
+        unit: z.enum(["hours", "days", "weeks", "months", "years"])
+      })
+    ])
+    .optional(),
   rootOverride: z
     .object({
       title: z.string().trim().min(2).optional(),
@@ -42,7 +54,13 @@ type TaskNode = {
   endTime: Date;
   location: string | null;
   templateId: string | null;
+  status: TaskStatus;
 };
+
+type DateShiftUnit = "hours" | "days" | "weeks" | "months" | "years";
+type DateTimeHandling =
+  | { mode: "KEEP" }
+  | { mode: "SHIFT"; amount: number; unit: DateShiftUnit };
 
 function uniqueSortedAliases(aliases: Iterable<string>): string[] {
   return Array.from(new Set(Array.from(aliases).filter(Boolean))).sort((left, right) =>
@@ -56,6 +74,56 @@ function coordinatorCreateData(aliases: readonly string[]) {
   }
   return {
     create: aliases.map((userAlias) => ({ userAlias }))
+  };
+}
+
+function cloneDate(value: Date): Date {
+  return new Date(value);
+}
+
+function addMonthsClamped(value: Date, months: number): Date {
+  const result = cloneDate(value);
+  const originalDay = result.getDate();
+  result.setDate(1);
+  result.setMonth(result.getMonth() + months);
+  const monthDays = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(originalDay, monthDays));
+  return result;
+}
+
+function shiftDate(value: Date, amount: number, unit: DateShiftUnit): Date {
+  switch (unit) {
+    case "hours":
+      return new Date(value.getTime() + amount * 60 * 60 * 1000);
+    case "days":
+      return new Date(value.getTime() + amount * 24 * 60 * 60 * 1000);
+    case "weeks":
+      return new Date(value.getTime() + amount * 7 * 24 * 60 * 60 * 1000);
+    case "months":
+      return addMonthsClamped(value, amount);
+    case "years":
+      return addMonthsClamped(value, amount * 12);
+  }
+}
+
+function applyDateTimeHandling(
+  date: Date,
+  startTime: Date | null,
+  endTime: Date,
+  handling: DateTimeHandling
+): { date: Date; startTime: Date | null; endTime: Date } {
+  if (handling.mode === "KEEP") {
+    return {
+      date: cloneDate(date),
+      startTime: startTime ? cloneDate(startTime) : null,
+      endTime: cloneDate(endTime)
+    };
+  }
+
+  return {
+    date: shiftDate(date, handling.amount, handling.unit),
+    startTime: startTime ? shiftDate(startTime, handling.amount, handling.unit) : null,
+    endTime: shiftDate(endTime, handling.amount, handling.unit)
   };
 }
 
@@ -121,7 +189,8 @@ export async function POST(
             startTime: true,
             endTime: true,
             location: true,
-            templateId: true
+            templateId: true,
+            status: true
           }
         }),
         tx.task.findUnique({
@@ -164,7 +233,8 @@ export async function POST(
             startTime: true,
             endTime: true,
             location: true,
-            templateId: true
+            templateId: true,
+            status: true
           }
         });
 
@@ -194,6 +264,9 @@ export async function POST(
       }
 
       const override = parsed.data.rootOverride;
+      const dateTimeHandling: DateTimeHandling = parsed.data.dateTimeHandling ?? {
+        mode: "KEEP"
+      };
       const createdIds: string[] = [];
       const requestedRootPoints =
         override?.points !== undefined ? override.points : parseStoredPoints(sourceTask.points);
@@ -218,6 +291,17 @@ export async function POST(
       const shouldZeroSubtree =
         rootAllocation.zeroed || requestedRootChildPoints > requestedRootPoints;
 
+      const rootDates = applyDateTimeHandling(
+        override?.date ? new Date(override.date) : sourceTask.date,
+        override?.startTime === undefined
+          ? sourceTask.startTime
+          : override.startTime
+            ? new Date(override.startTime)
+            : null,
+        override?.endTime ? new Date(override.endTime) : sourceTask.endTime,
+        dateTimeHandling
+      );
+
       const rootCopy = await tx.task.create({
         data: {
           title: override?.title ?? sourceTask.title,
@@ -227,18 +311,13 @@ export async function POST(
           parentId: targetParent.id,
           ownCoordinators: coordinatorCreateData(sourceTask.ownCoordinatorAliases),
           points: shouldZeroSubtree ? 0 : pointsToStorage(requestedRootPoints),
-          date: override?.date ? new Date(override.date) : sourceTask.date,
-          startTime:
-            override?.startTime === undefined
-              ? sourceTask.startTime
-              : override.startTime
-                ? new Date(override.startTime)
-                : null,
-          endTime: override?.endTime ? new Date(override.endTime) : sourceTask.endTime,
+          date: rootDates.date,
+          startTime: rootDates.startTime,
+          endTime: rootDates.endTime,
           location:
             override?.location === undefined ? sourceTask.location : override.location,
           templateId: sourceTask.templateId,
-          status: TaskStatus.BESCHIKBAAR
+          status: sourceTask.status
         }
       });
       createdIds.push(rootCopy.id);
@@ -246,6 +325,12 @@ export async function POST(
       async function cloneChildren(oldParentId: string, newParentId: string): Promise<void> {
         const children = childrenByParent.get(oldParentId) ?? [];
         for (const child of children) {
+          const childDates = applyDateTimeHandling(
+            child.date,
+            child.startTime,
+            child.endTime,
+            dateTimeHandling
+          );
           const createdChild = await tx.task.create({
             data: {
               title: child.title,
@@ -254,12 +339,12 @@ export async function POST(
               parentId: newParentId,
               ownCoordinators: coordinatorCreateData(child.ownCoordinatorAliases),
               points: shouldZeroSubtree ? 0 : child.points,
-              date: child.date,
-              startTime: child.startTime,
-              endTime: child.endTime,
+              date: childDates.date,
+              startTime: childDates.startTime,
+              endTime: childDates.endTime,
               location: child.location,
               templateId: child.templateId,
-              status: TaskStatus.BESCHIKBAAR
+              status: child.status
             }
           });
           createdIds.push(createdChild.id);
@@ -283,6 +368,7 @@ export async function POST(
       entityId: sourceTaskId,
       payload: {
         targetParentId: parsed.data.targetParentId,
+        dateTimeHandling: parsed.data.dateTimeHandling ?? { mode: "KEEP" },
         newRootId: result.rootId,
         createdCount: result.createdCount
       }
