@@ -114,9 +114,8 @@ const ICON_EDIT = "✎...";
 const ICON_COPY = "⧉";
 const ICON_DELETE = "🗑";
 const ICON_MOVE = "|--\n|   |--\n|   |--\n|--";
-const ICON_REGISTER = "✓";
-const ICON_PROPOSE = "⊕";
-const ICON_RELEASE = "⇡";
+const ICON_REGISTER = "☝︎";
+const ICON_PROPOSE = "☞";
 const ICON_CANCEL = "✕";
 const ICON_ADD = "+";
 const ICON_BACK = "↩";
@@ -130,6 +129,20 @@ const MOVE_ICON_STYLE = {
   display: "inline-block",
   textAlign: "left",
   verticalAlign: "middle"
+} as const;
+const RELEASE_ICON_STYLE = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.02rem",
+  lineHeight: 1
+} as const;
+const RELEASE_ICON_LEFT_STYLE = {
+  display: "inline-block",
+  transform: "rotate(-32deg) translateY(-0.08rem)"
+} as const;
+const RELEASE_ICON_RIGHT_STYLE = {
+  display: "inline-block",
+  transform: "rotate(32deg) translateY(-0.08rem)"
 } as const;
 
 const COPY_SHIFT_UNITS: Array<{ value: CopyDateShiftUnit; label: string }> = [
@@ -166,6 +179,16 @@ function labelForMenuView(view: TaskMenuView): string {
 
 function labelForOpenTaskStatus(status: ApiOpenTask["status"]): string {
   return status === "AFGEWEZEN" ? "afgewezen" : "open";
+}
+
+function renderReleaseIcon(isPending: boolean) {
+  return (
+    <span style={RELEASE_ICON_STYLE}>
+      <span style={RELEASE_ICON_LEFT_STYLE}>☞</span>
+      <span style={RELEASE_ICON_RIGHT_STYLE}>☜</span>
+      {isPending ? "..." : null}
+    </span>
+  );
 }
 
 function isAssignedStatus(status: ApiTask["status"]): boolean {
@@ -1669,6 +1692,12 @@ export function TasksClient({ alias }: { alias: string }) {
             (sum, subtask) => sum + parseTaskPoints(subtask.points),
             0
           );
+          const coordinatorSummary =
+            taskOwnCoordinatorAliases.length > 0
+              ? `Coordinatoren (expliciet): ${taskOwnCoordinatorAliases.join(", ")}`
+              : `Coordinatoren (effectief): ${
+                  taskCoordinatorAliases.length > 0 ? taskCoordinatorAliases.join(", ") : "-"
+                }`;
           const availableTaskPoints = taskPoints - totalSubtaskPoints;
           const pointsPerCoordinator =
             taskCoordinatorAliases.length > 0
@@ -1681,6 +1710,28 @@ export function TasksClient({ alias }: { alias: string }) {
           const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
           const showInlineTaskActions = canRegisterTask || canReleaseTask || canProposeTask;
           const isOpenTasksListView = taskMenuView === "BESCHIKBAAR" && !focusedTaskId;
+          const pointsLines = isOpenTasksListView
+            ? [`Aantal punten: ${formatPoints(availableTaskPoints)}`]
+            : [
+                `Punten (eigen): ${formatPoints(taskPoints)}`,
+                `Uitgegeven subtaken: ${formatPoints(totalSubtaskPoints)}`,
+                `Beschikbaar: ${formatPoints(availableTaskPoints)}`,
+                `Per coordinator: ${formatPoints(pointsPerCoordinator)}`
+              ];
+          const infoPanelStyle = {
+            display: "grid",
+            rowGap: "0.15rem",
+            background: "#edf4ea",
+            borderRadius: "10px",
+            padding: "0.5rem 0.75rem"
+          } as const;
+          const infoLineStyle = {
+            margin: 0,
+            minHeight: "2.05rem",
+            display: "flex",
+            alignItems: "center",
+            lineHeight: 1.15
+          } as const;
 
           return (
             <article key={task.id} className="card">
@@ -1707,48 +1758,49 @@ export function TasksClient({ alias }: { alias: string }) {
                   ))}
                 </p>
               ) : null}
-              <p className="muted">{task.description}</p>
-              <p className="muted">
-                Coordinatoren (expliciet):{" "}
-                {taskOwnCoordinatorAliases.length > 0 ? taskOwnCoordinatorAliases.join(", ") : "-"}{" "}
-                | Coordinatoren (effectief):{" "}
-                {taskCoordinatorAliases.length > 0 ? taskCoordinatorAliases.join(", ") : "-"} | Status:{" "}
-                {labelForStatus(task.status)}
-              </p>
-              <p className="muted">Jouw recht: {labelForPermission(task)}</p>
-              <p className="muted">
-                Start: {new Date(task.date).toLocaleString("nl-NL")} | Einde:{" "}
-                {new Date(task.endTime).toLocaleString("nl-NL")}
-              </p>
-              {isOpenTasksListView ? (
-                <p className="muted">Per coordinator: {formatPoints(pointsPerCoordinator)}</p>
-              ) : (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: "0.85rem",
+                  flexWrap: "wrap"
+                }}
+              >
+                <div style={{ ...infoPanelStyle, minWidth: 0, flex: "1 1 18rem" }}>
+                  <p className="muted" style={infoLineStyle}>
+                    {task.description}
+                  </p>
+                  <p className="muted" style={infoLineStyle}>
+                    {coordinatorSummary} | Status: {labelForStatus(task.status)}
+                  </p>
+                  <p className="muted" style={infoLineStyle}>
+                    Jouw recht: {labelForPermission(task)}
+                  </p>
+                  <p className="muted" style={infoLineStyle}>
+                    Start: {new Date(task.date).toLocaleString("nl-NL")} | Einde:{" "}
+                    {new Date(task.endTime).toLocaleString("nl-NL")}
+                  </p>
+                </div>
                 <div
                   style={{
-                    marginTop: "0.25rem",
-                    display: "grid",
-                    rowGap: "0.15rem",
+                    ...infoPanelStyle,
+                    marginLeft: "auto",
                     justifyItems: "end",
                     textAlign: "right"
                   }}
                 >
-                  <p className="muted" style={{ margin: 0 }}>
-                    Punten (eigen): {formatPoints(taskPoints)}
-                  </p>
-                  <p className="muted" style={{ margin: 0 }}>
-                    Uitgegeven subtaken: {formatPoints(totalSubtaskPoints)}
-                  </p>
-                  <p className="muted" style={{ margin: 0 }}>
-                    Beschikbaar: {formatPoints(availableTaskPoints)}
-                  </p>
-                  <p className="muted" style={{ margin: 0 }}>
-                    Per coordinator: {formatPoints(pointsPerCoordinator)}
-                  </p>
+                  {pointsLines.map((line) => (
+                    <p key={line} className="muted" style={{ ...infoLineStyle, justifyContent: "flex-end" }}>
+                      {line}
+                    </p>
+                  ))}
                 </div>
-              )}
+              </div>
 
               <div
                 style={{
+                  marginTop: "0.4rem",
                   display: "inline-grid",
                   gridAutoFlow: "column",
                   columnGap: "0.5rem",
@@ -1960,7 +2012,7 @@ export function TasksClient({ alias }: { alias: string }) {
                       title="Opslaan"
                       aria-label="Opslaan"
                     >
-                      {activeTaskId === task.id ? `${ICON_SAVE}...` : ICON_SAVE}
+                      {activeTaskId === task.id ? "Opslaan..." : "Opslaan"}
                     </button>
                     <button
                       type="button"
@@ -1969,7 +2021,7 @@ export function TasksClient({ alias }: { alias: string }) {
                       title="Annuleren"
                       aria-label="Annuleren"
                     >
-                      {ICON_CANCEL}
+                      Annuleren
                     </button>
                   </div>
                 </form>
@@ -2080,6 +2132,15 @@ export function TasksClient({ alias }: { alias: string }) {
                             const subtaskPointsDraft =
                               subtaskPointsDraftById[subtask.id] ??
                               subtaskCurrentPoints.toString();
+                            const subtaskOwnCoordinatorAliases = getTaskOwnCoordinatorAliases(subtask);
+                            const subtaskCoordinatorLabel =
+                              subtaskOwnCoordinatorAliases.length > 0
+                                ? subtaskOwnCoordinatorAliases.join(", ")
+                                : "-";
+                            const subtaskListMiddleLabel =
+                              subtask.status === "BESCHIKBAAR"
+                                ? labelForStatus(subtask.status)
+                                : subtaskCoordinatorLabel;
                             return (
                               <li
                                 key={subtask.id}
@@ -2092,8 +2153,7 @@ export function TasksClient({ alias }: { alias: string }) {
                                 }}
                               >
                                 <span>
-                                  • {subtask.title} | {labelForStatus(subtask.status)} | Punten:{" "}
-                                  {formatPoints(parseTaskPoints(subtask.points))} |{" "}
+                                  • {subtask.title} | {subtaskListMiddleLabel} |{" "}
                                   {new Date(subtask.date).toLocaleDateString("nl-NL")}
                                 </span>
                                 <span
@@ -2384,7 +2444,7 @@ export function TasksClient({ alias }: { alias: string }) {
                           title="Stel beschikbaar"
                           aria-label="Stel beschikbaar"
                         >
-                          {activeTaskId === task.id ? `${ICON_RELEASE}...` : ICON_RELEASE}
+                          {renderReleaseIcon(activeTaskId === task.id)}
                         </button>
                       ) : null}
 
@@ -2454,16 +2514,16 @@ export function TasksClient({ alias }: { alias: string }) {
                 title="Annuleren"
                 aria-label="Annuleren"
               >
-                {ICON_CANCEL}
+                Annuleren
               </button>
               <button
                 type="button"
                 onClick={onConfirmPropose}
                 disabled={activeTaskId === proposeDialogTask.id || !proposeDialogAlias}
-                title="Stel voor"
-                aria-label="Stel voor"
+                title="OK"
+                aria-label="OK"
               >
-                {activeTaskId === proposeDialogTask.id ? `${ICON_PROPOSE}...` : ICON_PROPOSE}
+                {activeTaskId === proposeDialogTask.id ? "OK..." : "OK"}
               </button>
             </div>
           </div>
@@ -2498,10 +2558,10 @@ export function TasksClient({ alias }: { alias: string }) {
               <button
                 type="button"
                 onClick={onCloseRegisterSuccessDialog}
-                title="Sluiten"
-                aria-label="Sluiten"
+                title="Ok"
+                aria-label="Ok"
               >
-                {ICON_ACCEPT}
+                Ok
               </button>
             </div>
           </div>
@@ -2660,19 +2720,19 @@ export function TasksClient({ alias }: { alias: string }) {
                 type="button"
                 onClick={onCancelReleaseDialog}
                 disabled={activeTaskId === releaseDialogTask.id}
-                title="Annuleren"
-                aria-label="Annuleren"
+                title="Nee"
+                aria-label="Nee"
               >
-                {ICON_CANCEL}
+                Nee
               </button>
               <button
                 type="button"
                 onClick={onConfirmRelease}
                 disabled={activeTaskId === releaseDialogTask.id}
-                title="Stel beschikbaar"
-                aria-label="Stel beschikbaar"
+                title="Ja"
+                aria-label="Ja"
               >
-                {activeTaskId === releaseDialogTask.id ? `${ICON_RELEASE}...` : ICON_RELEASE}
+                {activeTaskId === releaseDialogTask.id ? "Ja..." : "Ja"}
               </button>
             </div>
           </div>
