@@ -57,13 +57,13 @@ export function resolveOwnCoordinatorAliasesAfterRelease(params: {
   );
 
   if (nextEffective.length === 0) {
-    const parentWithoutActor = uniqueSortedAliases(
-      params.parentEffectiveCoordinatorAliases.filter((alias) => alias !== params.actorAlias)
-    );
-    if (parentWithoutActor.length > 0) {
-      return { ownCoordinatorAliases: parentWithoutActor, error: null };
-    }
     if (params.parentEffectiveCoordinatorAliases.includes(params.actorAlias)) {
+      const parentWithoutActor = uniqueSortedAliases(
+        params.parentEffectiveCoordinatorAliases.filter((alias) => alias !== params.actorAlias)
+      );
+      if (parentWithoutActor.length > 0) {
+        return { ownCoordinatorAliases: [], error: null };
+      }
       return {
         ownCoordinatorAliases: null,
         error: "Taak kan je niet loslaten: parent-taak heeft alleen jou als coordinator."

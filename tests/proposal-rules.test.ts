@@ -99,3 +99,13 @@ test("release kan niet als parent alleen actor heeft", () => {
     error: "Taak kan je niet loslaten: parent-taak heeft alleen jou als coordinator."
   });
 });
+
+test("release door laatste expliciete coordinator zet geen parent-effectieve aliases expliciet op child", () => {
+  const result = resolveOwnCoordinatorAliasesAfterRelease({
+    actorAlias: "Thomas",
+    currentEffectiveCoordinatorAliases: ["Thomas"],
+    parentEffectiveCoordinatorAliases: ["Edgar", "Jan"]
+  });
+
+  assert.deepEqual(result, { ownCoordinatorAliases: [], error: null });
+});
