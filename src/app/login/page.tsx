@@ -101,7 +101,7 @@ export default function LoginPage() {
           setPendingAlias(resolvedAlias);
           setPendingPassword(password);
           setAlias(resolvedAlias);
-          setEmail(payload.email ?? "");
+          setEmail("");
           setMode("request");
           setStatus(
             payload.error ??

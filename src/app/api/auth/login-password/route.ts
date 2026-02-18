@@ -38,8 +38,7 @@ export async function POST(request: Request) {
         {
           error: "Je e-mailadres is nog niet bevestigd. Controleer je mailbox voor de magic link.",
           code: "EMAIL_NOT_VERIFIED",
-          alias: user.alias,
-          email: user.email
+          alias: user.alias
         },
         { status: 428 }
       );
@@ -59,8 +58,7 @@ export async function POST(request: Request) {
       {
         error: "Gebruik je e-mailadres om in te loggen.",
         code: "USE_EMAIL_LOGIN",
-        alias: user.alias,
-        email: user.email
+        alias: user.alias
       },
       { status: 409 }
     );
