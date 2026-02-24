@@ -4,7 +4,7 @@
   --foreground: #172212;
   --muted: #516048;
   --border: #d7dfd2;
-  --brand: #2f6e3f;
+  --brand: #1d4f8f;
 }
 
 * {
@@ -55,7 +55,8 @@ a {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -84,4 +85,14 @@ input {
   border-radius: 10px;
   padding: 0.55rem 0.75rem;
   background: #fff;
+}
+
+textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  background: #fff;
+  resize: vertical;
+  line-height: 1.35;
 }

@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/api-session";
 import { canManageTaskByOwnership } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { sanitizeTrimmedText } from "@/lib/sanitize";
 import {
   allocatePointsFromParent,
   parseStoredPoints,
@@ -31,6 +32,10 @@ export async function POST(
   const parsed = applyTemplateSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+  }
+  const teamName = sanitizeTrimmedText(parsed.data.teamName);
+  if (teamName.length < 2) {
+    return NextResponse.json({ error: "Teamnaam moet minimaal 2 tekens bevatten." }, { status: 400 });
   }
 
   const { id } = await context.params;
@@ -100,9 +105,9 @@ export async function POST(
   const teamCoordinatorTask = await prisma.$transaction(async (tx) => {
     const coordinatorTask = await tx.task.create({
       data: {
-        title: `Coachen ${parsed.data.teamName}`,
-        description: `Coordinatietaak voor team ${parsed.data.teamName}`,
-        teamName: parsed.data.teamName,
+        title: sanitizeTrimmedText(`Coachen ${teamName}`),
+        description: `Coordinatietaak voor team ${teamName}`,
+        teamName,
         parentId: parentTask.id,
         points: zeroSubtree ? 0 : pointsToStorage(requestedRootPoints),
         date: baseDate,
@@ -118,9 +123,9 @@ export async function POST(
       const childPoints = childDefaultPoints[index] ?? 0;
       const created = await tx.task.create({
         data: {
-          title: child.title,
-          description: child.description,
-          teamName: parsed.data.teamName,
+          title: sanitizeTrimmedText(child.title),
+          description: sanitizeTrimmedText(child.description),
+          teamName,
           parentId: coordinatorTask.id,
           points: zeroSubtree ? 0 : pointsToStorage(childPoints),
           date: baseDate,
@@ -144,7 +149,7 @@ export async function POST(
     entityType: "TaskTemplate",
     entityId: template.id,
     payload: {
-      teamName: parsed.data.teamName,
+      teamName,
       parentTaskId: parentTask.id,
       createdTaskId: teamCoordinatorTask.coordinatorTask.id,
       createdSubtasks: teamCoordinatorTask.subtasks.map((item) => item.id),

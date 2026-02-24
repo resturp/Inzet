@@ -6,6 +6,11 @@ import { getSessionUser } from "@/lib/api-session";
 import { canManageTaskByOwnership } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import {
+  sanitizeNullableText,
+  sanitizeNullableTrimmedText,
+  sanitizeTrimmedText
+} from "@/lib/sanitize";
+import {
   allocatePointsFromParent,
   parseStoredPoints,
   pointsToStorage,
@@ -31,6 +36,7 @@ const copySchema = z.object({
     .object({
       title: z.string().trim().min(2).optional(),
       description: z.string().trim().min(2).optional(),
+      longDescription: z.string().max(20000).nullable().optional(),
       teamName: z.string().trim().max(100).nullable().optional(),
       points: z.number().finite().int().nonnegative().optional(),
       date: z.string().datetime().optional(),
@@ -45,6 +51,7 @@ type TaskNode = {
   id: string;
   title: string;
   description: string;
+  longDescription: string | null;
   teamName: string | null;
   parentId: string | null;
   ownCoordinatorAliases: string[];
@@ -141,6 +148,31 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
+  const rootOverride = parsed.data.rootOverride
+    ? {
+        ...parsed.data.rootOverride,
+        title:
+          parsed.data.rootOverride.title === undefined
+            ? undefined
+            : sanitizeTrimmedText(parsed.data.rootOverride.title),
+        description:
+          parsed.data.rootOverride.description === undefined
+            ? undefined
+            : sanitizeTrimmedText(parsed.data.rootOverride.description),
+        longDescription: sanitizeNullableText(parsed.data.rootOverride.longDescription),
+        teamName: sanitizeNullableTrimmedText(parsed.data.rootOverride.teamName),
+        location: sanitizeNullableTrimmedText(parsed.data.rootOverride.location)
+      }
+    : undefined;
+  if (rootOverride?.title !== undefined && rootOverride.title.length < 2) {
+    return NextResponse.json({ error: "Titel moet minimaal 2 tekens bevatten." }, { status: 400 });
+  }
+  if (rootOverride?.description !== undefined && rootOverride.description.length < 2) {
+    return NextResponse.json(
+      { error: "Beschrijving moet minimaal 2 tekens bevatten." },
+      { status: 400 }
+    );
+  }
 
   const sourceTaskContext = await prisma.task.findUnique({
     where: { id: sourceTaskId },
@@ -179,6 +211,7 @@ export async function POST(
             id: true,
             title: true,
             description: true,
+            longDescription: true,
             teamName: true,
             parentId: true,
             ownCoordinators: {
@@ -223,6 +256,7 @@ export async function POST(
             id: true,
             title: true,
             description: true,
+            longDescription: true,
             teamName: true,
             parentId: true,
             ownCoordinators: {
@@ -263,7 +297,7 @@ export async function POST(
         siblings.push(node);
       }
 
-      const override = parsed.data.rootOverride;
+      const override = rootOverride;
       const dateTimeHandling: DateTimeHandling = parsed.data.dateTimeHandling ?? {
         mode: "KEEP"
       };
@@ -304,10 +338,16 @@ export async function POST(
 
       const rootCopy = await tx.task.create({
         data: {
-          title: override?.title ?? sourceTask.title,
-          description: override?.description ?? sourceTask.description,
+          title: override?.title ?? sanitizeTrimmedText(sourceTask.title),
+          description: override?.description ?? sanitizeTrimmedText(sourceTask.description),
+          longDescription:
+            override?.longDescription === undefined
+              ? (sanitizeNullableText(sourceTask.longDescription) ?? null)
+              : override.longDescription,
           teamName:
-            override?.teamName === undefined ? sourceTask.teamName : override.teamName,
+            override?.teamName === undefined
+              ? (sanitizeNullableTrimmedText(sourceTask.teamName) ?? null)
+              : override.teamName,
           parentId: targetParent.id,
           ownCoordinators: coordinatorCreateData(sourceTask.ownCoordinatorAliases),
           points: shouldZeroSubtree ? 0 : pointsToStorage(requestedRootPoints),
@@ -315,7 +355,9 @@ export async function POST(
           startTime: rootDates.startTime,
           endTime: rootDates.endTime,
           location:
-            override?.location === undefined ? sourceTask.location : override.location,
+            override?.location === undefined
+              ? (sanitizeNullableTrimmedText(sourceTask.location) ?? null)
+              : override.location,
           templateId: sourceTask.templateId,
           status: sourceTask.status
         }
@@ -333,16 +375,17 @@ export async function POST(
           );
           const createdChild = await tx.task.create({
             data: {
-              title: child.title,
-              description: child.description,
-              teamName: child.teamName,
+              title: sanitizeTrimmedText(child.title),
+              description: sanitizeTrimmedText(child.description),
+              longDescription: sanitizeNullableText(child.longDescription) ?? null,
+              teamName: sanitizeNullableTrimmedText(child.teamName) ?? null,
               parentId: newParentId,
               ownCoordinators: coordinatorCreateData(child.ownCoordinatorAliases),
               points: shouldZeroSubtree ? 0 : child.points,
               date: childDates.date,
               startTime: childDates.startTime,
               endTime: childDates.endTime,
-              location: child.location,
+              location: sanitizeNullableTrimmedText(child.location) ?? null,
               templateId: child.templateId,
               status: child.status
             }

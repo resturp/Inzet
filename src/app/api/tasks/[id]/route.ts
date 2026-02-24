@@ -4,11 +4,13 @@ import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import { canManageTaskByOwnership } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import { sanitizeNullableText, sanitizeNullableTrimmedText, sanitizeTrimmedText } from "@/lib/sanitize";
 import { pointsToStorage } from "@/lib/task-points";
 
 const patchTaskSchema = z.object({
   title: z.string().trim().min(2).optional(),
   description: z.string().trim().min(2).optional(),
+  longDescription: z.string().max(20000).nullable().optional(),
   teamName: z.string().trim().max(100).nullable().optional(),
   points: z.number().finite().int().nonnegative().optional(),
   date: z.string().datetime().optional(),
@@ -48,6 +50,20 @@ export async function PATCH(
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
+  const sanitizedTitle =
+    parsed.data.title === undefined ? undefined : sanitizeTrimmedText(parsed.data.title);
+  const sanitizedDescription =
+    parsed.data.description === undefined ? undefined : sanitizeTrimmedText(parsed.data.description);
+  if (sanitizedTitle !== undefined && sanitizedTitle.length < 2) {
+    return NextResponse.json({ error: "Titel moet minimaal 2 tekens bevatten." }, { status: 400 });
+  }
+  if (sanitizedDescription !== undefined && sanitizedDescription.length < 2) {
+    return NextResponse.json({ error: "Beschrijving moet minimaal 2 tekens bevatten." }, { status: 400 });
+  }
+  const sanitizedLongDescription = sanitizeNullableText(parsed.data.longDescription);
+  const sanitizedTeamName = sanitizeNullableTrimmedText(parsed.data.teamName);
+  const sanitizedLocation = sanitizeNullableTrimmedText(parsed.data.location);
+
   const task = await prisma.task.findUnique({ where: { id } });
   if (!task) {
     return NextResponse.json({ error: "Taak niet gevonden" }, { status: 404 });
@@ -58,6 +74,7 @@ export async function PATCH(
   const hasOtherUpdates =
     parsed.data.title !== undefined ||
     parsed.data.description !== undefined ||
+    parsed.data.longDescription !== undefined ||
     parsed.data.teamName !== undefined ||
     parsed.data.date !== undefined ||
     parsed.data.startTime !== undefined ||
@@ -84,14 +101,10 @@ export async function PATCH(
   }
 
   const baseUpdateData = {
-    title: parsed.data.title,
-    description: parsed.data.description,
-    teamName:
-      parsed.data.teamName === undefined
-        ? undefined
-        : parsed.data.teamName
-          ? parsed.data.teamName
-          : null,
+    title: sanitizedTitle,
+    description: sanitizedDescription,
+    longDescription: sanitizedLongDescription,
+    teamName: sanitizedTeamName,
     date: parsed.data.date ? new Date(parsed.data.date) : undefined,
     startTime:
       parsed.data.startTime === undefined
@@ -100,12 +113,7 @@ export async function PATCH(
           ? new Date(parsed.data.startTime)
           : null,
     endTime: parsed.data.endTime ? new Date(parsed.data.endTime) : undefined,
-    location:
-      parsed.data.location === undefined
-        ? undefined
-        : parsed.data.location
-          ? parsed.data.location
-          : null
+    location: sanitizedLocation
   };
 
   const updatedTask = await prisma.task.update({

@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/api-session";
 import { isRootOwner } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { sanitizeTrimmedText } from "@/lib/sanitize";
 
 const createTemplateSchema = z.object({
   title: z.string().trim().min(2),
@@ -49,10 +50,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
+  const title = sanitizeTrimmedText(parsed.data.title);
+  const description = sanitizeTrimmedText(parsed.data.description);
+  if (title.length < 2 || description.length < 2) {
+    return NextResponse.json({ error: "Titel en beschrijving zijn verplicht." }, { status: 400 });
+  }
+
   const template = await prisma.taskTemplate.create({
     data: {
-      title: parsed.data.title,
-      description: parsed.data.description,
+      title,
+      description,
       parentTemplateId: parsed.data.parentTemplateId,
       defaultPoints: parsed.data.defaultPoints
     }

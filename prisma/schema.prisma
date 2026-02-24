@@ -30,6 +30,8 @@ model User {
   email             String?           @unique
   emailVerifiedAt   DateTime?
   passwordHash      String?
+  profilePhotoData  String?
+  aboutMe           String?
   role              UserRole          @default(LID)
   isActive          Boolean           @default(true)
   createdAt         DateTime          @default(now())
@@ -55,6 +57,7 @@ model Task {
   id              String            @id @default(cuid())
   title           String
   description     String
+  longDescription String?
   teamName        String?
   parentId        String?
   parent          Task?             @relation("TaskParent", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)

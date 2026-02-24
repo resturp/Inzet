@@ -1,14 +1,15 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatPoints, snapNearInteger } from "@/lib/points";
-import { LogoutButton } from "@/components/logout-button";
 
 type ApiTask = {
   id: string;
   title: string;
   description: string;
+  longDescription: string | null;
   teamName: string | null;
   parentId: string | null;
   parent: { id: string; title: string; teamName: string | null } | null;
@@ -51,6 +52,14 @@ type ApiTemplate = {
   defaultPoints: number | null;
 };
 
+type ApiAccount = {
+  alias: string;
+  email: string | null;
+  role: "LID" | "COORDINATOR" | "BESTUUR";
+  aboutMe: string | null;
+  profilePhotoData: string | null;
+};
+
 type DraftSubtask = {
   title: string;
   description: string;
@@ -68,7 +77,7 @@ type TaskMenuView = TaskStatusFilter | "OPEN_VOORSTELLEN" | "SJABLONEN";
 type TaskEditDraft = {
   title: string;
   description: string;
-  teamName: string;
+  longDescription: string;
   points: string;
   startDate: string;
   startTime: string;
@@ -88,14 +97,29 @@ type DeleteDialogTask = {
   message: string;
 };
 
+type LongDescriptionDialogTask = {
+  id: string;
+  title: string;
+  longDescription: string;
+};
+
 type CopyDateShiftUnit = "hours" | "days" | "weeks" | "months" | "years";
 type CopyDateHandlingMode = "KEEP" | "SHIFT";
-type CopyDateDialogState = {
-  parentTaskId: string;
-};
 type CopyDateTimeHandlingPayload =
   | { mode: "KEEP" }
   | { mode: "SHIFT"; amount: number; unit: CopyDateShiftUnit };
+
+type AccountSettingsDraft = {
+  email: string;
+  currentPassword: string;
+  newPassword: string;
+  newPasswordConfirm: string;
+};
+
+type ProfileDraft = {
+  aboutMe: string;
+  profilePhotoData: string | null;
+};
 
 const initialSubtask: DraftSubtask = {
   title: "",
@@ -121,6 +145,9 @@ const ICON_ADD = "+";
 const ICON_BACK = "↩";
 const ICON_ACCEPT = "✓";
 const ICON_REJECT = "✕";
+const VCZ_LOGO_URL =
+  "https://usercontent.one/wp/www.vczwolle.nl/wp-content/uploads/Logo-nieuw-V1-VCZ.png?media=1660898964";
+const MAX_PROFILE_FILE_BYTES = 2 * 1024 * 1024;
 const MOVE_ICON_STYLE = {
   whiteSpace: "pre",
   fontFamily: "monospace",
@@ -350,6 +377,22 @@ function buildTaskChain(task: ApiTask, tasksById: Map<string, ApiTask>): ApiTask
   return chain;
 }
 
+function accountSettingsDraftFromAccount(account: ApiAccount): AccountSettingsDraft {
+  return {
+    email: account.email ?? "",
+    currentPassword: "",
+    newPassword: "",
+    newPasswordConfirm: ""
+  };
+}
+
+function profileDraftFromAccount(account: ApiAccount): ProfileDraft {
+  return {
+    aboutMe: account.aboutMe ?? "",
+    profilePhotoData: account.profilePhotoData
+  };
+}
+
 export function TasksClient({ alias }: { alias: string }) {
   const router = useRouter();
   const [tasks, setTasks] = useState<ApiTask[]>([]);
@@ -375,8 +418,6 @@ export function TasksClient({ alias }: { alias: string }) {
   const [creatingSubtaskForTaskId, setCreatingSubtaskForTaskId] = useState<string | null>(null);
   const [subtaskFormMode, setSubtaskFormMode] = useState<"new" | "copy">("new");
   const [copySourceTaskId, setCopySourceTaskId] = useState<string | null>(null);
-  const [copySourceTitle, setCopySourceTitle] = useState<string | null>(null);
-  const [copyDateDialogState, setCopyDateDialogState] = useState<CopyDateDialogState | null>(null);
   const [copyDateHandlingMode, setCopyDateHandlingMode] = useState<CopyDateHandlingMode>("KEEP");
   const [copyDateShiftAmount, setCopyDateShiftAmount] = useState("1");
   const [copyDateShiftUnit, setCopyDateShiftUnit] = useState<CopyDateShiftUnit>("days");
@@ -389,7 +430,23 @@ export function TasksClient({ alias }: { alias: string }) {
   const [registerSuccessTaskTitle, setRegisterSuccessTaskTitle] = useState<string | null>(null);
   const [releaseDialogTask, setReleaseDialogTask] = useState<ReleaseDialogTask | null>(null);
   const [deleteDialogTask, setDeleteDialogTask] = useState<DeleteDialogTask | null>(null);
+  const [longDescriptionDialogTask, setLongDescriptionDialogTask] =
+    useState<LongDescriptionDialogTask | null>(null);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isAccountSettingsDialogOpen, setIsAccountSettingsDialogOpen] = useState(false);
+  const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
+  const [accountSettingsDraft, setAccountSettingsDraft] = useState<AccountSettingsDraft | null>(null);
+  const [profileDraft, setProfileDraft] = useState<ProfileDraft | null>(null);
+  const [accountRole, setAccountRole] = useState<ApiAccount["role"] | null>(null);
+  const [isAccountLoading, setIsAccountLoading] = useState(false);
+  const [isAccountSettingsSaving, setIsAccountSettingsSaving] = useState(false);
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+  const [accountSettingsError, setAccountSettingsError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [accountSettingsStatus, setAccountSettingsStatus] = useState<string | null>(null);
+  const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [subtaskPointsDraftById, setSubtaskPointsDraftById] = useState<Record<string, string>>({});
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
 
   const sortedTasks = useMemo(
     () =>
@@ -608,6 +665,24 @@ export function TasksClient({ alias }: { alias: string }) {
   }, [alias, assignedAliasFilter, assignedAliasOptions]);
 
   useEffect(() => {
+    if (!isUserMenuOpen) {
+      return;
+    }
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (userMenuRef.current?.contains(target)) {
+        return;
+      }
+      setIsUserMenuOpen(false);
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    return () => window.removeEventListener("mousedown", onPointerDown);
+  }, [isUserMenuOpen]);
+
+  useEffect(() => {
     if (!proposeDialogTask) {
       return;
     }
@@ -622,31 +697,98 @@ export function TasksClient({ alias }: { alias: string }) {
   }, [otherAliases, proposeDialogAlias, proposeDialogTask]);
 
   useEffect(() => {
-    if (!proposeDialogTask) {
-      return;
-    }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      if (deleteDialogTask) {
+        if (activeTaskId !== deleteDialogTask.id) {
+          setDeleteDialogTask(null);
+        }
+        return;
+      }
+
+      if (releaseDialogTask) {
+        if (activeTaskId !== releaseDialogTask.id) {
+          setReleaseDialogTask(null);
+        }
+        return;
+      }
+
+      if (subtaskFormMode === "copy" && creatingSubtaskForTaskId) {
+        if (activeTaskId !== creatingSubtaskForTaskId) {
+          setCreatingSubtaskForTaskId(null);
+          setSubtaskDraft(initialSubtask);
+          setSubtaskFormMode("new");
+          setCopySourceTaskId(null);
+          setCopyDateHandlingMode("KEEP");
+          setCopyDateShiftAmount("1");
+          setCopyDateShiftUnit("days");
+        }
+        return;
+      }
+
+      if (registerSuccessTaskTitle) {
+        setRegisterSuccessTaskTitle(null);
+        return;
+      }
+
+      if (proposeDialogTask) {
         setProposeDialogTask(null);
         setProposeDialogAlias("");
+        return;
       }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [proposeDialogTask]);
 
-  useEffect(() => {
-    if (!copyDateDialogState) {
-      return;
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && activeTaskId !== copyDateDialogState.parentTaskId) {
-        setCopyDateDialogState(null);
+      if (isProfileDialogOpen) {
+        if (!isProfileSaving) {
+          setIsProfileDialogOpen(false);
+          setProfileDraft(null);
+          setProfileError(null);
+          setProfileStatus(null);
+        }
+        return;
+      }
+
+      if (isAccountSettingsDialogOpen) {
+        if (!isAccountSettingsSaving) {
+          setIsAccountSettingsDialogOpen(false);
+          setAccountSettingsDraft(null);
+          setAccountSettingsError(null);
+          setAccountSettingsStatus(null);
+        }
+        return;
+      }
+
+      if (longDescriptionDialogTask) {
+        setLongDescriptionDialogTask(null);
+        return;
+      }
+
+      if (editingTaskId) {
+        if (activeTaskId !== editingTaskId) {
+          setEditingTaskId(null);
+          setEditDraft(null);
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTaskId, copyDateDialogState]);
+  }, [
+    activeTaskId,
+    creatingSubtaskForTaskId,
+    deleteDialogTask,
+    editingTaskId,
+    isAccountSettingsDialogOpen,
+    isAccountSettingsSaving,
+    isProfileDialogOpen,
+    isProfileSaving,
+    longDescriptionDialogTask,
+    proposeDialogTask,
+    registerSuccessTaskTitle,
+    releaseDialogTask,
+    subtaskFormMode
+  ]);
 
   useEffect(() => {
     if (focusedTaskId && !tasksById.has(focusedTaskId)) {
@@ -657,8 +799,9 @@ export function TasksClient({ alias }: { alias: string }) {
       setSubtaskDraft(initialSubtask);
       setSubtaskFormMode("new");
       setCopySourceTaskId(null);
-      setCopySourceTitle(null);
-      setCopyDateDialogState(null);
+      setCopyDateHandlingMode("KEEP");
+      setCopyDateShiftAmount("1");
+      setCopyDateShiftUnit("days");
     }
     if (editingTaskId && !tasksById.has(editingTaskId)) {
       setEditingTaskId(null);
@@ -705,7 +848,6 @@ export function TasksClient({ alias }: { alias: string }) {
   }, [focusedTaskId, isTaskListView, taskMenuView, visibleTasks]);
 
   function resetCopyDateDialog() {
-    setCopyDateDialogState(null);
     setCopyDateHandlingMode("KEEP");
     setCopyDateShiftAmount("1");
     setCopyDateShiftUnit("days");
@@ -927,7 +1069,6 @@ export function TasksClient({ alias }: { alias: string }) {
       setCreatingSubtaskForTaskId(null);
       setSubtaskFormMode("new");
       setCopySourceTaskId(null);
-      setCopySourceTitle(null);
       resetCopyDateDialog();
       await loadAll();
     } catch {
@@ -939,41 +1080,28 @@ export function TasksClient({ alias }: { alias: string }) {
 
   function onCreateSubtask(event: FormEvent<HTMLFormElement>, parentTaskId: string) {
     event.preventDefault();
-    if (subtaskFormMode === "copy" && copySourceTaskId) {
-      setError(null);
-      setCopyDateDialogState({ parentTaskId });
-      return;
-    }
     void submitSubtask(parentTaskId);
   }
 
-  function onCancelCopyDateDialog() {
-    if (!copyDateDialogState || activeTaskId === copyDateDialogState.parentTaskId) {
+  async function onSaveCopiedSubtask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (subtaskFormMode !== "copy" || !copySourceTaskId || !creatingSubtaskForTaskId) {
       return;
     }
-    setCopyDateDialogState(null);
-  }
-
-  async function onConfirmCopyDateDialog() {
-    if (!copyDateDialogState) {
-      return;
+    let copyDateTimeHandling: CopyDateTimeHandlingPayload = { mode: "KEEP" };
+    if (copyDateHandlingMode === "SHIFT") {
+      const amount = Number(copyDateShiftAmount);
+      if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
+        setError("Verplaatsing moet een geheel getal van 1 of hoger zijn.");
+        return;
+      }
+      copyDateTimeHandling = {
+        mode: "SHIFT",
+        amount,
+        unit: copyDateShiftUnit
+      };
     }
-    if (copyDateHandlingMode === "KEEP") {
-      await submitSubtask(copyDateDialogState.parentTaskId, { mode: "KEEP" });
-      return;
-    }
-
-    const amount = Number(copyDateShiftAmount);
-    if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
-      setError("Verplaatsing moet een geheel getal van 1 of hoger zijn.");
-      return;
-    }
-
-    await submitSubtask(copyDateDialogState.parentTaskId, {
-      mode: "SHIFT",
-      amount,
-      unit: copyDateShiftUnit
-    });
+    await submitSubtask(creatingSubtaskForTaskId, copyDateTimeHandling);
   }
 
   async function onCreateTemplate(event: FormEvent<HTMLFormElement>) {
@@ -1054,7 +1182,6 @@ export function TasksClient({ alias }: { alias: string }) {
     setSubtaskDraft(initialSubtask);
     setSubtaskFormMode("new");
     setCopySourceTaskId(null);
-    setCopySourceTitle(null);
     resetCopyDateDialog();
   }
 
@@ -1067,7 +1194,6 @@ export function TasksClient({ alias }: { alias: string }) {
     setCreatingSubtaskForTaskId(task.id);
     setSubtaskFormMode(sourceTask ? "copy" : "new");
     setCopySourceTaskId(sourceTask?.id ?? null);
-    setCopySourceTitle(sourceTask?.title ?? null);
     resetCopyDateDialog();
     if (sourceTask) {
       setSubtaskDraft({
@@ -1097,7 +1223,6 @@ export function TasksClient({ alias }: { alias: string }) {
     setSubtaskDraft(initialSubtask);
     setSubtaskFormMode("new");
     setCopySourceTaskId(null);
-    setCopySourceTitle(null);
     resetCopyDateDialog();
   }
 
@@ -1107,7 +1232,6 @@ export function TasksClient({ alias }: { alias: string }) {
     setSubtaskDraft(initialSubtask);
     setSubtaskFormMode("new");
     setCopySourceTaskId(null);
-    setCopySourceTitle(null);
     resetCopyDateDialog();
     setMovingTaskId(null);
     setMoveTargetParentId("");
@@ -1115,7 +1239,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setEditDraft({
       title: task.title,
       description: task.description,
-      teamName: task.teamName ?? "",
+      longDescription: task.longDescription ?? "",
       points: parseTaskPoints(task.points).toString(),
       startDate: toDateValue(task.date),
       startTime: toTimeValue(task.startTime ?? task.date),
@@ -1176,7 +1300,9 @@ export function TasksClient({ alias }: { alias: string }) {
         body: JSON.stringify({
           title: editDraft.title.trim(),
           description: editDraft.description.trim(),
-          teamName: editDraft.teamName.trim() ? editDraft.teamName.trim() : null,
+          longDescription: editDraft.longDescription.trim()
+            ? editDraft.longDescription
+            : null,
           points,
           date: startAt,
           startTime: startAt,
@@ -1253,7 +1379,6 @@ export function TasksClient({ alias }: { alias: string }) {
     setSubtaskDraft(initialSubtask);
     setSubtaskFormMode("new");
     setCopySourceTaskId(null);
-    setCopySourceTitle(null);
     resetCopyDateDialog();
     setEditingTaskId(null);
     setEditDraft(null);
@@ -1356,7 +1481,6 @@ export function TasksClient({ alias }: { alias: string }) {
         setSubtaskDraft(initialSubtask);
         setSubtaskFormMode("new");
         setCopySourceTaskId(null);
-        setCopySourceTitle(null);
         resetCopyDateDialog();
       }
       setDeleteDialogTask(null);
@@ -1368,7 +1492,237 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
+  async function onLogout() {
+    setIsUserMenuOpen(false);
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+    } finally {
+      router.replace("/login");
+      router.refresh();
+    }
+  }
+
+  async function onOpenAccountSettingsDialog() {
+    setIsUserMenuOpen(false);
+    setAccountSettingsError(null);
+    setAccountSettingsStatus(null);
+    setIsAccountLoading(true);
+
+    try {
+      const response = await fetch("/api/account", { cache: "no-store" });
+      if (response.status === 401) {
+        router.replace("/login");
+        return;
+      }
+
+      const payload = (await response.json()) as { data?: ApiAccount; error?: string };
+      if (!response.ok || !payload.data) {
+        setAccountSettingsError(payload.error ?? "Account laden mislukt.");
+        return;
+      }
+
+      setAccountRole(payload.data.role);
+      setAccountSettingsDraft(accountSettingsDraftFromAccount(payload.data));
+      setIsProfileDialogOpen(false);
+      setIsAccountSettingsDialogOpen(true);
+    } catch {
+      setAccountSettingsError("Netwerkfout bij laden van account.");
+    } finally {
+      setIsAccountLoading(false);
+    }
+  }
+
+  async function onOpenProfileDialog() {
+    setIsUserMenuOpen(false);
+    setProfileError(null);
+    setProfileStatus(null);
+    setIsAccountLoading(true);
+
+    try {
+      const response = await fetch("/api/account", { cache: "no-store" });
+      if (response.status === 401) {
+        router.replace("/login");
+        return;
+      }
+
+      const payload = (await response.json()) as { data?: ApiAccount; error?: string };
+      if (!response.ok || !payload.data) {
+        setProfileError(payload.error ?? "Profiel laden mislukt.");
+        return;
+      }
+
+      setAccountRole(payload.data.role);
+      setProfileDraft(profileDraftFromAccount(payload.data));
+      setIsAccountSettingsDialogOpen(false);
+      setIsProfileDialogOpen(true);
+    } catch {
+      setProfileError("Netwerkfout bij laden van profiel.");
+    } finally {
+      setIsAccountLoading(false);
+    }
+  }
+
+  function onCloseAccountSettingsDialog() {
+    if (isAccountSettingsSaving) {
+      return;
+    }
+    setIsAccountSettingsDialogOpen(false);
+    setAccountSettingsDraft(null);
+    setAccountSettingsError(null);
+    setAccountSettingsStatus(null);
+  }
+
+  function onCloseProfileDialog() {
+    if (isProfileSaving) {
+      return;
+    }
+    setIsProfileDialogOpen(false);
+    setProfileDraft(null);
+    setProfileError(null);
+    setProfileStatus(null);
+  }
+
+  async function onSelectProfilePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !profileDraft) {
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setProfileError("Kies een afbeeldingbestand.");
+      return;
+    }
+    if (file.size > MAX_PROFILE_FILE_BYTES) {
+      setProfileError("Afbeelding is te groot (max 2MB).");
+      return;
+    }
+
+    setProfileError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        setProfileError("Afbeelding verwerken mislukt.");
+        return;
+      }
+      setProfileDraft((current) => (current ? { ...current, profilePhotoData: result } : current));
+    };
+    reader.onerror = () => setProfileError("Afbeelding verwerken mislukt.");
+    reader.readAsDataURL(file);
+  }
+
+  async function onSaveAccountSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!accountSettingsDraft) {
+      return;
+    }
+
+    const trimmedEmail = accountSettingsDraft.email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      setAccountSettingsError("E-mailadres is verplicht.");
+      return;
+    }
+    if (
+      accountSettingsDraft.newPassword.length > 0 &&
+      accountSettingsDraft.newPassword !== accountSettingsDraft.newPasswordConfirm
+    ) {
+      setAccountSettingsError("Nieuwe wachtwoorden komen niet overeen.");
+      return;
+    }
+    if (
+      accountSettingsDraft.newPassword.length > 0 &&
+      accountSettingsDraft.newPassword.length < 8
+    ) {
+      setAccountSettingsError("Nieuw wachtwoord moet minimaal 8 tekens zijn.");
+      return;
+    }
+
+    setAccountSettingsError(null);
+    setAccountSettingsStatus(null);
+    setIsAccountSettingsSaving(true);
+    try {
+      const response = await fetch("/api/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          currentPassword: accountSettingsDraft.currentPassword || undefined,
+          newPassword: accountSettingsDraft.newPassword || undefined
+        })
+      });
+      const payload = (await response.json()) as {
+        data?: ApiAccount;
+        message?: string;
+        error?: string;
+      };
+      if (!response.ok || !payload.data) {
+        setAccountSettingsError(payload.error ?? "Opslaan mislukt.");
+        return;
+      }
+
+      setAccountRole(payload.data.role);
+      setAccountSettingsDraft(accountSettingsDraftFromAccount(payload.data));
+      setAccountSettingsStatus(payload.message ?? "Account opgeslagen.");
+    } catch {
+      setAccountSettingsError("Netwerkfout bij opslaan van account.");
+    } finally {
+      setIsAccountSettingsSaving(false);
+    }
+  }
+
+  async function onSaveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!profileDraft) {
+      return;
+    }
+
+    setProfileError(null);
+    setProfileStatus(null);
+    setIsProfileSaving(true);
+    try {
+      const response = await fetch("/api/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          aboutMe: profileDraft.aboutMe.trim() ? profileDraft.aboutMe : null,
+          profilePhotoData: profileDraft.profilePhotoData
+        })
+      });
+      const payload = (await response.json()) as {
+        data?: ApiAccount;
+        message?: string;
+        error?: string;
+      };
+      if (!response.ok || !payload.data) {
+        setProfileError(payload.error ?? "Opslaan mislukt.");
+        return;
+      }
+
+      setAccountRole(payload.data.role);
+      setIsProfileDialogOpen(false);
+      setProfileDraft(null);
+      setProfileError(null);
+      setProfileStatus(null);
+    } catch {
+      setProfileError("Netwerkfout bij opslaan van profiel.");
+    } finally {
+      setIsProfileSaving(false);
+    }
+  }
+
   const focusedTask = focusedTaskId ? tasksById.get(focusedTaskId) ?? null : null;
+  const editingTask = editingTaskId ? tasksById.get(editingTaskId) ?? null : null;
+  const copySourceTask = copySourceTaskId ? tasksById.get(copySourceTaskId) ?? null : null;
+  const copyTargetTask =
+    subtaskFormMode === "copy" && creatingSubtaskForTaskId
+      ? tasksById.get(creatingSubtaskForTaskId) ?? null
+      : null;
+  const copySourcePath = copySourceTask
+    ? buildTaskPath(copySourceTask, tasksById).join(" > ")
+    : "onbekende bron";
   const tasksToRender = focusedTask ? [focusedTask] : visibleTasks;
   const breadcrumbTasks = focusedTask
     ? (() => {
@@ -1381,7 +1735,17 @@ export function TasksClient({ alias }: { alias: string }) {
   return (
     <div className="grid">
       <section className="card grid">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+            position: "relative",
+            alignItems: "center",
+            minHeight: "46px"
+          }}
+        >
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
             <button type="button" onClick={() => setIsTaskMenuOpen((open) => !open)}>
               {isTaskMenuOpen ? "Sluit menu" : "☰ Menu"}
@@ -1408,7 +1772,6 @@ export function TasksClient({ alias }: { alias: string }) {
                     setSubtaskDraft(initialSubtask);
                     setSubtaskFormMode("new");
                     setCopySourceTaskId(null);
-                    setCopySourceTitle(null);
                     resetCopyDateDialog();
                   }}
                 >
@@ -1421,9 +1784,62 @@ export function TasksClient({ alias }: { alias: string }) {
               </label>
             ) : null}
           </div>
+          <div
+            role="img"
+            aria-label="VC Zwolle logo"
+            style={{
+              position: "absolute",
+              left: "60%",
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "120px",
+              minWidth: "120px",
+              height: "46px",
+              backgroundImage: `url(${VCZ_LOGO_URL})`,
+              backgroundSize: "contain",
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "center",
+              pointerEvents: "none"
+            }}
+          />
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-            <p className="muted">Aangemeld als: {alias}</p>
-            <LogoutButton />
+            <div ref={userMenuRef} style={{ position: "relative" }}>
+              <button type="button" onClick={() => setIsUserMenuOpen((open) => !open)}>
+                {alias} ▾
+              </button>
+              {isUserMenuOpen ? (
+                <div
+                  className="card"
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "calc(100% + 0.4rem)",
+                    minWidth: "12rem",
+                    zIndex: 40,
+                    display: "grid",
+                    gap: "0.35rem"
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => void onOpenAccountSettingsDialog()}
+                    disabled={isAccountLoading}
+                  >
+                    {isAccountLoading ? "Account laden..." : "Account"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onOpenProfileDialog()}
+                    disabled={isAccountLoading}
+                  >
+                    {isAccountLoading ? "Profiel laden..." : "Profiel"}
+                  </button>
+                  <button type="button" onClick={() => void onLogout()}>
+                    Log uit
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
         {isTaskMenuOpen ? (
@@ -1444,7 +1860,6 @@ export function TasksClient({ alias }: { alias: string }) {
                   setSubtaskDraft(initialSubtask);
                   setSubtaskFormMode("new");
                   setCopySourceTaskId(null);
-                  setCopySourceTitle(null);
                   resetCopyDateDialog();
                 }}
                 disabled={taskMenuView === view}
@@ -1721,7 +2136,7 @@ export function TasksClient({ alias }: { alias: string }) {
           const infoPanelStyle = {
             display: "grid",
             rowGap: "0.15rem",
-            background: "#edf4ea",
+            background: "#eaf1fb",
             borderRadius: "10px",
             padding: "0.5rem 0.75rem"
           } as const;
@@ -1735,7 +2150,32 @@ export function TasksClient({ alias }: { alias: string }) {
 
           return (
             <article key={task.id} className="card">
-              <h2>{task.title}</h2>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                <h2 style={{ margin: 0 }}>{task.title}</h2>
+                {task.longDescription?.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLongDescriptionDialogTask({
+                        id: task.id,
+                        title: task.title,
+                        longDescription: task.longDescription ?? ""
+                      })
+                    }
+                    style={{
+                      width: "1.8rem",
+                      minHeight: "1.8rem",
+                      borderRadius: "999px",
+                      padding: 0,
+                      fontWeight: 700
+                    }}
+                    title="Lange beschrijving"
+                    aria-label="Lange beschrijving"
+                  >
+                    i
+                  </button>
+                ) : null}
+              </div>
               {parentTaskChain.length > 0 ? (
                 <p className="muted" style={{ marginTop: "-0.35rem" }}>
                   {parentTaskChain.map((node, index) => (
@@ -1880,153 +2320,6 @@ export function TasksClient({ alias }: { alias: string }) {
                 ) : null}
               </div>
 
-              {isEditingTask && editDraft ? (
-                <form className="grid" onSubmit={(event) => onSaveTask(event, task.id)}>
-                  <h3>Taak bewerken</h3>
-                  <p className="muted">
-                    Parent en subtaken worden in deze modus bewust niet getoond of aangepast.
-                  </p>
-                  <label>
-                    Titel
-                    <input
-                      value={editDraft.title}
-                      onChange={(event) =>
-                        setEditDraft((current) =>
-                          current ? { ...current, title: event.target.value } : current
-                        )
-                      }
-                      required
-                    />
-                  </label>
-                  <label>
-                    Beschrijving
-                    <input
-                      value={editDraft.description}
-                      onChange={(event) =>
-                        setEditDraft((current) =>
-                          current ? { ...current, description: event.target.value } : current
-                        )
-                      }
-                      required
-                    />
-                  </label>
-                  <label>
-                    Team (optioneel)
-                    <input
-                      value={editDraft.teamName}
-                      onChange={(event) =>
-                        setEditDraft((current) =>
-                          current ? { ...current, teamName: event.target.value } : current
-                        )
-                      }
-                    />
-                  </label>
-                  {!task.parentId ? (
-                    <label>
-                      Punten
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={editDraft.points}
-                        onChange={(event) =>
-                          setEditDraft((current) =>
-                            current ? { ...current, points: event.target.value } : current
-                          )
-                        }
-                        required
-                      />
-                    </label>
-                  ) : (
-                    <p className="muted">
-                      Punten van subtaken beheer je bij de parent-taak in de subtakenlijst.
-                    </p>
-                  )}
-                  <label>
-                    Begindatum
-                    <input
-                      type="date"
-                      value={editDraft.startDate}
-                      onChange={(event) =>
-                        setEditDraft((current) =>
-                          current ? { ...current, startDate: event.target.value } : current
-                        )
-                      }
-                      required
-                    />
-                  </label>
-                  <label>
-                    Begintijd
-                    <input
-                      type="time"
-                      value={editDraft.startTime}
-                      onChange={(event) =>
-                        setEditDraft((current) =>
-                          current ? { ...current, startTime: event.target.value } : current
-                        )
-                      }
-                      required
-                    />
-                  </label>
-                  <label>
-                    Einddatum
-                    <input
-                      type="date"
-                      value={editDraft.endDate}
-                      onChange={(event) =>
-                        setEditDraft((current) =>
-                          current ? { ...current, endDate: event.target.value } : current
-                        )
-                      }
-                      required
-                    />
-                  </label>
-                  <label>
-                    Eindtijd
-                    <input
-                      type="time"
-                      value={editDraft.endTime}
-                      onChange={(event) =>
-                        setEditDraft((current) =>
-                          current ? { ...current, endTime: event.target.value } : current
-                        )
-                      }
-                      required
-                    />
-                  </label>
-                  <label>
-                    Locatie (optioneel)
-                    <input
-                      value={editDraft.location}
-                      onChange={(event) =>
-                        setEditDraft((current) =>
-                          current ? { ...current, location: event.target.value } : current
-                        )
-                      }
-                    />
-                  </label>
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <button
-                      type="submit"
-                      disabled={activeTaskId === task.id}
-                      title="Opslaan"
-                      aria-label="Opslaan"
-                    >
-                      {activeTaskId === task.id ? "Opslaan..." : "Opslaan"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onCancelEdit}
-                      disabled={activeTaskId === task.id}
-                      title="Annuleren"
-                      aria-label="Annuleren"
-                    >
-                      Annuleren
-                    </button>
-                  </div>
-                </form>
-              ) : null}
-
               {isMovingTask ? (
                 <div className="grid">
                   <h3>Taak verplaatsen</h3>
@@ -2082,7 +2375,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 </div>
               ) : null}
 
-              {isEditingTask || isMovingTask || isOpenTasksListView ? null : (
+              {isMovingTask || isOpenTasksListView ? null : (
                 <>
                   <div className="grid" style={{ gap: "0.5rem" }}>
                     <div
@@ -2240,17 +2533,9 @@ export function TasksClient({ alias }: { alias: string }) {
                       </>
                     )}
 
-                    {isCreatingSubtask ? (
+                    {isCreatingSubtask && subtaskFormMode === "new" ? (
                       <form className="grid" onSubmit={(event) => onCreateSubtask(event, task.id)}>
-                        <h3>{subtaskFormMode === "copy" ? "Kopie bewerken" : "Nieuwe subtaak"}</h3>
-                        {copySourceTitle ? (
-                          <p className="muted">Kopie van: {copySourceTitle}</p>
-                        ) : null}
-                        {subtaskFormMode === "copy" ? (
-                          <p className="muted">
-                            Opslaan maakt een nieuwe kopie van deze taak inclusief alle onderliggende subtaken.
-                          </p>
-                        ) : null}
+                        <h3>Nieuwe subtaak</h3>
                         <label>
                           Titel
                           <input
@@ -2374,14 +2659,12 @@ export function TasksClient({ alias }: { alias: string }) {
                             type="submit"
                             disabled={activeTaskId === task.id}
                             style={{ whiteSpace: "nowrap" }}
-                            title={subtaskFormMode === "copy" ? "Kopieer" : "Opslaan"}
-                            aria-label={subtaskFormMode === "copy" ? "Kopieer" : "Opslaan"}
+                            title="Opslaan"
+                            aria-label="Opslaan"
                           >
                             {activeTaskId === task.id
                               ? `${ICON_SAVE}...`
-                              : subtaskFormMode === "copy"
-                                ? ICON_COPY
-                                : "Subtaak aanmaken"}
+                              : "Subtaak aanmaken"}
                           </button>
                           <button
                             type="button"
@@ -2410,7 +2693,9 @@ export function TasksClient({ alias }: { alias: string }) {
                     ) : null}
                   </div>
 
-                  {!isOpenTasksListView && showInlineTaskActions ? (
+                  {!isOpenTasksListView &&
+                  showInlineTaskActions &&
+                  !(isCreatingSubtask && subtaskFormMode === "copy") ? (
                     <div
                       style={{
                         display: "inline-grid",
@@ -2468,6 +2753,396 @@ export function TasksClient({ alias }: { alias: string }) {
           );
           })}
         </section>
+      ) : null}
+
+      {editingTask && editDraft ? (
+        <div
+          onClick={activeTaskId === editingTask.id ? undefined : onCancelEdit}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <form
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Taak bewerken"
+            onSubmit={(event) => onSaveTask(event, editingTask.id)}
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "38rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3>Taak bewerken</h3>
+            <label>
+              Titel
+              <input
+                value={editDraft.title}
+                onChange={(event) =>
+                  setEditDraft((current) => (current ? { ...current, title: event.target.value } : current))
+                }
+                required
+              />
+            </label>
+            <label>
+              Beschrijving
+              <input
+                value={editDraft.description}
+                onChange={(event) =>
+                  setEditDraft((current) =>
+                    current ? { ...current, description: event.target.value } : current
+                  )
+                }
+                required
+              />
+            </label>
+            <label>
+              Lange beschrijving
+              <textarea
+                rows={6}
+                value={editDraft.longDescription}
+                onChange={(event) =>
+                  setEditDraft((current) =>
+                    current ? { ...current, longDescription: event.target.value } : current
+                  )
+                }
+                placeholder="Vul uitgebreide informatie in."
+                disabled={activeTaskId === editingTask.id}
+              />
+            </label>
+            {!editingTask.parentId ? (
+              <label>
+                Punten
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={editDraft.points}
+                  onChange={(event) =>
+                    setEditDraft((current) =>
+                      current ? { ...current, points: event.target.value } : current
+                    )
+                  }
+                  required
+                />
+              </label>
+            ) : null}
+            <div className="grid grid-2">
+              <label>
+                Begindatum
+                <input
+                  type="date"
+                  value={editDraft.startDate}
+                  onChange={(event) =>
+                    setEditDraft((current) =>
+                      current ? { ...current, startDate: event.target.value } : current
+                    )
+                  }
+                  required
+                />
+              </label>
+              <label>
+                Begintijd
+                <input
+                  type="time"
+                  value={editDraft.startTime}
+                  onChange={(event) =>
+                    setEditDraft((current) =>
+                      current ? { ...current, startTime: event.target.value } : current
+                    )
+                  }
+                  required
+                />
+              </label>
+              <label>
+                Einddatum
+                <input
+                  type="date"
+                  value={editDraft.endDate}
+                  onChange={(event) =>
+                    setEditDraft((current) =>
+                      current ? { ...current, endDate: event.target.value } : current
+                    )
+                  }
+                  required
+                />
+              </label>
+              <label>
+                Eindtijd
+                <input
+                  type="time"
+                  value={editDraft.endTime}
+                  onChange={(event) =>
+                    setEditDraft((current) =>
+                      current ? { ...current, endTime: event.target.value } : current
+                    )
+                  }
+                  required
+                />
+              </label>
+            </div>
+            <label>
+              Locatie (optioneel)
+              <input
+                value={editDraft.location}
+                onChange={(event) =>
+                  setEditDraft((current) =>
+                    current ? { ...current, location: event.target.value } : current
+                  )
+                }
+              />
+            </label>
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={onCancelEdit}
+                disabled={activeTaskId === editingTask.id}
+                title="Annuleren"
+                aria-label="Annuleren"
+              >
+                Annuleren
+              </button>
+              <button
+                type="submit"
+                disabled={activeTaskId === editingTask.id}
+                title="Opslaan"
+                aria-label="Opslaan"
+              >
+                {activeTaskId === editingTask.id ? "Opslaan..." : "Opslaan"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {longDescriptionDialogTask ? (
+        <div
+          onClick={() => setLongDescriptionDialogTask(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Lange beschrijving taak"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "42rem", margin: "8vh auto 0 auto", maxHeight: "80vh", overflowY: "auto" }}
+          >
+            <h3 style={{ marginBottom: 0 }}>{longDescriptionDialogTask.title}</h3>
+            <div className="card" style={{ padding: "0.75rem" }}>
+              <pre
+                style={{
+                  margin: 0,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontFamily: "inherit",
+                  lineHeight: 1.4
+                }}
+              >
+                {longDescriptionDialogTask.longDescription}
+              </pre>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setLongDescriptionDialogTask(null)}>
+                Sluiten
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isAccountSettingsDialogOpen && accountSettingsDraft ? (
+        <div
+          onClick={isAccountSettingsSaving ? undefined : onCloseAccountSettingsDialog}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <form
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Account bewerken"
+            onSubmit={(event) => void onSaveAccountSettings(event)}
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "34rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3>Account</h3>
+            <p className="muted" style={{ margin: 0 }}>
+              Alias: {alias} | Rol: {accountRole ?? "-"}
+            </p>
+            {accountSettingsError ? <p className="muted">{accountSettingsError}</p> : null}
+            {accountSettingsStatus ? <p className="muted">{accountSettingsStatus}</p> : null}
+
+            <label>
+              E-mailadres
+              <input
+                type="email"
+                value={accountSettingsDraft.email}
+                onChange={(event) =>
+                  setAccountSettingsDraft((current) =>
+                    current ? { ...current, email: event.target.value } : current
+                  )
+                }
+                required
+              />
+            </label>
+
+            <label>
+              Huidig wachtwoord (verplicht bij e-mail/wachtwoord wijzigen)
+              <input
+                type="password"
+                value={accountSettingsDraft.currentPassword}
+                onChange={(event) =>
+                  setAccountSettingsDraft((current) =>
+                    current ? { ...current, currentPassword: event.target.value } : current
+                  )
+                }
+              />
+            </label>
+
+            <label>
+              Nieuw wachtwoord (optioneel)
+              <input
+                type="password"
+                value={accountSettingsDraft.newPassword}
+                onChange={(event) =>
+                  setAccountSettingsDraft((current) =>
+                    current ? { ...current, newPassword: event.target.value } : current
+                  )
+                }
+              />
+            </label>
+
+            <label>
+              Bevestig nieuw wachtwoord
+              <input
+                type="password"
+                value={accountSettingsDraft.newPasswordConfirm}
+                onChange={(event) =>
+                  setAccountSettingsDraft((current) =>
+                    current ? { ...current, newPasswordConfirm: event.target.value } : current
+                  )
+                }
+              />
+            </label>
+
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={onCloseAccountSettingsDialog}
+                disabled={isAccountSettingsSaving}
+              >
+                Annuleren
+              </button>
+              <button type="submit" disabled={isAccountSettingsSaving}>
+                {isAccountSettingsSaving ? "Opslaan..." : "Opslaan"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {isProfileDialogOpen && profileDraft ? (
+        <div
+          onClick={isProfileSaving ? undefined : onCloseProfileDialog}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <form
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Profiel bewerken"
+            onSubmit={(event) => void onSaveProfile(event)}
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "34rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3>Profiel</h3>
+            <p className="muted" style={{ margin: 0 }}>
+              Alias: {alias} | Rol: {accountRole ?? "-"}
+            </p>
+            {profileError ? <p className="muted">{profileError}</p> : null}
+            {profileStatus ? <p className="muted">{profileStatus}</p> : null}
+
+            <div className="grid">
+              <label>
+                Profielfoto uploaden
+                <input type="file" accept="image/*" onChange={onSelectProfilePhoto} />
+              </label>
+              <div className="card" style={{ padding: "0.75rem" }}>
+                {profileDraft.profilePhotoData ? (
+                  <Image
+                    src={profileDraft.profilePhotoData}
+                    alt="Profielfoto"
+                    width={120}
+                    height={120}
+                    unoptimized
+                    style={{ borderRadius: "12px", objectFit: "cover" }}
+                  />
+                ) : (
+                  <p className="muted">Nog geen profielfoto.</p>
+                )}
+                {profileDraft.profilePhotoData ? (
+                  <div style={{ marginTop: "0.5rem" }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setProfileDraft((current) =>
+                          current ? { ...current, profilePhotoData: null } : current
+                        )
+                      }
+                      disabled={isProfileSaving}
+                    >
+                      Verwijder foto
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <label>
+              Wie ben ik
+              <textarea
+                rows={6}
+                value={profileDraft.aboutMe}
+                onChange={(event) =>
+                  setProfileDraft((current) =>
+                    current ? { ...current, aboutMe: event.target.value } : current
+                  )
+                }
+                placeholder="Vertel iets over jezelf."
+                disabled={isProfileSaving}
+              />
+            </label>
+
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button type="button" onClick={onCloseProfileDialog} disabled={isProfileSaving}>
+                Annuleren
+              </button>
+              <button type="submit" disabled={isProfileSaving}>
+                {isProfileSaving ? "Opslaan..." : "Opslaan"}
+              </button>
+            </div>
+          </form>
+        </div>
       ) : null}
 
       {proposeDialogTask ? (
@@ -2568,11 +3243,9 @@ export function TasksClient({ alias }: { alias: string }) {
         </div>
       ) : null}
 
-      {copyDateDialogState ? (
+      {copyTargetTask && copySourceTask ? (
         <div
-          onClick={
-            activeTaskId === copyDateDialogState.parentTaskId ? undefined : onCancelCopyDateDialog
-          }
+          onClick={activeTaskId === copyTargetTask.id ? undefined : onCancelSubtask}
           style={{
             position: "fixed",
             inset: 0,
@@ -2581,59 +3254,176 @@ export function TasksClient({ alias }: { alias: string }) {
             padding: "1rem"
           }}
         >
-          <div
+          <form
             className="card grid"
             role="dialog"
             aria-modal="true"
-            aria-label="Datums en tijden kopieren"
+            aria-label="Taak kopieren"
+            onSubmit={(event) => void onSaveCopiedSubtask(event)}
             onClick={(event) => event.stopPropagation()}
-            style={{ maxWidth: "34rem", margin: "8vh auto 0 auto" }}
+            style={{ maxWidth: "36rem", margin: "8vh auto 0 auto" }}
           >
-            <h3>Datums en tijden kopieren</h3>
-            <p>Kies wat er met begin- en einddatum/tijd van de kopie moet gebeuren.</p>
-            <div style={{ display: "flex", gap: "0.85rem", flexWrap: "wrap" }}>
-              <label
-                style={{
-                  display: "inline-flex",
-                  gap: "0.35rem",
-                  alignItems: "center",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap"
-                }}
-              >
+            <h3>Kopieer taak {copySourcePath}</h3>
+            <label>
+              Titel
+              <input
+                value={subtaskDraft.title}
+                onChange={(event) =>
+                  setSubtaskDraft((current) => ({
+                    ...current,
+                    title: event.target.value
+                  }))
+                }
+                disabled={activeTaskId === copyTargetTask.id}
+                required
+              />
+            </label>
+            <label>
+              Beschrijving
+              <input
+                value={subtaskDraft.description}
+                onChange={(event) =>
+                  setSubtaskDraft((current) => ({
+                    ...current,
+                    description: event.target.value
+                  }))
+                }
+                disabled={activeTaskId === copyTargetTask.id}
+                required
+              />
+            </label>
+            <label>
+              Team (optioneel)
+              <input
+                value={subtaskDraft.teamName}
+                onChange={(event) =>
+                  setSubtaskDraft((current) => ({
+                    ...current,
+                    teamName: event.target.value
+                  }))
+                }
+                disabled={activeTaskId === copyTargetTask.id}
+                placeholder="bijv. Meiden A2"
+              />
+            </label>
+            <label>
+              Punten
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={subtaskDraft.points}
+                onChange={(event) =>
+                  setSubtaskDraft((current) => ({
+                    ...current,
+                    points: event.target.value
+                  }))
+                }
+                disabled={activeTaskId === copyTargetTask.id}
+                required
+              />
+            </label>
+            <label>
+              Begin
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                 <input
-                  type="radio"
-                  name="copy-date-handling"
-                  checked={copyDateHandlingMode === "KEEP"}
-                  onChange={() => setCopyDateHandlingMode("KEEP")}
-                  disabled={activeTaskId === copyDateDialogState.parentTaskId}
-                  style={{ width: "auto", margin: 0 }}
+                  type="date"
+                  value={subtaskDraft.startDate}
+                  onChange={(event) =>
+                    setSubtaskDraft((current) => ({
+                      ...current,
+                      startDate: event.target.value
+                    }))
+                  }
+                  disabled={activeTaskId === copyTargetTask.id}
+                  required
                 />
-                Laat staan
-              </label>
-              <label
-                style={{
-                  display: "inline-flex",
-                  gap: "0.35rem",
-                  alignItems: "center",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap"
-                }}
-              >
                 <input
-                  type="radio"
-                  name="copy-date-handling"
-                  checked={copyDateHandlingMode === "SHIFT"}
-                  onChange={() => setCopyDateHandlingMode("SHIFT")}
-                  disabled={activeTaskId === copyDateDialogState.parentTaskId}
-                  style={{ width: "auto", margin: 0 }}
+                  type="time"
+                  value={subtaskDraft.startTime}
+                  onChange={(event) =>
+                    setSubtaskDraft((current) => ({
+                      ...current,
+                      startTime: event.target.value
+                    }))
+                  }
+                  disabled={activeTaskId === copyTargetTask.id}
+                  required
                 />
-                Verplaats
-              </label>
-            </div>
-            {copyDateHandlingMode === "SHIFT" ? (
-              <>
-                <p className="muted">Schuif begin- en einddatum/tijd vooruit met:</p>
+              </div>
+            </label>
+            <label>
+              Eind
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <input
+                  type="date"
+                  value={subtaskDraft.endDate}
+                  onChange={(event) =>
+                    setSubtaskDraft((current) => ({
+                      ...current,
+                      endDate: event.target.value
+                    }))
+                  }
+                  disabled={activeTaskId === copyTargetTask.id}
+                  required
+                />
+                <input
+                  type="time"
+                  value={subtaskDraft.endTime}
+                  onChange={(event) =>
+                    setSubtaskDraft((current) => ({
+                      ...current,
+                      endTime: event.target.value
+                    }))
+                  }
+                  disabled={activeTaskId === copyTargetTask.id}
+                  required
+                />
+              </div>
+            </label>
+            <div className="grid" style={{ gap: "0.4rem" }}>
+              <p className="muted">Datums/tijden van de kopie:</p>
+              <div style={{ display: "flex", gap: "0.85rem", flexWrap: "wrap" }}>
+                <label
+                  style={{
+                    display: "inline-flex",
+                    gap: "0.35rem",
+                    alignItems: "center",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="copy-date-handling"
+                    checked={copyDateHandlingMode === "KEEP"}
+                    onChange={() => setCopyDateHandlingMode("KEEP")}
+                    disabled={activeTaskId === copyTargetTask.id}
+                    style={{ width: "auto", margin: 0 }}
+                  />
+                  Laat staan
+                </label>
+                <label
+                  style={{
+                    display: "inline-flex",
+                    gap: "0.35rem",
+                    alignItems: "center",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="copy-date-handling"
+                    checked={copyDateHandlingMode === "SHIFT"}
+                    onChange={() => setCopyDateHandlingMode("SHIFT")}
+                    disabled={activeTaskId === copyTargetTask.id}
+                    style={{ width: "auto", margin: 0 }}
+                  />
+                  Verplaats
+                </label>
+              </div>
+              {copyDateHandlingMode === "SHIFT" ? (
                 <div
                   style={{
                     display: "flex",
@@ -2648,7 +3438,7 @@ export function TasksClient({ alias }: { alias: string }) {
                     step="1"
                     value={copyDateShiftAmount}
                     onChange={(event) => setCopyDateShiftAmount(event.target.value)}
-                    disabled={activeTaskId === copyDateDialogState.parentTaskId}
+                    disabled={activeTaskId === copyTargetTask.id}
                     style={{ width: "6rem" }}
                   />
                   <select
@@ -2656,7 +3446,7 @@ export function TasksClient({ alias }: { alias: string }) {
                     onChange={(event) =>
                       setCopyDateShiftUnit(event.target.value as CopyDateShiftUnit)
                     }
-                    disabled={activeTaskId === copyDateDialogState.parentTaskId}
+                    disabled={activeTaskId === copyTargetTask.id}
                   >
                     {COPY_SHIFT_UNITS.map((unit) => (
                       <option key={unit.value} value={unit.value}>
@@ -2666,29 +3456,21 @@ export function TasksClient({ alias }: { alias: string }) {
                   </select>
                   <span className="muted">vooruit</span>
                 </div>
-              </>
-            ) : null}
+              ) : null}
+            </div>
             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button
                 type="button"
-                onClick={onCancelCopyDateDialog}
-                disabled={activeTaskId === copyDateDialogState.parentTaskId}
-                title="Annuleren"
-                aria-label="Annuleren"
+                onClick={onCancelSubtask}
+                disabled={activeTaskId === copyTargetTask.id}
               >
-                {ICON_CANCEL}
+                Annuleren
               </button>
-              <button
-                type="button"
-                onClick={() => void onConfirmCopyDateDialog()}
-                disabled={activeTaskId === copyDateDialogState.parentTaskId}
-                title="Kopieer"
-                aria-label="Kopieer"
-              >
-                {activeTaskId === copyDateDialogState.parentTaskId ? `${ICON_COPY}...` : ICON_COPY}
+              <button type="submit" disabled={activeTaskId === copyTargetTask.id}>
+                {activeTaskId === copyTargetTask.id ? "Opslaan..." : "Opslaan"}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       ) : null}
 
@@ -2771,7 +3553,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 title="Annuleren"
                 aria-label="Annuleren"
               >
-                {ICON_CANCEL}
+                Annuleren
               </button>
               <button
                 type="button"
@@ -2780,7 +3562,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 title="Verwijder"
                 aria-label="Verwijder"
               >
-                {activeTaskId === deleteDialogTask.id ? `${ICON_DELETE}...` : ICON_DELETE}
+                {activeTaskId === deleteDialogTask.id ? "Verwijderen..." : "Verwijderen"}
               </button>
             </div>
           </div>

@@ -11,6 +11,7 @@ import {
   resolveEffectiveCoordinatorAliasesFromMap
 } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
+import { sanitizeNullableText, sanitizeOptionalTrimmedText, sanitizeTrimmedText } from "@/lib/sanitize";
 import {
   allocatePointsFromParent,
   parseStoredPoints,
@@ -22,6 +23,7 @@ import {
 const createTaskSchema = z.object({
   title: z.string().trim().min(2),
   description: z.string().trim().min(2),
+  longDescription: z.string().max(20000).optional(),
   teamName: z.string().trim().max(100).optional(),
   parentId: z.string().trim().optional(),
   points: z.number().finite().int().nonnegative(),
@@ -50,6 +52,7 @@ export async function GET() {
       id: true,
       title: true,
       description: true,
+      longDescription: true,
       teamName: true,
       parentId: true,
       parent: {
@@ -93,6 +96,7 @@ export async function GET() {
       id: task.id,
       title: task.title,
       description: task.description,
+      longDescription: task.longDescription,
       teamName: task.teamName,
       parentId: task.parentId,
       parent: task.parent,
@@ -154,6 +158,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
+  const title = sanitizeTrimmedText(parsed.data.title);
+  const description = sanitizeTrimmedText(parsed.data.description);
+  if (title.length < 2 || description.length < 2) {
+    return NextResponse.json({ error: "Titel en beschrijving zijn verplicht." }, { status: 400 });
+  }
+  const longDescription = sanitizeNullableText(parsed.data.longDescription) ?? null;
+  const teamNameSanitized = sanitizeOptionalTrimmedText(parsed.data.teamName);
+  const teamName = teamNameSanitized && teamNameSanitized.length > 0 ? teamNameSanitized : undefined;
+  const locationSanitized = sanitizeOptionalTrimmedText(parsed.data.location);
+  const location = locationSanitized && locationSanitized.length > 0 ? locationSanitized : undefined;
+
   let parentTask: { id: string; points: number } | null = null;
   if (parsed.data.parentId) {
     parentTask = await prisma.task.findUnique({
@@ -208,9 +223,10 @@ export async function POST(request: Request) {
 
     return tx.task.create({
       data: {
-        title: parsed.data.title,
-        description: parsed.data.description,
-        teamName: parsed.data.teamName,
+        title,
+        description,
+        longDescription,
+        teamName,
         parentId: parsed.data.parentId,
         ownCoordinators:
           ownCoordinatorAliases.length > 0
@@ -222,7 +238,7 @@ export async function POST(request: Request) {
         date: new Date(parsed.data.date),
         startTime: parsed.data.startTime ? new Date(parsed.data.startTime) : null,
         endTime: new Date(parsed.data.endTime),
-        location: parsed.data.location,
+        location,
         templateId: parsed.data.templateId,
         status: TaskStatus.BESCHIKBAAR
       }
