@@ -3,13 +3,19 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type LoginMode = "password" | "request" | "magic";
+type LoginMode = "password" | "request" | "create" | "magic";
+
+type RegistrationOptions = {
+  email: string;
+  bondsnummer: string;
+  claimableAliases: string[];
+};
+
 type ApiPayload = {
   message?: string;
   error?: string;
-  code?: "EMAIL_REQUIRED" | "USE_EMAIL_LOGIN" | "EMAIL_NOT_VERIFIED";
   alias?: string;
-  email?: string;
+  data?: RegistrationOptions;
   debugAlias?: string;
   debugToken?: string;
   debugMagicLink?: string;
@@ -32,34 +38,106 @@ async function readApiPayload(response: Response): Promise<ApiPayload> {
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<LoginMode>("password");
-  const [email, setEmail] = useState("");
-  const [loginId, setLoginId] = useState("");
-  const [pendingAlias, setPendingAlias] = useState("");
-  const [pendingPassword, setPendingPassword] = useState("");
-  const [alias, setAlias] = useState("");
+
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  const [requestBondsnummer, setRequestBondsnummer] = useState("");
+  const [requestEmail, setRequestEmail] = useState("");
+
   const [token, setToken] = useState("");
-  const [password, setPassword] = useState("");
+  const [magicAlias, setMagicAlias] = useState("");
   const [magicSetPassword, setMagicSetPassword] = useState("");
   const [magicSetPasswordConfirm, setMagicSetPasswordConfirm] = useState("");
+
+  const [claimableAliases, setClaimableAliases] = useState<string[]>([]);
+  const [selectedAlias, setSelectedAlias] = useState("");
+  const [newAlias, setNewAlias] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createPasswordConfirm, setCreatePasswordConfirm] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createBondsnummer, setCreateBondsnummer] = useState("");
+
   const [magicLink, setMagicLink] = useState("");
   const [status, setStatus] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
+
   const [isPasswordLogin, setIsPasswordLogin] = useState(false);
+  const [isRequestingMagicLink, setIsRequestingMagicLink] = useState(false);
+  const [isLoadingCreateOptions, setIsLoadingCreateOptions] = useState(false);
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+  const [isVerifyingMagic, setIsVerifyingMagic] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const aliasFromQuery = params.get("alias");
+    const flow = params.get("flow");
     const tokenFromQuery = params.get("token");
-    if (aliasFromQuery) {
-      setAlias(aliasFromQuery);
-    }
+    const aliasFromQuery = params.get("alias");
+
     if (tokenFromQuery) {
-      setMode("magic");
       setToken(tokenFromQuery);
+    }
+    if (aliasFromQuery) {
+      setMagicAlias(aliasFromQuery);
+    }
+
+    if (flow === "create-account" && tokenFromQuery) {
+      setMode("create");
+      setStatus("Magic link geladen. Maak nu je account af.");
+      return;
+    }
+
+    if ((flow === "magic" || (aliasFromQuery && tokenFromQuery)) && tokenFromQuery) {
+      setMode("magic");
       setStatus("Magic link uit URL geladen. Klik op Inloggen.");
     }
   }, []);
+
+  useEffect(() => {
+    if (mode !== "create" || !token) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadCreateOptions() {
+      setIsLoadingCreateOptions(true);
+      try {
+        const response = await fetch(
+          `/api/auth/registration-options?token=${encodeURIComponent(token)}`
+        );
+        const payload = await readApiPayload(response);
+
+        if (!response.ok || !payload.data) {
+          if (!isCancelled) {
+            setStatus(payload.error ?? `Magic link laden mislukt (${response.status})`);
+          }
+          return;
+        }
+
+        if (!isCancelled) {
+          setCreateEmail(payload.data.email);
+          setCreateBondsnummer(payload.data.bondsnummer);
+          setClaimableAliases(payload.data.claimableAliases);
+          setSelectedAlias("");
+          setStatus("Kies een bestaande alias of verzin een nieuwe alias.");
+        }
+      } catch {
+        if (!isCancelled) {
+          setStatus("Netwerkfout bij laden van account-aanmaak.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingCreateOptions(false);
+        }
+      }
+    }
+
+    void loadCreateOptions();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [mode, token]);
 
   async function copyText(value: string, successMessage: string) {
     try {
@@ -70,12 +148,12 @@ export default function LoginPage() {
     }
   }
 
-  function validatePasswordPair(a: string, b: string): boolean {
-    if (a.length < 8) {
+  function validatePasswordPair(password: string, confirm: string): boolean {
+    if (password.length < 8) {
       setStatus("Wachtwoord moet minimaal 8 tekens zijn.");
       return false;
     }
-    if (a !== b) {
+    if (password !== confirm) {
       setStatus("Wachtwoorden komen niet overeen.");
       return false;
     }
@@ -91,146 +169,175 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/login-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login: loginId, password })
+        body: JSON.stringify({ email: loginEmail, password: loginPassword })
       });
       const payload = await readApiPayload(response);
+
       if (!response.ok) {
-        const code = payload.code;
-        if (code === "EMAIL_REQUIRED" || code === "EMAIL_NOT_VERIFIED") {
-          const resolvedAlias = payload.alias ?? loginId;
-          setPendingAlias(resolvedAlias);
-          setPendingPassword(password);
-          setAlias(resolvedAlias);
-          setEmail("");
-          setMode("request");
-          setStatus(
-            payload.error ??
-              "Vul je e-mailadres in en bevestig met de magic link om je account te activeren."
-          );
-          return;
-        }
-        if (code === "USE_EMAIL_LOGIN") {
-          if (payload.email) {
-            setLoginId(payload.email);
-          }
-          setStatus(payload.error ?? "Gebruik je e-mailadres om in te loggen.");
-          return;
-        }
-        setStatus(payload.error ?? `Inloggen met wachtwoord mislukt (${response.status})`);
-      } else {
-        setStatus(payload.message ?? "Ingelogd");
-        router.push("/tasks");
+        setStatus(payload.error ?? `Inloggen mislukt (${response.status})`);
+        return;
       }
+
+      setStatus(payload.message ?? "Ingelogd");
+      router.push("/tasks");
     } catch {
-      setStatus("Netwerkfout bij wachtwoord-login.");
+      setStatus("Netwerkfout bij inloggen.");
     } finally {
       setIsPasswordLogin(false);
     }
   }
 
-  async function onRequestEmailVerification(event: FormEvent<HTMLFormElement>) {
+  async function onRequestMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsLoading(true);
     setStatus(null);
-
-    const aliasForVerification = pendingAlias || alias || loginId;
-    const passwordForVerification = pendingPassword || password;
-    if (!aliasForVerification || !passwordForVerification) {
-      setStatus("Log eerst in met alias + wachtwoord om e-mailverificatie te starten.");
-      setIsLoading(false);
-      return;
-    }
+    setIsRequestingMagicLink(true);
 
     try {
-      const response = await fetch("/api/auth/request-email-verification", {
+      const response = await fetch("/api/auth/request-magic-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          alias: aliasForVerification,
-          password: passwordForVerification,
-          email
+          bondsnummer: requestBondsnummer,
+          email: requestEmail
         })
       });
       const payload = await readApiPayload(response);
+
       if (!response.ok) {
-        setStatus(payload.error ?? `Verificatiemail sturen mislukt (${response.status})`);
-      } else {
-        setStatus(payload.message ?? "Verificatiemail verzonden");
-        setAlias(payload.debugAlias ?? aliasForVerification);
-        setToken(payload.debugToken ?? "");
-        setMagicLink(payload.debugMagicLink ?? "");
-        setMode("magic");
+        setStatus(payload.error ?? `Magic link aanvragen mislukt (${response.status})`);
+        return;
+      }
+
+      setStatus(payload.message ?? "Magic link verstuurd.");
+      setMagicLink(payload.debugMagicLink ?? "");
+
+      if (payload.debugToken) {
+        setToken(payload.debugToken);
+        setMode("create");
       }
     } catch {
       setStatus("Netwerkfout, probeer opnieuw.");
     } finally {
-      setIsLoading(false);
+      setIsRequestingMagicLink(false);
     }
   }
 
-  async function onVerify(event: FormEvent<HTMLFormElement>) {
+  async function onCreateAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsVerifying(true);
     setStatus(null);
 
-    const hasPasswordUpdate = magicSetPassword.length > 0 || magicSetPasswordConfirm.length > 0;
-    if (hasPasswordUpdate && !validatePasswordPair(magicSetPassword, magicSetPasswordConfirm)) {
-      setIsVerifying(false);
+    const hasSelectedExistingAlias = selectedAlias.trim().length > 0;
+    const hasNewAlias = newAlias.trim().length > 0;
+    if (hasSelectedExistingAlias && hasNewAlias) {
+      setStatus("Kies een bestaande alias of vul een nieuwe alias in, niet allebei.");
+      return;
+    }
+    if (!hasSelectedExistingAlias && !hasNewAlias) {
+      setStatus("Kies een bestaande alias of vul een nieuwe alias in.");
+      return;
+    }
+    if (!validatePasswordPair(createPassword, createPasswordConfirm)) {
       return;
     }
 
+    setIsCreatingAccount(true);
+    try {
+      const response = await fetch("/api/auth/complete-registration", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          existingAlias: hasSelectedExistingAlias ? selectedAlias.trim() : undefined,
+          newAlias: hasNewAlias ? newAlias.trim() : undefined,
+          password: createPassword
+        })
+      });
+      const payload = await readApiPayload(response);
+
+      if (!response.ok) {
+        setStatus(payload.error ?? `Account aanmaken mislukt (${response.status})`);
+        return;
+      }
+
+      setStatus(payload.message ?? "Account aangemaakt.");
+      router.push("/tasks");
+    } catch {
+      setStatus("Netwerkfout bij account-aanmaak.");
+    } finally {
+      setIsCreatingAccount(false);
+    }
+  }
+
+  async function onVerifyMagicLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus(null);
+
+    const hasPasswordUpdate =
+      magicSetPassword.length > 0 || magicSetPasswordConfirm.length > 0;
+    if (hasPasswordUpdate && !validatePasswordPair(magicSetPassword, magicSetPasswordConfirm)) {
+      return;
+    }
+
+    setIsVerifyingMagic(true);
     try {
       const response = await fetch("/api/auth/verify-magic-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          alias,
+          alias: magicAlias,
           token,
           setPassword: hasPasswordUpdate ? magicSetPassword : undefined
         })
       });
       const payload = await readApiPayload(response);
+
       if (!response.ok) {
-        setStatus(payload.error ?? `Verificatie mislukt (${response.status})`);
-      } else {
-        setStatus(payload.message ?? "Ingelogd");
-        router.push("/tasks");
+        setStatus(payload.error ?? `Magic link verificatie mislukt (${response.status})`);
+        return;
       }
+
+      setStatus(payload.message ?? "Ingelogd");
+      router.push("/tasks");
     } catch {
       setStatus("Netwerkfout bij verificatie.");
     } finally {
-      setIsVerifying(false);
+      setIsVerifyingMagic(false);
     }
   }
 
   return (
     <div className="grid">
       <h1>Inloggen</h1>
+
       <section className="card grid">
-        <h2>Kies methode</h2>
+        <h2>Kies je situatie</h2>
+        <p className="muted">
+          Je hebt al een account: log in met e-mailadres + wachtwoord. Eerste keer op de
+          website: vul je Nevobo relatiecode en e-mailadres in en maak daarna je account.
+        </p>
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           <button type="button" onClick={() => setMode("password")}>
-            Login met wachtwoord
+            Ik heb al een account
           </button>
           <button type="button" onClick={() => setMode("request")}>
-            Koppel e-mail
+            Eerste keer
           </button>
           <button type="button" onClick={() => setMode("magic")}>
-            Gebruik magic link
+            Ik heb een magic link
           </button>
         </div>
       </section>
 
       {mode === "password" && (
         <form className="card grid" onSubmit={onPasswordLogin}>
-          <h2>Login met e-mail + wachtwoord</h2>
+          <h2>Login met e-mailadres + wachtwoord</h2>
           <label>
-            E-mail (of alias als je nog geen e-mail hebt gekoppeld)
+            E-mailadres
             <input
-              type="text"
-              value={loginId}
-              onChange={(e) => setLoginId(e.target.value)}
-              placeholder="bijv. jan@email.nl of JanA2"
+              type="email"
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              placeholder="jouw@email.nl"
               required
             />
           </label>
@@ -238,8 +345,8 @@ export default function LoginPage() {
             Wachtwoord
             <input
               type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
               required
             />
           </label>
@@ -250,50 +357,133 @@ export default function LoginPage() {
       )}
 
       {mode === "request" && (
-        <form className="card grid" onSubmit={onRequestEmailVerification}>
-          <h2>E-mail koppelen en bevestigen</h2>
-          <p className="muted">
-            Na bevestiging met magic link log je voortaan in met e-mailadres + wachtwoord.
-          </p>
+        <form className="card grid" onSubmit={onRequestMagicLink}>
+          <h2>Eerste keer: vraag je magic link aan</h2>
           <label>
-            Alias
+            Nevobo relatiecode
             <input
               type="text"
-              value={pendingAlias || alias}
-              onChange={(e) => {
-                setPendingAlias(e.target.value);
-                setAlias(e.target.value);
-              }}
-              placeholder="bijv. JanA2"
+              value={requestBondsnummer}
+              onChange={(e) => setRequestBondsnummer(e.target.value)}
+              placeholder="bijv. CQS3S1J"
               required
-              readOnly={Boolean(pendingAlias)}
             />
           </label>
           <label>
-            E-mail
+            E-mailadres
             <input
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={requestEmail}
+              onChange={(e) => setRequestEmail(e.target.value)}
               placeholder="jouw@email.nl"
               required
             />
           </label>
-          <button type="submit" disabled={isLoading}>
-            {isLoading ? "Versturen..." : "Stuur verificatiemail"}
+          <p className="muted">
+            Een e-mailadres mag bij meerdere accounts horen. Elke account heeft een eigen
+            alias.
+          </p>
+          <button type="submit" disabled={isRequestingMagicLink}>
+            {isRequestingMagicLink ? "Versturen..." : "Stuur magic link"}
+          </button>
+        </form>
+      )}
+
+      {mode === "create" && (
+        <form className="card grid" onSubmit={onCreateAccount}>
+          <h2>Maak account</h2>
+          <p className="muted">
+            Van sommige vrijwilligers hebben we alvast hun voornaam als alias aangemaakt,
+            zodat we bestaande taken konden registreren. Je kunt in deze lijst kijken of dat
+            voor jou van toepassing is.
+          </p>
+
+          <label>
+            E-mailadres uit magic link
+            <input type="text" value={createEmail} readOnly />
+          </label>
+          <label>
+            Relatiecode uit magic link
+            <input type="text" value={createBondsnummer} readOnly />
+          </label>
+
+          <div className="grid" style={{ gap: "0.4rem" }}>
+            <strong>Kies een bestaande alias of verzin een nieuwe.</strong>
+            {isLoadingCreateOptions ? <p className="muted">Beschikbare aliassen laden...</p> : null}
+            {claimableAliases.length > 0 ? (
+              <label>
+                Bestaande alias claimen (optioneel)
+                <select
+                  value={selectedAlias}
+                  onChange={(e) => {
+                    setSelectedAlias(e.target.value);
+                    if (e.target.value) {
+                      setNewAlias("");
+                    }
+                  }}
+                >
+                  <option value="">Geen bestaande alias kiezen</option>
+                  {claimableAliases.map((aliasOption) => (
+                    <option key={aliasOption} value={aliasOption}>
+                      {aliasOption}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <p className="muted">Er zijn geen ongeclaimde aliassen gevonden voor deze relatiecode.</p>
+            )}
+
+            <label>
+              Nieuwe alias (optioneel)
+              <input
+                type="text"
+                value={newAlias}
+                onChange={(e) => {
+                  setNewAlias(e.target.value);
+                  if (e.target.value.trim()) {
+                    setSelectedAlias("");
+                  }
+                }}
+                placeholder="bijv. JanA2"
+              />
+            </label>
+          </div>
+
+          <label>
+            Wachtwoord
+            <input
+              type="password"
+              value={createPassword}
+              onChange={(e) => setCreatePassword(e.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Herhaal wachtwoord
+            <input
+              type="password"
+              value={createPasswordConfirm}
+              onChange={(e) => setCreatePasswordConfirm(e.target.value)}
+              required
+            />
+          </label>
+
+          <button type="submit" disabled={isCreatingAccount || isLoadingCreateOptions}>
+            {isCreatingAccount ? "Aanmaken..." : "Maak account"}
           </button>
         </form>
       )}
 
       {mode === "magic" && (
-        <form className="card grid" onSubmit={onVerify}>
-          <h2>Inloggen met magic link</h2>
+        <form className="card grid" onSubmit={onVerifyMagicLink}>
+          <h2>Inloggen met bestaande magic link</h2>
           <label>
             Alias
             <input
               type="text"
-              value={alias}
-              onChange={(e) => setAlias(e.target.value)}
+              value={magicAlias}
+              onChange={(e) => setMagicAlias(e.target.value)}
               placeholder="bijv. JanA2"
               required
             />
@@ -324,8 +514,8 @@ export default function LoginPage() {
               onChange={(e) => setMagicSetPasswordConfirm(e.target.value)}
             />
           </label>
-          <button type="submit" disabled={isVerifying}>
-            {isVerifying ? "Verifiëren..." : "Inloggen"}
+          <button type="submit" disabled={isVerifyingMagic}>
+            {isVerifyingMagic ? "Verifieren..." : "Inloggen"}
           </button>
         </form>
       )}
@@ -343,16 +533,17 @@ export default function LoginPage() {
           >
             Kopieer magic link
           </button>
-          <label>
-            Token
-            <input type="text" value={token} readOnly />
-          </label>
-          <button
-            type="button"
-            onClick={() => copyText(token, "Token gekopieerd")}
-          >
-            Kopieer token
-          </button>
+          {token ? (
+            <>
+              <label>
+                Token
+                <input type="text" value={token} readOnly />
+              </label>
+              <button type="button" onClick={() => copyText(token, "Token gekopieerd")}>
+                Kopieer token
+              </button>
+            </>
+          ) : null}
         </section>
       ) : null}
 

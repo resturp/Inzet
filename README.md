@@ -44,8 +44,6 @@ Fase 1 bootstrap van de MVP op basis van:
 ## Schone testinstallatie (aanrader)
 - Volledige reset van containers/volumes + herstart:
   - `npm run dev:reset`
-- Ook leden-allowlist resetten (`data/bondsnummers.json` verwijderen):
-  - `npm run dev:reset -- --wipe-allowlist`
 
 Na reset:
 - Web: `http://localhost:3000`

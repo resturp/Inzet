@@ -7,8 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 
 const verifySchema = z.object({
-  alias: z.string().trim().min(1),
   token: z.string().trim().min(20),
+  alias: z.string().trim().min(1).optional(),
   setPassword: z.string().min(8).optional()
 });
 
@@ -22,7 +22,6 @@ export async function POST(request: Request) {
 
   const record = await prisma.magicLinkToken.findFirst({
     where: {
-      userAlias: parsed.data.alias,
       tokenHash,
       usedAt: null,
       expiresAt: { gt: new Date() }
@@ -34,14 +33,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Token ongeldig of verlopen" }, { status: 401 });
   }
 
-  await prisma.magicLinkToken.update({
-    where: { id: record.id },
-    data: { usedAt: new Date() }
-  });
+  if (!record.userAlias) {
+    return NextResponse.json(
+      { error: "Gebruik deze magic link op de account-aanmaakflow." },
+      { status: 409 }
+    );
+  }
+
+  const alias = parsed.data.alias ?? record.userAlias;
+  if (alias !== record.userAlias) {
+    return NextResponse.json({ error: "Token hoort niet bij deze alias." }, { status: 401 });
+  }
 
   const user = await prisma.user.findUnique({
-    where: { alias: parsed.data.alias },
-    select: { alias: true, passwordHash: true }
+    where: { alias },
+    select: { alias: true, passwordHash: true, email: true }
   });
   if (!user) {
     return NextResponse.json({ error: "Gebruiker niet gevonden" }, { status: 404 });
@@ -58,23 +64,28 @@ export async function POST(request: Request) {
     ? await hashPassword(parsed.data.setPassword)
     : undefined;
 
-  await prisma.user.update({
-    where: { alias: parsed.data.alias },
-    data: {
-      passwordHash,
-      emailVerifiedAt: new Date()
-    }
-  });
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.magicLinkToken.update({
+      where: { id: record.id },
+      data: { usedAt: now }
+    }),
+    prisma.user.update({
+      where: { alias },
+      data: {
+        email: record.email ?? user.email,
+        passwordHash,
+        emailVerifiedAt: now
+      }
+    })
+  ]);
 
-  await ensureGovernanceBootstrap(parsed.data.alias);
+  await ensureGovernanceBootstrap(alias);
 
-  const response = NextResponse.json(
-    { message: "Login geslaagd", alias: parsed.data.alias },
-    { status: 200 }
-  );
+  const response = NextResponse.json({ message: "Login geslaagd", alias }, { status: 200 });
   response.cookies.set({
     name: SESSION_COOKIE_NAME,
-    value: parsed.data.alias,
+    value: alias,
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

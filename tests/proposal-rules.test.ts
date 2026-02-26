@@ -28,7 +28,7 @@ test("proposer == proposed: alleen effectieve coordinator mag beslissen", () => 
   );
 });
 
-test("proposer != proposed: voorgesteld lid beslist", () => {
+test("proposer != proposed: voorgesteld lid of coordinator beslist", () => {
   assert.equal(
     canActorDecideProposal({
       proposerAlias: "Edgar",
@@ -44,6 +44,18 @@ test("proposer != proposed: voorgesteld lid beslist", () => {
       proposerAlias: "Edgar",
       proposedAlias: "Thomas",
       actorAlias: "Edgar",
+      effectiveCoordinatorAliases: ["Edgar"]
+    }),
+    true
+  );
+});
+
+test("niet-coordinator en niet-voorgesteld lid kan voorstel niet beslissen", () => {
+  assert.equal(
+    canActorDecideProposal({
+      proposerAlias: "Edgar",
+      proposedAlias: "Thomas",
+      actorAlias: "Jan",
       effectiveCoordinatorAliases: ["Edgar"]
     }),
     false

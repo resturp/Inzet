@@ -1,10 +1,10 @@
-import { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import {
   isRootOwner,
+  resolveBestuurAliases,
   resolveEffectiveCoordinatorAliases
 } from "@/lib/authorization";
 import { writeAllowedBondsnummers } from "@/lib/member-allowlist";
@@ -36,25 +36,35 @@ export async function POST(request: Request) {
   await writeAllowedBondsnummers(Array.from(desired));
 
   const users = await prisma.user.findMany();
-  const activeBestuur = await prisma.user.findFirst({
-    where: { role: UserRole.BESTUUR, isActive: true },
-    orderBy: { createdAt: "asc" }
-  });
+  const bestuurAliases = new Set(await resolveBestuurAliases());
+  const activeBestuurAlias =
+    users
+      .filter((user) => user.isActive && bestuurAliases.has(user.alias))
+      .map((user) => user.alias)
+      .sort((left, right) => left.localeCompare(right, "nl-NL"))[0] ?? null;
 
-  const existingByBondsnummer = new Map(users.map((user) => [user.bondsnummer, user]));
+  const existingByBondsnummer = new Map<string, typeof users>();
+  for (const user of users) {
+    const group = existingByBondsnummer.get(user.bondsnummer) ?? [];
+    group.push(user);
+    existingByBondsnummer.set(user.bondsnummer, group);
+  }
   const addedToAllowlist: string[] = [];
   const activated: string[] = [];
   const deactivated: string[] = [];
   const reassignedTasks: string[] = [];
 
   for (const bondsnummer of desired) {
-    const existing = existingByBondsnummer.get(bondsnummer);
-    if (!existing) {
+    const existingUsers = existingByBondsnummer.get(bondsnummer) ?? [];
+    if (existingUsers.length === 0) {
       addedToAllowlist.push(bondsnummer);
       continue;
     }
 
-    if (!existing.isActive) {
+    for (const existing of existingUsers) {
+      if (existing.isActive) {
+        continue;
+      }
       await prisma.user.update({
         where: { alias: existing.alias },
         data: { isActive: true }
@@ -64,7 +74,7 @@ export async function POST(request: Request) {
   }
 
   for (const user of users) {
-    if (user.role === UserRole.BESTUUR) {
+    if (bestuurAliases.has(user.alias)) {
       continue;
     }
     if (desired.has(user.bondsnummer) || !user.isActive) {
@@ -95,7 +105,7 @@ export async function POST(request: Request) {
         await prisma.taskCoordinator.create({
           data: {
             taskId,
-            userAlias: activeBestuur?.alias ?? sessionUser.alias
+            userAlias: activeBestuurAlias ?? sessionUser.alias
           }
         });
       }

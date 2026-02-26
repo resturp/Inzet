@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/api-session";
-import { prisma } from "@/lib/prisma";
+import { getCurrentDataVersion } from "@/lib/data-version";
 
 export async function GET() {
   const sessionUser = await getSessionUser();
@@ -8,13 +8,7 @@ export async function GET() {
     return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
   }
 
-  const users = await prisma.user.findMany({
-    where: { isActive: true },
-    orderBy: { alias: "asc" },
-    select: {
-      alias: true
-    }
-  });
+  const version = await getCurrentDataVersion();
 
-  return NextResponse.json({ data: users }, { status: 200 });
+  return NextResponse.json({ data: { version } }, { status: 200 });
 }

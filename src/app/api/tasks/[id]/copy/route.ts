@@ -38,6 +38,7 @@ const copySchema = z.object({
       description: z.string().trim().min(2).optional(),
       longDescription: z.string().max(20000).nullable().optional(),
       teamName: z.string().trim().max(100).nullable().optional(),
+      coordinationType: z.enum(["DELEGEREN", "ORGANISEREN"]).nullable().optional(),
       points: z.number().finite().int().nonnegative().optional(),
       date: z.string().datetime().optional(),
       startTime: z.string().datetime().nullable().optional(),
@@ -54,6 +55,7 @@ type TaskNode = {
   longDescription: string | null;
   teamName: string | null;
   parentId: string | null;
+  coordinationType: "DELEGEREN" | "ORGANISEREN" | null;
   ownCoordinatorAliases: string[];
   points: number;
   date: Date;
@@ -217,6 +219,7 @@ export async function POST(
             ownCoordinators: {
               select: { userAlias: true }
             },
+            coordinationType: true,
             points: true,
             date: true,
             startTime: true,
@@ -262,6 +265,7 @@ export async function POST(
             ownCoordinators: {
               select: { userAlias: true }
             },
+            coordinationType: true,
             points: true,
             date: true,
             startTime: true,
@@ -349,6 +353,10 @@ export async function POST(
               ? (sanitizeNullableTrimmedText(sourceTask.teamName) ?? null)
               : override.teamName,
           parentId: targetParent.id,
+          coordinationType:
+            override?.coordinationType === undefined
+              ? sourceTask.coordinationType
+              : override.coordinationType,
           ownCoordinators: coordinatorCreateData(sourceTask.ownCoordinatorAliases),
           points: shouldZeroSubtree ? 0 : pointsToStorage(requestedRootPoints),
           date: rootDates.date,
@@ -380,6 +388,7 @@ export async function POST(
               longDescription: sanitizeNullableText(child.longDescription) ?? null,
               teamName: sanitizeNullableTrimmedText(child.teamName) ?? null,
               parentId: newParentId,
+              coordinationType: child.coordinationType,
               ownCoordinators: coordinatorCreateData(child.ownCoordinatorAliases),
               points: shouldZeroSubtree ? 0 : child.points,
               date: childDates.date,

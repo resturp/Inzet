@@ -4,10 +4,12 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import {
+  canEditTaskCoordinatorsFromMap,
   canManageTaskByOwnership,
   hasTaskPermissionFromMap,
   isRootOwner,
   primaryCoordinatorAlias,
+  resolveEffectiveCoordinationTypeFromMap,
   resolveEffectiveCoordinatorAliasesFromMap
 } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
@@ -31,7 +33,8 @@ const createTaskSchema = z.object({
   startTime: z.string().datetime().optional(),
   endTime: z.string().datetime(),
   location: z.string().trim().optional(),
-  templateId: z.string().trim().optional()
+  templateId: z.string().trim().optional(),
+  coordinationType: z.enum(["DELEGEREN", "ORGANISEREN"]).nullable().optional()
 });
 
 function uniqueSortedAliases(aliases: Iterable<string>): string[] {
@@ -70,7 +73,8 @@ export async function GET() {
       startTime: true,
       endTime: true,
       location: true,
-      status: true
+      status: true,
+      coordinationType: true
     }
   });
 
@@ -80,6 +84,7 @@ export async function GET() {
       {
         id: task.id,
         parentId: task.parentId,
+        coordinationType: task.coordinationType,
         ownCoordinatorAliases: uniqueSortedAliases(task.ownCoordinators.map((item) => item.userAlias))
       }
     ])
@@ -88,9 +93,11 @@ export async function GET() {
   const tasksWithEffectiveCoordinators = tasks.map((task) => {
     const ownCoordinatorAliases = uniqueSortedAliases(task.ownCoordinators.map((item) => item.userAlias));
     const coordinatorAliases = resolveEffectiveCoordinatorAliasesFromMap(task.id, byId);
+    const effectiveCoordinationType = resolveEffectiveCoordinationTypeFromMap(task.id, byId);
     const canRead = hasTaskPermissionFromMap(sessionUser.alias, task.id, "READ", byId);
     const canOpen = hasTaskPermissionFromMap(sessionUser.alias, task.id, "OPEN", byId);
     const canManage = hasTaskPermissionFromMap(sessionUser.alias, task.id, "MANAGE", byId);
+    const canEditCoordinators = canEditTaskCoordinatorsFromMap(sessionUser.alias, task.id, byId);
 
     return {
       id: task.id,
@@ -106,12 +113,15 @@ export async function GET() {
       endTime: task.endTime,
       location: task.location,
       status: task.status,
+      coordinationType: effectiveCoordinationType,
+      ownCoordinationType: task.coordinationType,
       ownCoordinatorAliases,
       coordinatorAliases,
       coordinatorAlias: primaryCoordinatorAlias(coordinatorAliases),
       canRead,
       canOpen,
-      canManage
+      canManage,
+      canEditCoordinators
     };
   });
 
@@ -200,6 +210,8 @@ export async function POST(request: Request) {
   }
 
   const ownCoordinatorAliases = parentTask ? [] : [sessionUser.alias];
+  const coordinationType =
+    parsed.data.coordinationType === undefined ? null : parsed.data.coordinationType;
 
   const task = await prisma.$transaction(async (tx) => {
     let pointsToAssign = parsed.data.points;
@@ -240,7 +252,8 @@ export async function POST(request: Request) {
         endTime: new Date(parsed.data.endTime),
         location,
         templateId: parsed.data.templateId,
-        status: TaskStatus.BESCHIKBAAR
+        status: TaskStatus.BESCHIKBAAR,
+        coordinationType
       }
     });
   });
@@ -250,7 +263,7 @@ export async function POST(request: Request) {
     actionType: "TASK_CREATED",
     entityType: "Task",
     entityId: task.id,
-    payload: { parentId: task.parentId, ownCoordinatorAliases }
+    payload: { parentId: task.parentId, ownCoordinatorAliases, coordinationType }
   });
 
   return NextResponse.json({ data: task }, { status: 201 });

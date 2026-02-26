@@ -1,0 +1,21 @@
+Goed, hier is de nieuwe inlog flow: 
+
+Stap 1: De landingspagina legt uit dat er 2 mogelijkheden zijn:
+- Iemand heeft al een account gemaakt, en kan inloggen met het gekozen e-mail adres + wachtwoord.
+- Iemand komt hier voor het eerst. Iemand die voor de eerste keer op de website komt voert een Nevobo relatiecode in + een e-mail adres.
+
+één e-mail adrees kan door verschillende gebruikers gebruikt worden. Er kunnen dus meerdere wachtwoorden geldig zijn bij 1 email adres en verwijzen naar verschillende accounts.
+Er kunnen ook meerdere accounts zijn met dezelfde relatiecode, bijvoorbeeld een vader en een moeder met ieder een eigen account.
+
+Een account heeft een unieke alias, en dat is het enige dat gebruikers van elkaar kunnen zien. 
+Alleen bestaande relatiecodes uit /data/relatiecodes.csv mogen gebruikt worden om een account te maken.
+
+Stap 2: Een nieuwe gebruiker ontvangt op het gegeven e-mail adres een magic link.
+De gebruiker klikt op de link en komt aan op een "Maak account" pagina.
+
+- De gebruiker kan aangeven dat één nog niet geclaimde bestaande alias van hem/haar is.
+  Er is een korte uitleg: "Van sommige vrijwilligers hebben we alvast hun voornaam als alias aangemaakt zodat we bestaande taken konden registreren. Je kunt in deze lijst kijken of dat voor jou van toepassing is."
+  De opdracht is "Kies een bestaande alias of verzin een nieuwe. 
+- Daarnaast maakt de gebruiker een wachtwoord, de combinatie e-mail adres + wachtwoord moet uniek zijn.
+
+Vanaf nu kan een gebruiker inloggen met emailadres + wachtwoord.

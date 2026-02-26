@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { normalizeEmail } from "@/lib/auth-credentials";
 import { sendMail } from "@/lib/mailer";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
   }
 
   const alias = parsed.data.alias.trim();
-  const email = parsed.data.email.trim().toLowerCase();
+  const email = normalizeEmail(parsed.data.email);
 
   const user = await prisma.user.findUnique({ where: { alias } });
   if (!user || !user.isActive || !user.passwordHash) {
@@ -30,31 +31,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Inloggegevens zijn onjuist" }, { status: 401 });
   }
 
-  const emailOwner = await prisma.user.findUnique({ where: { email } });
-  if (emailOwner && emailOwner.alias !== alias) {
-    return NextResponse.json({ error: "Dit e-mailadres is al in gebruik" }, { status: 409 });
-  }
-
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + 20 * 60 * 1000);
 
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { alias },
-      data: { email, emailVerifiedAt: null }
-    }),
-    prisma.magicLinkToken.create({
-      data: {
-        userAlias: alias,
-        tokenHash,
-        expiresAt
-      }
-    })
-  ]);
+  await prisma.magicLinkToken.create({
+    data: {
+      userAlias: alias,
+      email,
+      bondsnummer: user.bondsnummer,
+      tokenHash,
+      expiresAt
+    }
+  });
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const magicLinkUrl = `${baseUrl}/login?alias=${encodeURIComponent(alias)}&token=${encodeURIComponent(token)}`;
+  const magicLinkUrl = `${baseUrl}/login?flow=magic&alias=${encodeURIComponent(alias)}&token=${encodeURIComponent(token)}`;
 
   try {
     await sendMail({

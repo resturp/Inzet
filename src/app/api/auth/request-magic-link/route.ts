@@ -1,10 +1,13 @@
 import crypto from "node:crypto";
-import { UserRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isBondsnummerAllowed } from "@/lib/member-allowlist";
+import { normalizeEmail } from "@/lib/auth-credentials";
 import { sendMail } from "@/lib/mailer";
 import { prisma } from "@/lib/prisma";
+import {
+  isRelatiecodeAllowed,
+  normalizeInputRelatiecode
+} from "@/lib/relatiecodes";
 
 const requestSchema = z.object({
   bondsnummer: z.string().trim().min(2),
@@ -22,92 +25,73 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  const { bondsnummer, email } = parsed.data;
+  const bondsnummer = normalizeInputRelatiecode(parsed.data.bondsnummer);
+  const email = normalizeEmail(parsed.data.email);
   const requestedAlias = parsed.data.alias?.trim();
 
-  let user = await prisma.user.findUnique({ where: { bondsnummer } });
-
-  if (user && !user.isActive) {
-    return NextResponse.json({ error: "Onbekend of inactief bondsnummer" }, { status: 404 });
+  if (!(await isRelatiecodeAllowed(bondsnummer))) {
+    return NextResponse.json({ error: "Onbekende relatiecode" }, { status: 404 });
   }
 
-  if (!user) {
-    const allowed = await isBondsnummerAllowed(bondsnummer);
-    if (!allowed) {
-      return NextResponse.json({ error: "Onbekend of inactief bondsnummer" }, { status: 404 });
-    }
-    if (!requestedAlias) {
-      return NextResponse.json(
-        { error: "Alias is verplicht bij eerste accountaanmaak" },
-        { status: 400 }
-      );
-    }
-
-    const aliasInUse = await prisma.user.findUnique({ where: { alias: requestedAlias } });
-    if (aliasInUse) {
-      return NextResponse.json({ error: "Alias is al in gebruik" }, { status: 409 });
-    }
-
-    user = await prisma.user.create({
-      data: {
+  let aliasUser: { alias: string } | null = null;
+  if (requestedAlias) {
+    aliasUser = await prisma.user.findFirst({
+      where: {
         alias: requestedAlias,
         bondsnummer,
-        email,
-        emailVerifiedAt: null,
-        role: UserRole.LID,
         isActive: true
-      }
+      },
+      select: { alias: true }
     });
-  } else if (requestedAlias && requestedAlias !== user.alias) {
-    const aliasInUse = await prisma.user.findUnique({ where: { alias: requestedAlias } });
-    if (aliasInUse && aliasInUse.bondsnummer !== bondsnummer) {
-      return NextResponse.json({ error: "Alias is al in gebruik" }, { status: 409 });
+    if (!aliasUser) {
+      return NextResponse.json(
+        { error: "Alias hoort niet bij deze relatiecode of is inactief." },
+        { status: 404 }
+      );
     }
-
-    user = await prisma.user.update({
-      where: { alias: user.alias },
-      data: {
-        alias: requestedAlias,
-        email,
-        emailVerifiedAt: null
-      }
-    });
   }
 
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + 20 * 60 * 1000);
 
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { alias: user.alias },
-      data: { email, emailVerifiedAt: null }
-    }),
-    prisma.magicLinkToken.create({
-      data: {
-        userAlias: user.alias,
-        tokenHash,
-        expiresAt
-      }
-    })
-  ]);
+  await prisma.magicLinkToken.create({
+    data: {
+      userAlias: aliasUser?.alias,
+      email,
+      bondsnummer,
+      tokenHash,
+      expiresAt
+    }
+  });
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const magicLinkUrl = `${baseUrl}/login?alias=${encodeURIComponent(user.alias)}&token=${encodeURIComponent(token)}`;
+  const magicLinkUrl = aliasUser
+    ? `${baseUrl}/login?flow=magic&alias=${encodeURIComponent(aliasUser.alias)}&token=${encodeURIComponent(token)}`
+    : `${baseUrl}/login?flow=create-account&token=${encodeURIComponent(token)}`;
 
   try {
     await sendMail({
       to: email,
-      subject: "Je Inzet magic link",
-      text: [
-        "Je hebt een loginlink aangevraagd voor Inzet.",
-        "",
-        `Open deze link binnen 20 minuten: ${magicLinkUrl}`,
-        "",
-        `Alias: ${user.alias}`,
-        "",
-        "Heb je dit niet aangevraagd? Dan kun je deze e-mail negeren."
-      ].join("\n")
+      subject: aliasUser ? "Je Inzet magic link" : "Maak je Inzet-account aan",
+      text: aliasUser
+        ? [
+            "Je hebt een loginlink aangevraagd voor Inzet.",
+            "",
+            `Open deze link binnen 20 minuten: ${magicLinkUrl}`,
+            "",
+            `Alias: ${aliasUser.alias}`,
+            "",
+            "Heb je dit niet aangevraagd? Dan kun je deze e-mail negeren."
+          ].join("\n")
+        : [
+            "Je hebt een accountaanmaak-link aangevraagd voor Inzet.",
+            "",
+            `Open deze link binnen 20 minuten: ${magicLinkUrl}`,
+            "",
+            "Op de pagina kies je een bestaande alias of verzin je een nieuwe alias.",
+            "Daarna stel je een wachtwoord in en kun je meteen inloggen."
+          ].join("\n")
     });
   } catch (error) {
     console.error("Magic link e-mail verzenden mislukt", error);
@@ -121,9 +105,13 @@ export async function POST(request: Request) {
 
   return NextResponse.json(
     {
-      message: "Magic link is aangemaakt en wordt per e-mail verstuurd.",
+      message: aliasUser
+        ? "Magic link om in te loggen is verstuurd."
+        : "Magic link voor accountaanmaak is verstuurd.",
       debugToken: process.env.NODE_ENV === "production" ? undefined : token,
-      debugAlias: process.env.NODE_ENV === "production" ? undefined : user.alias,
+      debugAlias: process.env.NODE_ENV === "production" ? undefined : aliasUser?.alias,
+      debugEmail: process.env.NODE_ENV === "production" ? undefined : email,
+      debugBondsnummer: process.env.NODE_ENV === "production" ? undefined : bondsnummer,
       debugMagicLink: process.env.NODE_ENV === "production" ? undefined : magicLinkUrl
     },
     { status: 200 }

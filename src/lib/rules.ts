@@ -23,8 +23,11 @@ export function canActorDecideProposal(params: {
   effectiveCoordinatorAliases: string[];
 }): boolean {
   const { proposerAlias, proposedAlias, actorAlias, effectiveCoordinatorAliases } = params;
+  if (effectiveCoordinatorAliases.includes(actorAlias)) {
+    return true;
+  }
   if (proposerAlias === proposedAlias) {
-    return effectiveCoordinatorAliases.includes(actorAlias);
+    return false;
   }
   return actorAlias === proposedAlias;
 }

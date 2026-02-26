@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/api-session";
+import {
+  findEmailPasswordConflictAlias,
+  normalizeEmail
+} from "@/lib/auth-credentials";
+import { isBestuurAlias } from "@/lib/authorization";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
 import { sanitizeNullableText } from "@/lib/sanitize";
@@ -51,13 +56,15 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
   }
+  const bestuur = await isBestuurAlias(user.alias);
 
   return NextResponse.json(
     {
       data: {
         alias: user.alias,
+        bondsnummer: user.bondsnummer,
         email: user.email,
-        role: user.role,
+        isBestuur: bestuur,
         aboutMe: user.aboutMe,
         profilePhotoData: user.profilePhotoData
       }
@@ -78,9 +85,10 @@ export async function PATCH(request: Request) {
   }
 
   const payload = parsed.data;
-  const normalizedEmail = payload.email?.trim().toLowerCase();
+  const normalizedEmail = payload.email === undefined ? undefined : normalizeEmail(payload.email);
   const wantsEmailChange =
-    normalizedEmail !== undefined && normalizedEmail !== (sessionUser.email ?? "").toLowerCase();
+    normalizedEmail !== undefined &&
+    normalizedEmail !== normalizeEmail(sessionUser.email ?? "");
   const wantsPasswordChange = payload.newPassword !== undefined;
   const wantsSensitiveChange = wantsEmailChange || wantsPasswordChange;
 
@@ -103,10 +111,23 @@ export async function PATCH(request: Request) {
     }
   }
 
-  if (normalizedEmail) {
-    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (existing && existing.alias !== sessionUser.alias) {
-      return NextResponse.json({ error: "Dit e-mailadres is al in gebruik." }, { status: 409 });
+  const resultingEmail =
+    normalizedEmail === undefined ? (sessionUser.email ?? null) : normalizedEmail;
+  const passwordCandidate = payload.newPassword ?? payload.currentPassword;
+  if (wantsSensitiveChange && resultingEmail && passwordCandidate) {
+    const conflictAlias = await findEmailPasswordConflictAlias(
+      resultingEmail,
+      passwordCandidate,
+      sessionUser.alias
+    );
+    if (conflictAlias) {
+      return NextResponse.json(
+        {
+          error:
+            "De combinatie e-mailadres + wachtwoord is al in gebruik. Kies een ander wachtwoord."
+        },
+        { status: 409 }
+      );
     }
   }
 
@@ -148,12 +169,16 @@ export async function PATCH(request: Request) {
     },
     select: {
       alias: true,
+      bondsnummer: true,
       email: true,
-      role: true,
       aboutMe: true,
       profilePhotoData: true
     }
   });
+  const bestuur = await isBestuurAlias(updated.alias);
 
-  return NextResponse.json({ data: updated, message: "Account opgeslagen." }, { status: 200 });
+  return NextResponse.json(
+    { data: { ...updated, isBestuur: bestuur }, message: "Account opgeslagen." },
+    { status: 200 }
+  );
 }

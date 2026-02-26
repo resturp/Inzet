@@ -2,19 +2,34 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   areAliasSetsEqual,
+  canEditTaskCoordinatorsFromMap,
   hasTaskPermissionFromMap,
   primaryCoordinatorAlias,
-  resolveEffectiveCoordinatorAliasesFromMap
+  resolveEffectiveCoordinatorAliasesFromMap,
+  resolveOrganizerAliasesFromMap
 } from "../src/lib/authorization";
 
 type TestTask = {
   id: string;
   parentId: string | null;
+  coordinationType?: "DELEGEREN" | "ORGANISEREN";
   ownCoordinatorAliases: string[];
 };
 
-function taskMap(tasks: TestTask[]): Map<string, TestTask> {
-  return new Map(tasks.map((task) => [task.id, task]));
+type ResolvedTestTask = Omit<TestTask, "coordinationType"> & {
+  coordinationType: "DELEGEREN" | "ORGANISEREN" | null;
+};
+
+function taskMap(tasks: TestTask[]): Map<string, ResolvedTestTask> {
+  return new Map(
+    tasks.map((task) => [
+      task.id,
+      {
+        ...task,
+        coordinationType: task.coordinationType ?? null
+      }
+    ])
+  );
 }
 
 test("coordinator op taak krijgt alle rechten", () => {
@@ -102,6 +117,40 @@ test("coordinatoren op A beperken parent-coordinatoren tot leesrecht op A en die
   assert.equal(hasTaskPermissionFromMap("edgar", "a-child-explicit", "MANAGE", tasks), true);
 });
 
+test("organiseren op parent houdt parent-coordinator beheersbevoegd op expliciete child", () => {
+  const tasks = taskMap([
+    { id: "root", parentId: null, coordinationType: "ORGANISEREN", ownCoordinatorAliases: ["edgar"] },
+    { id: "child", parentId: "root", ownCoordinatorAliases: ["thomas"] }
+  ]);
+
+  assert.equal(hasTaskPermissionFromMap("edgar", "child", "MANAGE", tasks), true);
+  assert.deepEqual(resolveEffectiveCoordinatorAliasesFromMap("child", tasks), ["edgar", "thomas"]);
+  assert.deepEqual(resolveOrganizerAliasesFromMap("child", tasks), ["edgar"]);
+  assert.equal(canEditTaskCoordinatorsFromMap("edgar", "child", tasks), true);
+});
+
+test("oningestelde werkwijze erft organiseren van voorouder", () => {
+  const tasks = taskMap([
+    { id: "root", parentId: null, coordinationType: "ORGANISEREN", ownCoordinatorAliases: ["edgar"] },
+    { id: "mid", parentId: "root", ownCoordinatorAliases: [] },
+    { id: "leaf", parentId: "mid", ownCoordinatorAliases: ["thomas"] }
+  ]);
+
+  assert.equal(hasTaskPermissionFromMap("edgar", "leaf", "MANAGE", tasks), true);
+  assert.deepEqual(resolveEffectiveCoordinatorAliasesFromMap("leaf", tasks), ["edgar", "thomas"]);
+  assert.deepEqual(resolveOrganizerAliasesFromMap("leaf", tasks), ["edgar"]);
+});
+
+test("delegeren op parent geeft child-beheer exclusief aan child-coordinator", () => {
+  const tasks = taskMap([
+    { id: "root", parentId: null, coordinationType: "DELEGEREN", ownCoordinatorAliases: ["edgar"] },
+    { id: "child", parentId: "root", ownCoordinatorAliases: ["thomas"] }
+  ]);
+
+  assert.equal(hasTaskPermissionFromMap("edgar", "child", "MANAGE", tasks), false);
+  assert.deepEqual(resolveEffectiveCoordinatorAliasesFromMap("child", tasks), ["thomas"]);
+});
+
 test("cycle in parent-structuur stopt veilig zonder rechten", () => {
   const tasks = taskMap([
     { id: "loop", parentId: "loop", ownCoordinatorAliases: [] }
@@ -109,6 +158,34 @@ test("cycle in parent-structuur stopt veilig zonder rechten", () => {
 
   assert.equal(hasTaskPermissionFromMap("jan", "loop", "MANAGE", tasks), false);
   assert.equal(hasTaskPermissionFromMap("jan", "loop", "OPEN", tasks), false);
+  assert.deepEqual(resolveOrganizerAliasesFromMap("loop", tasks), []);
+});
+
+test("organisator kan coordinatorlijst aanpassen op taak die effectief organiseren is", () => {
+  const tasks = taskMap([
+    { id: "root", parentId: null, coordinationType: "ORGANISEREN", ownCoordinatorAliases: ["edgar"] },
+    { id: "child", parentId: "root", ownCoordinatorAliases: ["thomas"] }
+  ]);
+
+  // Edgar is organisator via dichtstbijzijnde expliciete parent (root ORGANISEREN).
+  assert.deepEqual(resolveOrganizerAliasesFromMap("child", tasks), ["edgar"]);
+  assert.equal(canEditTaskCoordinatorsFromMap("edgar", "child", tasks), true);
+  assert.equal(canEditTaskCoordinatorsFromMap("jan", "child", tasks), false);
+});
+
+test("coordinatorlijst aanpassen staat uit als taak effectief delegeren is", () => {
+  const tasks = taskMap([
+    { id: "root", parentId: null, coordinationType: "ORGANISEREN", ownCoordinatorAliases: ["edgar"] },
+    {
+      id: "child",
+      parentId: "root",
+      coordinationType: "DELEGEREN",
+      ownCoordinatorAliases: ["edgar", "thomas"]
+    }
+  ]);
+
+  assert.equal(hasTaskPermissionFromMap("edgar", "child", "MANAGE", tasks), true);
+  assert.equal(canEditTaskCoordinatorsFromMap("edgar", "child", tasks), false);
 });
 
 test("effective coordinators resolver pakt eerste coordinator-set in de keten", () => {

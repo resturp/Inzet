@@ -19,26 +19,32 @@ enum TaskStatus {
   GEREED
 }
 
+enum TaskCoordinationType {
+  DELEGEREN
+  ORGANISEREN
+}
+
 enum OpenTaskStatus {
   OPEN
   AFGEWEZEN
 }
 
 model User {
-  alias             String            @id
-  bondsnummer       String            @unique
-  email             String?           @unique
-  emailVerifiedAt   DateTime?
-  passwordHash      String?
-  profilePhotoData  String?
-  aboutMe           String?
-  role              UserRole          @default(LID)
-  isActive          Boolean           @default(true)
-  createdAt         DateTime          @default(now())
-  taskCoordinators  TaskCoordinator[]
-  proposedOpenTasks OpenTask[]        @relation("OpenTaskProposed")
-  proposerOpenTasks OpenTask[]        @relation("OpenTaskProposer")
-  magicLinkTokens   MagicLinkToken[]
+  alias                   String               @id
+  bondsnummer             String
+  email                   String?
+  emailVerifiedAt         DateTime?
+  passwordHash            String?
+  profilePhotoData        String?
+  aboutMe                 String?
+  role                    UserRole             @default(LID)
+  isActive                Boolean              @default(true)
+  createdAt               DateTime             @default(now())
+  taskCoordinators        TaskCoordinator[]
+  proposedOpenTasks       OpenTask[]           @relation("OpenTaskProposed")
+  proposerOpenTasks       OpenTask[]           @relation("OpenTaskProposer")
+  aliasChangeProposals    AliasChangeProposal[]
+  magicLinkTokens         MagicLinkToken[]
 }
 
 model TaskTemplate {
@@ -71,6 +77,7 @@ model Task {
   templateId      String?
   template        TaskTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   status          TaskStatus        @default(BESCHIKBAAR)
+  coordinationType TaskCoordinationType?
   createdAt       DateTime          @default(now())
   openTasks       OpenTask[]
 }
@@ -100,6 +107,19 @@ model OpenTask {
   @@unique([taskId, proposerAlias, proposedAlias, status])
 }
 
+model AliasChangeProposal {
+  id            String         @id @default(cuid())
+  requesterAlias String
+  requester     User           @relation(fields: [requesterAlias], references: [alias], onDelete: Cascade, onUpdate: Cascade)
+  currentAlias  String
+  requestedAlias String
+  status        OpenTaskStatus @default(OPEN)
+  createdAt     DateTime       @default(now())
+
+  @@unique([requesterAlias, status])
+  @@index([status, createdAt])
+}
+
 model AuditLog {
   id          String   @id @default(cuid())
   actorAlias  String
@@ -112,10 +132,14 @@ model AuditLog {
 
 model MagicLinkToken {
   id        String    @id @default(cuid())
-  userAlias String
-  user      User      @relation(fields: [userAlias], references: [alias], onDelete: Cascade, onUpdate: Cascade)
+  userAlias String?
+  user      User?     @relation(fields: [userAlias], references: [alias], onDelete: Cascade, onUpdate: Cascade)
+  email     String?
+  bondsnummer String?
   tokenHash String
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+
+  @@index([email, bondsnummer])
 }

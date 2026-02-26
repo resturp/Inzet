@@ -2,7 +2,7 @@ import { TaskStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
-import { canOpenTaskByOwnership } from "@/lib/authorization";
+import { canOpenTaskByOwnership, resolveEffectiveCoordinationType } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(
@@ -15,7 +15,13 @@ export async function POST(
   }
 
   const { id } = await context.params;
-  const task = await prisma.task.findUnique({ where: { id } });
+  const task = await prisma.task.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true
+    }
+  });
 
   if (!task) {
     return NextResponse.json({ error: "Taak niet gevonden" }, { status: 404 });
@@ -26,6 +32,19 @@ export async function POST(
   }
   if (task.status !== TaskStatus.BESCHIKBAAR) {
     return NextResponse.json({ error: "Taak is niet beschikbaar voor inschrijving" }, { status: 409 });
+  }
+  const effectiveCoordinationType = await resolveEffectiveCoordinationType(task.id);
+  if (effectiveCoordinationType === "ORGANISEREN") {
+    const firstChild = await prisma.task.findFirst({
+      where: { parentId: task.id },
+      select: { id: true }
+    });
+    if (firstChild) {
+      return NextResponse.json(
+        { error: "Bij organiseren kan je je alleen op een bladtaak (zonder subtaken) inschrijven" },
+        { status: 409 }
+      );
+    }
   }
 
   let openTask;

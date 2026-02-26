@@ -2,7 +2,7 @@ import { OpenTaskStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
-import { resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
+import { isBestuurAlias, resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import { canActorDecideProposal } from "@/lib/rules";
 
@@ -14,14 +14,48 @@ export async function POST(
   if (!sessionUser) {
     return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
   }
+  const sessionIsBestuur = await isBestuurAlias(sessionUser.alias);
 
   const { id } = await context.params;
   const openTask = await prisma.openTask.findUnique({
     where: { id },
     include: { task: true }
   });
-  if (!openTask || openTask.status !== OpenTaskStatus.OPEN) {
-    return NextResponse.json({ error: "Open taak niet gevonden" }, { status: 404 });
+  if (!openTask) {
+    const aliasChangeProposal = await prisma.aliasChangeProposal.findUnique({
+      where: { id }
+    });
+    if (!aliasChangeProposal || aliasChangeProposal.status !== OpenTaskStatus.OPEN) {
+      return NextResponse.json({ error: "Open voorstel niet gevonden" }, { status: 404 });
+    }
+    if (!sessionIsBestuur) {
+      return NextResponse.json(
+        { error: "Alleen bestuur mag aliaswijzigingen afwijzen" },
+        { status: 403 }
+      );
+    }
+
+    await prisma.aliasChangeProposal.update({
+      where: { id: aliasChangeProposal.id },
+      data: { status: OpenTaskStatus.AFGEWEZEN }
+    });
+
+    await writeAuditLog({
+      actorAlias: sessionUser.alias,
+      actionType: "ALIAS_CHANGE_REJECTED",
+      entityType: "AliasChangeProposal",
+      entityId: aliasChangeProposal.id,
+      payload: {
+        requesterAlias: aliasChangeProposal.requesterAlias,
+        requestedAlias: aliasChangeProposal.requestedAlias
+      }
+    });
+
+    return NextResponse.json({ message: "Aliaswijziging afgewezen" }, { status: 200 });
+  }
+
+  if (openTask.status !== OpenTaskStatus.OPEN) {
+    return NextResponse.json({ error: "Open voorstel niet gevonden" }, { status: 404 });
   }
 
   if (!openTask.proposedAlias) {

@@ -22,18 +22,26 @@ type ApiTask = {
   startTime: string | null;
   endTime: string;
   location: string | null;
+  coordinationType: "DELEGEREN" | "ORGANISEREN";
+  ownCoordinationType: "DELEGEREN" | "ORGANISEREN" | null;
   canRead: boolean;
   canOpen: boolean;
   canManage: boolean;
+  canEditCoordinators: boolean;
 };
+
+type DraftCoordinationChoice = "INHERIT" | "DELEGEREN" | "ORGANISEREN";
 
 type ApiOpenTask = {
   id: string;
-  taskId: string;
+  proposalType: "TAAK" | "ALIAS_WIJZIGING";
+  taskId: string | null;
   taskTitle: string;
   teamName: string | null;
   proposerAlias: string;
   proposedAlias: string | null;
+  currentAlias: string | null;
+  requestedAlias: string | null;
   status: "OPEN" | "AFGEWEZEN";
   canDecide: boolean;
   createdAt: string;
@@ -41,7 +49,6 @@ type ApiOpenTask = {
 
 type ApiUser = {
   alias: string;
-  role: "LID" | "COORDINATOR" | "BESTUUR";
 };
 
 type ApiTemplate = {
@@ -54,8 +61,9 @@ type ApiTemplate = {
 
 type ApiAccount = {
   alias: string;
+  bondsnummer: string;
   email: string | null;
-  role: "LID" | "COORDINATOR" | "BESTUUR";
+  isBestuur: boolean;
   aboutMe: string | null;
   profilePhotoData: string | null;
 };
@@ -65,6 +73,7 @@ type DraftSubtask = {
   description: string;
   teamName: string;
   points: string;
+  coordinationType: DraftCoordinationChoice;
   startDate: string;
   startTime: string;
   endDate: string;
@@ -79,12 +88,16 @@ type TaskEditDraft = {
   description: string;
   longDescription: string;
   points: string;
+  coordinationType: DraftCoordinationChoice;
+  coordinatorAliases: string[];
   startDate: string;
   startTime: string;
   endDate: string;
   endTime: string;
   location: string;
 };
+
+type EditTaskTab = "LONG_DESCRIPTION" | "COORDINATORS" | "DATE_TIME";
 
 type ReleaseDialogTask = {
   id: string;
@@ -126,13 +139,13 @@ const initialSubtask: DraftSubtask = {
   description: "",
   teamName: "",
   points: "10",
+  coordinationType: "INHERIT",
   startDate: "",
   startTime: "",
   endDate: "",
   endTime: ""
 };
 
-const ICON_SAVE = "🖫";
 const ICON_OPEN = "✎";
 const ICON_EDIT = "✎...";
 const ICON_COPY = "⧉";
@@ -189,6 +202,32 @@ function labelForStatus(status: ApiTask["status"]): string {
     case "GEREED":
       return "gereed";
   }
+}
+
+function labelForCoordinationType(value: ApiTask["coordinationType"]): string {
+  return value === "ORGANISEREN" ? "Organiseren" : "Delegeren";
+}
+
+function labelForOwnCoordinationType(value: ApiTask["ownCoordinationType"]): string {
+  if (value === null) {
+    return "Overerven";
+  }
+  return labelForCoordinationType(value);
+}
+
+function draftCoordinationChoiceFromOwn(
+  ownCoordinationType: ApiTask["ownCoordinationType"]
+): DraftCoordinationChoice {
+  return ownCoordinationType ?? "INHERIT";
+}
+
+function toApiCoordinationTypeFromDraft(
+  draftCoordinationType: DraftCoordinationChoice
+): "DELEGEREN" | "ORGANISEREN" | null {
+  if (draftCoordinationType === "INHERIT") {
+    return null;
+  }
+  return draftCoordinationType;
 }
 
 function labelForMenuView(view: TaskMenuView): string {
@@ -260,8 +299,16 @@ function getTaskOwnCoordinatorAliases(task: ApiTask): string[] {
   return uniqueSortedAliases(task.ownCoordinatorAliases);
 }
 
+function getTaskAssigneeAliases(task: ApiTask): string[] {
+  const ownAliases = getTaskOwnCoordinatorAliases(task);
+  if (ownAliases.length > 0) {
+    return ownAliases;
+  }
+  return getTaskCoordinatorAliases(task);
+}
+
 function taskHasCoordinator(task: ApiTask, alias: string): boolean {
-  return getTaskCoordinatorAliases(task).includes(alias);
+  return getTaskAssigneeAliases(task).includes(alias);
 }
 
 function labelForPermission(task: ApiTask): string {
@@ -307,6 +354,12 @@ function combineDateAndTime(dateValue: string, timeValue: string): string | null
     return null;
   }
   return parsed.toISOString();
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function collectDescendantIds(
@@ -423,6 +476,8 @@ export function TasksClient({ alias }: { alias: string }) {
   const [copyDateShiftUnit, setCopyDateShiftUnit] = useState<CopyDateShiftUnit>("days");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null);
+  const [editTaskTab, setEditTaskTab] = useState<EditTaskTab>("LONG_DESCRIPTION");
+  const [coordinatorAliasToAdd, setCoordinatorAliasToAdd] = useState("");
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
   const [moveTargetParentId, setMoveTargetParentId] = useState("");
   const [proposeDialogTask, setProposeDialogTask] = useState<{ id: string; title: string } | null>(null);
@@ -437,16 +492,23 @@ export function TasksClient({ alias }: { alias: string }) {
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
   const [accountSettingsDraft, setAccountSettingsDraft] = useState<AccountSettingsDraft | null>(null);
   const [profileDraft, setProfileDraft] = useState<ProfileDraft | null>(null);
-  const [accountRole, setAccountRole] = useState<ApiAccount["role"] | null>(null);
+  const [accountIsBestuur, setAccountIsBestuur] = useState<boolean | null>(null);
+  const [accountBondsnummer, setAccountBondsnummer] = useState<string | null>(null);
   const [isAccountLoading, setIsAccountLoading] = useState(false);
   const [isAccountSettingsSaving, setIsAccountSettingsSaving] = useState(false);
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [accountSettingsError, setAccountSettingsError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [accountSettingsStatus, setAccountSettingsStatus] = useState<string | null>(null);
+  const [aliasChangeDraft, setAliasChangeDraft] = useState("");
+  const [aliasChangeError, setAliasChangeError] = useState<string | null>(null);
+  const [aliasChangeStatus, setAliasChangeStatus] = useState<string | null>(null);
+  const [isAliasChangeSubmitting, setIsAliasChangeSubmitting] = useState(false);
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [subtaskPointsDraftById, setSubtaskPointsDraftById] = useState<Record<string, string>>({});
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const isRefreshingRef = useRef(false);
+  const lastKnownVersionRef = useRef(0);
 
   const sortedTasks = useMemo(
     () =>
@@ -485,6 +547,32 @@ export function TasksClient({ alias }: { alias: string }) {
     return byParent;
   }, [sortedTasks]);
 
+  const totalAccountPoints = useMemo(() => {
+    let total = 0;
+    for (const task of sortedTasks) {
+      if (!isAssignedStatus(task.status)) {
+        continue;
+      }
+      const assigneeAliases = getTaskAssigneeAliases(task);
+      if (!assigneeAliases.includes(alias)) {
+        continue;
+      }
+      const taskPoints = parseTaskPoints(task.points);
+      const subtasks = childrenByParentId.get(task.id) ?? [];
+      const totalSubtaskPoints = subtasks.reduce(
+        (sum, subtask) => sum + parseTaskPoints(subtask.points),
+        0
+      );
+      const availableTaskPoints = taskPoints - totalSubtaskPoints;
+      const pointsPerCoordinator =
+        assigneeAliases.length > 0
+          ? availableTaskPoints / assigneeAliases.length
+          : availableTaskPoints;
+      total += pointsPerCoordinator;
+    }
+    return total;
+  }, [alias, childrenByParentId, sortedTasks]);
+
   const myAssignedRootTaskIds = useMemo(
     () =>
       sortedTasks
@@ -519,9 +607,9 @@ export function TasksClient({ alias }: { alias: string }) {
       if (!myAssignedSubtreeTaskIds.has(task.id) || !isAssignedStatus(task.status)) {
         continue;
       }
-      const coordinatorAliases = getTaskCoordinatorAliases(task);
-      for (const coordinatorAlias of coordinatorAliases) {
-        aliases.add(coordinatorAlias);
+      const assigneeAliases = getTaskAssigneeAliases(task);
+      for (const assigneeAlias of assigneeAliases) {
+        aliases.add(assigneeAlias);
       }
     }
 
@@ -546,13 +634,32 @@ export function TasksClient({ alias }: { alias: string }) {
     [manageableTaskIds, sortedTasks]
   );
 
-  const canManageTemplates = useMemo(
-    () =>
-      myCoordinatedTasks.some(
-        (task) => task.title === "Besturen vereniging" && task.parentId === null
-      ),
-    [myCoordinatedTasks]
-  );
+  const canManageTemplates = useMemo(() => {
+    const bestuurTasks = sortedTasks.filter(
+      (task) => task.title.trim().toLocaleLowerCase("nl-NL") === "bestuur"
+    );
+    if (bestuurTasks.length > 0) {
+      let shallowestDepth = Number.POSITIVE_INFINITY;
+      const depthByTaskId = new Map<string, number>();
+      for (const task of bestuurTasks) {
+        const depth = buildTaskChain(task, tasksById).length - 1;
+        depthByTaskId.set(task.id, depth);
+        if (depth < shallowestDepth) {
+          shallowestDepth = depth;
+        }
+      }
+      const topBestuurTaskIds = new Set(
+        bestuurTasks
+          .filter((task) => depthByTaskId.get(task.id) === shallowestDepth)
+          .map((task) => task.id)
+      );
+      return myCoordinatedTasks.some((task) => topBestuurTaskIds.has(task.id));
+    }
+
+    return myCoordinatedTasks.some(
+      (task) => task.title === "Besturen vereniging" && task.parentId === null
+    );
+  }, [myCoordinatedTasks, sortedTasks, tasksById]);
 
   const menuViews = useMemo(() => {
     const base: TaskMenuView[] = [
@@ -583,20 +690,144 @@ export function TasksClient({ alias }: { alias: string }) {
             taskHasCoordinator(task, assignedAliasFilter)
           );
         }
-        return task.status === taskMenuView && endsInFuture(task);
+        if (task.status !== taskMenuView || !endsInFuture(task)) {
+          return false;
+        }
+        const isLeafTask = (childrenByParentId.get(task.id) ?? []).length === 0;
+        // In "Organiseren" zien niet-beheerders alleen bladtaken als openstaand.
+        if (task.coordinationType === "ORGANISEREN" && !isLeafTask && !task.canManage) {
+          return false;
+        }
+        return true;
       });
     },
-    [assignedAliasFilter, isTaskListView, myAssignedSubtreeTaskIds, sortedTasks, taskMenuView]
+    [
+      assignedAliasFilter,
+      childrenByParentId,
+      isTaskListView,
+      myAssignedSubtreeTaskIds,
+      sortedTasks,
+      taskMenuView
+    ]
+  );
+
+  const menuItemCounts = useMemo<Partial<Record<TaskMenuView, number>>>(() => {
+    const assignedCount = sortedTasks.filter(
+      (task) =>
+        isAssignedStatus(task.status) &&
+        myAssignedSubtreeTaskIds.has(task.id) &&
+        taskHasCoordinator(task, assignedAliasFilter)
+    ).length;
+
+    const openCount = sortedTasks.filter((task) => {
+      if (task.status !== "BESCHIKBAAR" || !endsInFuture(task)) {
+        return false;
+      }
+      const isLeafTask = (childrenByParentId.get(task.id) ?? []).length === 0;
+      if (task.coordinationType === "ORGANISEREN" && !isLeafTask && !task.canManage) {
+        return false;
+      }
+      return true;
+    }).length;
+
+    return {
+      BESCHIKBAAR: openCount,
+      TOEGEWEZEN: assignedCount,
+      OPEN_VOORSTELLEN: openTasks.length
+    };
+  }, [assignedAliasFilter, childrenByParentId, myAssignedSubtreeTaskIds, openTasks.length, sortedTasks]);
+
+  const labelForMenuViewWithCount = useCallback(
+    (view: TaskMenuView): string => {
+      const count = menuItemCounts[view];
+      const label = labelForMenuView(view);
+      return typeof count === "number" ? `${label} (${count})` : label;
+    },
+    [menuItemCounts]
   );
 
   const otherAliases = useMemo(
     () => users.map((user) => user.alias).filter((candidate) => candidate !== alias),
     [users, alias]
   );
+  const activeUserAliases = useMemo(
+    () => uniqueSortedAliases(users.map((user) => user.alias)),
+    [users]
+  );
 
-  const loadAll = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  useEffect(() => {
+    if (!editDraft) {
+      if (coordinatorAliasToAdd !== "") {
+        setCoordinatorAliasToAdd("");
+      }
+      return;
+    }
+    const currentAliases = new Set(editDraft.coordinatorAliases);
+    const availableAliases = activeUserAliases.filter((candidateAlias) => !currentAliases.has(candidateAlias));
+    const nextAlias = availableAliases.includes(coordinatorAliasToAdd)
+      ? coordinatorAliasToAdd
+      : (availableAliases[0] ?? "");
+    if (nextAlias !== coordinatorAliasToAdd) {
+      setCoordinatorAliasToAdd(nextAlias);
+    }
+  }, [activeUserAliases, coordinatorAliasToAdd, editDraft]);
+
+  const readLatestVersion = useCallback(async (): Promise<number | null> => {
+    const response = await fetch("/api/version", { cache: "no-store" });
+    if (response.status === 401) {
+      router.replace("/login");
+      return null;
+    }
+    if (!response.ok) {
+      return null;
+    }
+    const payload = (await response.json()) as { data?: { version?: number } };
+    const version = Number(payload.data?.version);
+    if (!Number.isFinite(version) || version < 0) {
+      return null;
+    }
+    return version;
+  }, [router]);
+
+  const watchLatestVersion = useCallback(
+    async (sinceVersion: number, signal: AbortSignal): Promise<number | null> => {
+      try {
+        const response = await fetch(`/api/version/watch?since=${Math.max(0, Math.floor(sinceVersion))}`, {
+          cache: "no-store",
+          signal
+        });
+        if (response.status === 401) {
+          router.replace("/login");
+          return null;
+        }
+        if (!response.ok) {
+          return null;
+        }
+        const payload = (await response.json()) as { data?: { version?: number; changed?: boolean } };
+        const version = Number(payload.data?.version);
+        if (!Number.isFinite(version) || version < 0) {
+          return null;
+        }
+        return version;
+      } catch {
+        // Safari can throw "TypeError: Load failed" on aborted/failed long-poll requests.
+        // Treat as a transient miss and retry in the loop.
+        return null;
+      }
+    },
+    [router]
+  );
+
+  const loadAll = useCallback(async (options?: { silent?: boolean; knownVersion?: number }) => {
+    if (isRefreshingRef.current) {
+      return;
+    }
+    isRefreshingRef.current = true;
+    const isSilent = options?.silent === true;
+    if (!isSilent) {
+      setIsLoading(true);
+      setError(null);
+    }
     try {
       const [tasksRes, openTasksRes, usersRes, templatesRes] = await Promise.all([
         fetch("/api/tasks", { cache: "no-store" }),
@@ -622,19 +853,27 @@ export function TasksClient({ alias }: { alias: string }) {
       };
 
       if (!tasksRes.ok) {
-        setError(tasksPayload.error ?? "Taken konden niet worden geladen.");
+        if (!isSilent) {
+          setError(tasksPayload.error ?? "Taken konden niet worden geladen.");
+        }
         return;
       }
       if (!openTasksRes.ok) {
-        setError(openTasksPayload.error ?? "Open voorstellen konden niet worden geladen.");
+        if (!isSilent) {
+          setError(openTasksPayload.error ?? "Open voorstellen konden niet worden geladen.");
+        }
         return;
       }
       if (!usersRes.ok) {
-        setError(usersPayload.error ?? "Ledenlijst kon niet worden geladen.");
+        if (!isSilent) {
+          setError(usersPayload.error ?? "Ledenlijst kon niet worden geladen.");
+        }
         return;
       }
       if (!templatesRes.ok) {
-        setError(templatesPayload.error ?? "Sjablonen konden niet worden geladen.");
+        if (!isSilent) {
+          setError(templatesPayload.error ?? "Sjablonen konden niet worden geladen.");
+        }
         return;
       }
 
@@ -642,17 +881,83 @@ export function TasksClient({ alias }: { alias: string }) {
       setOpenTasks(openTasksPayload.data ?? []);
       setUsers(usersPayload.data ?? []);
       setTemplates(templatesPayload.data ?? []);
-      setSubtaskPointsDraftById({});
+      if (!isSilent) {
+        setSubtaskPointsDraftById({});
+      }
+
+      if (options?.knownVersion !== undefined && Number.isFinite(options.knownVersion)) {
+        lastKnownVersionRef.current = Math.max(
+          lastKnownVersionRef.current,
+          Math.floor(options.knownVersion)
+        );
+      } else {
+        const latestVersion = await readLatestVersion();
+        if (latestVersion !== null) {
+          lastKnownVersionRef.current = latestVersion;
+        }
+      }
     } catch {
-      setError("Netwerkfout bij laden van gegevens.");
+      if (!isSilent) {
+        setError("Netwerkfout bij laden van gegevens.");
+      }
     } finally {
-      setIsLoading(false);
+      if (!isSilent) {
+        setIsLoading(false);
+      }
+      isRefreshingRef.current = false;
     }
-  }, [router]);
+  }, [readLatestVersion, router]);
 
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let currentController: AbortController | null = null;
+
+    const watchLoop = async () => {
+      while (!cancelled) {
+        if (document.hidden || isRefreshingRef.current) {
+          await sleepMs(400);
+          continue;
+        }
+
+        currentController = new AbortController();
+        const sinceVersion = lastKnownVersionRef.current;
+        const watchedVersion = await watchLatestVersion(sinceVersion, currentController.signal);
+        currentController = null;
+
+        if (cancelled) {
+          return;
+        }
+
+        if (watchedVersion === null) {
+          await sleepMs(1000);
+          continue;
+        }
+
+        if (watchedVersion <= lastKnownVersionRef.current) {
+          continue;
+        }
+
+        await loadAll({ silent: true, knownVersion: watchedVersion });
+      }
+    };
+
+    void watchLoop();
+
+    const onFocus = () => {
+      void loadAll({ silent: true });
+    };
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      cancelled = true;
+      currentController?.abort();
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadAll, watchLatestVersion]);
 
   useEffect(() => {
     setAssignedAliasFilter(alias);
@@ -686,15 +991,13 @@ export function TasksClient({ alias }: { alias: string }) {
     if (!proposeDialogTask) {
       return;
     }
-    if (otherAliases.length === 0) {
-      setProposeDialogTask(null);
-      setProposeDialogAlias("");
-      return;
-    }
-    if (!otherAliases.includes(proposeDialogAlias)) {
-      setProposeDialogAlias(otherAliases[0]);
-    }
-  }, [otherAliases, proposeDialogAlias, proposeDialogTask]);
+    setProposeDialogAlias((current) => {
+      if (current.trim().length > 0) {
+        return current;
+      }
+      return otherAliases[0] ?? "";
+    });
+  }, [otherAliases, proposeDialogTask]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -823,7 +1126,9 @@ export function TasksClient({ alias }: { alias: string }) {
     if (isLoading || didAutoOpenProposals) {
       return;
     }
-    const hasIncomingProposal = openTasks.some((item) => item.proposedAlias === alias);
+    const hasIncomingProposal = openTasks.some(
+      (item) => item.proposalType === "TAAK" && item.proposedAlias === alias
+    );
     if (hasIncomingProposal) {
       setTaskMenuView("OPEN_VOORSTELLEN");
     }
@@ -914,13 +1219,9 @@ export function TasksClient({ alias }: { alias: string }) {
   }
 
   function onStartPropose(task: ApiTask) {
-    if (otherAliases.length === 0) {
-      setError("Geen leden beschikbaar om aan voor te stellen.");
-      return;
-    }
     setError(null);
     setProposeDialogTask({ id: task.id, title: task.title });
-    setProposeDialogAlias(otherAliases[0]);
+    setProposeDialogAlias(otherAliases[0] ?? "");
   }
 
   function onCancelProposeDialog() {
@@ -937,8 +1238,15 @@ export function TasksClient({ alias }: { alias: string }) {
       return;
     }
     const proposedAlias = proposeDialogAlias.trim();
-    if (!proposedAlias || !otherAliases.includes(proposedAlias)) {
-      setError(`Kies een geldig lid uit de lijst: ${otherAliases.join(", ")}`);
+    if (!proposedAlias) {
+      setError("Vul een alias in.");
+      return;
+    }
+    const isKnownAlias = otherAliases.includes(proposedAlias);
+    if (!isKnownAlias && !/^[a-zA-Z0-9_-]{3,32}$/.test(proposedAlias)) {
+      setError(
+        "Nieuwe alias moet 3-32 tekens zijn en mag alleen letters, cijfers, _ en - bevatten."
+      );
       return;
     }
 
@@ -1039,6 +1347,7 @@ export function TasksClient({ alias }: { alias: string }) {
                   title: subtaskDraft.title,
                   description: subtaskDraft.description,
                   teamName: subtaskDraft.teamName || null,
+                  coordinationType: toApiCoordinationTypeFromDraft(subtaskDraft.coordinationType),
                   points: draftPoints,
                   date: startAt,
                   startTime: startAt,
@@ -1054,6 +1363,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 description: subtaskDraft.description,
                 teamName: subtaskDraft.teamName || undefined,
                 parentId: parentTaskId,
+                coordinationType: toApiCoordinationTypeFromDraft(subtaskDraft.coordinationType),
                 points: draftPoints,
                 date: startAt,
                 startTime: startAt,
@@ -1201,6 +1511,7 @@ export function TasksClient({ alias }: { alias: string }) {
         description: sourceTask.description,
         teamName: sourceTask.teamName ?? task.teamName ?? "",
         points: parseTaskPoints(sourceTask.points).toString(),
+        coordinationType: draftCoordinationChoiceFromOwn(sourceTask.ownCoordinationType),
         startDate: toDateValue(sourceTask.date),
         startTime: toTimeValue(sourceTask.startTime ?? sourceTask.date),
         endDate: toDateValue(sourceTask.endTime),
@@ -1241,17 +1552,23 @@ export function TasksClient({ alias }: { alias: string }) {
       description: task.description,
       longDescription: task.longDescription ?? "",
       points: parseTaskPoints(task.points).toString(),
+      coordinationType: draftCoordinationChoiceFromOwn(task.ownCoordinationType),
+      coordinatorAliases: getTaskOwnCoordinatorAliases(task),
       startDate: toDateValue(task.date),
       startTime: toTimeValue(task.startTime ?? task.date),
       endDate: toDateValue(task.endTime),
       endTime: toTimeValue(task.endTime),
       location: task.location ?? ""
     });
+    setEditTaskTab("LONG_DESCRIPTION");
+    setCoordinatorAliasToAdd("");
   }
 
   function onCancelEdit() {
     setEditingTaskId(null);
     setEditDraft(null);
+    setEditTaskTab("LONG_DESCRIPTION");
+    setCoordinatorAliasToAdd("");
   }
 
   async function onSaveTask(event: FormEvent<HTMLFormElement>, taskId: string) {
@@ -1260,35 +1577,65 @@ export function TasksClient({ alias }: { alias: string }) {
       return;
     }
 
-    if (!editDraft.title.trim() || !editDraft.description.trim()) {
-      setError("Titel en beschrijving zijn verplicht.");
-      return;
-    }
-    if (!editDraft.startDate || !editDraft.startTime || !editDraft.endDate || !editDraft.endTime) {
-      setError("Begindatum/tijd en einddatum/tijd zijn verplicht.");
-      return;
-    }
-    const startAt = combineDateAndTime(editDraft.startDate, editDraft.startTime);
-    const endAt = combineDateAndTime(editDraft.endDate, editDraft.endTime);
-    if (!startAt || !endAt) {
-      setError("Begindatum/tijd en einddatum/tijd zijn ongeldig.");
-      return;
-    }
-
     const task = tasksById.get(taskId);
     if (!task) {
       setError("Taak niet gevonden.");
       return;
     }
+    const canEditTaskDetails = task.canManage;
+    const canEditCoordinatorList =
+      task.coordinationType === "ORGANISEREN" &&
+      (task.canEditCoordinators || canEditTaskDetails);
+    if (!canEditTaskDetails && !canEditCoordinatorList) {
+      setError("Geen rechten om deze taak te bewerken.");
+      return;
+    }
+
+    let startAt: string | null = null;
+    let endAt: string | null = null;
+    if (canEditTaskDetails) {
+      if (!editDraft.title.trim() || !editDraft.description.trim()) {
+        setError("Titel en beschrijving zijn verplicht.");
+        return;
+      }
+      if (!editDraft.startDate || !editDraft.startTime || !editDraft.endDate || !editDraft.endTime) {
+        setError("Begindatum/tijd en einddatum/tijd zijn verplicht.");
+        return;
+      }
+      startAt = combineDateAndTime(editDraft.startDate, editDraft.startTime);
+      endAt = combineDateAndTime(editDraft.endDate, editDraft.endTime);
+      if (!startAt || !endAt) {
+        setError("Begindatum/tijd en einddatum/tijd zijn ongeldig.");
+        return;
+      }
+    }
     const canEditOwnPoints = !task.parentId;
 
     let points: number | undefined;
-    if (canEditOwnPoints) {
+    if (canEditTaskDetails && canEditOwnPoints) {
       points = Number(editDraft.points);
       if (!Number.isFinite(points) || !Number.isInteger(points) || points < 0) {
         setError("Punten moeten een geheel getal van 0 of hoger zijn.");
         return;
       }
+    }
+
+    const patchPayload: Record<string, unknown> = {};
+    if (canEditTaskDetails) {
+      patchPayload.title = editDraft.title.trim();
+      patchPayload.description = editDraft.description.trim();
+      patchPayload.longDescription = editDraft.longDescription.trim()
+        ? editDraft.longDescription
+        : null;
+      patchPayload.coordinationType = toApiCoordinationTypeFromDraft(editDraft.coordinationType);
+      patchPayload.points = points;
+      patchPayload.date = startAt;
+      patchPayload.startTime = startAt;
+      patchPayload.endTime = endAt;
+      patchPayload.location = editDraft.location.trim() ? editDraft.location.trim() : null;
+    }
+    if (canEditCoordinatorList) {
+      patchPayload.coordinatorAliases = uniqueSortedAliases(editDraft.coordinatorAliases);
     }
 
     setActiveTaskId(taskId);
@@ -1297,18 +1644,7 @@ export function TasksClient({ alias }: { alias: string }) {
       const response = await fetch(`/api/tasks/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: editDraft.title.trim(),
-          description: editDraft.description.trim(),
-          longDescription: editDraft.longDescription.trim()
-            ? editDraft.longDescription
-            : null,
-          points,
-          date: startAt,
-          startTime: startAt,
-          endTime: endAt,
-          location: editDraft.location.trim() ? editDraft.location.trim() : null
-        })
+        body: JSON.stringify(patchPayload)
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
@@ -1510,6 +1846,9 @@ export function TasksClient({ alias }: { alias: string }) {
     setIsUserMenuOpen(false);
     setAccountSettingsError(null);
     setAccountSettingsStatus(null);
+    setAliasChangeError(null);
+    setAliasChangeStatus(null);
+    setAliasChangeDraft("");
     setIsAccountLoading(true);
 
     try {
@@ -1525,7 +1864,8 @@ export function TasksClient({ alias }: { alias: string }) {
         return;
       }
 
-      setAccountRole(payload.data.role);
+      setAccountIsBestuur(payload.data.isBestuur);
+      setAccountBondsnummer(payload.data.bondsnummer);
       setAccountSettingsDraft(accountSettingsDraftFromAccount(payload.data));
       setIsProfileDialogOpen(false);
       setIsAccountSettingsDialogOpen(true);
@@ -1555,7 +1895,8 @@ export function TasksClient({ alias }: { alias: string }) {
         return;
       }
 
-      setAccountRole(payload.data.role);
+      setAccountIsBestuur(payload.data.isBestuur);
+      setAccountBondsnummer(payload.data.bondsnummer);
       setProfileDraft(profileDraftFromAccount(payload.data));
       setIsAccountSettingsDialogOpen(false);
       setIsProfileDialogOpen(true);
@@ -1567,13 +1908,16 @@ export function TasksClient({ alias }: { alias: string }) {
   }
 
   function onCloseAccountSettingsDialog() {
-    if (isAccountSettingsSaving) {
+    if (isAccountSettingsSaving || isAliasChangeSubmitting) {
       return;
     }
     setIsAccountSettingsDialogOpen(false);
     setAccountSettingsDraft(null);
     setAccountSettingsError(null);
     setAccountSettingsStatus(null);
+    setAliasChangeError(null);
+    setAliasChangeStatus(null);
+    setAliasChangeDraft("");
   }
 
   function onCloseProfileDialog() {
@@ -1663,13 +2007,55 @@ export function TasksClient({ alias }: { alias: string }) {
         return;
       }
 
-      setAccountRole(payload.data.role);
+      setAccountIsBestuur(payload.data.isBestuur);
+      setAccountBondsnummer(payload.data.bondsnummer);
       setAccountSettingsDraft(accountSettingsDraftFromAccount(payload.data));
       setAccountSettingsStatus(payload.message ?? "Account opgeslagen.");
     } catch {
       setAccountSettingsError("Netwerkfout bij opslaan van account.");
     } finally {
       setIsAccountSettingsSaving(false);
+    }
+  }
+
+  async function onSubmitAliasChangeProposal() {
+    const requestedAlias = aliasChangeDraft.trim();
+    if (!requestedAlias) {
+      setAliasChangeError("Vul een nieuwe alias in.");
+      return;
+    }
+    if (requestedAlias === alias) {
+      setAliasChangeError("Nieuwe alias moet anders zijn dan je huidige alias.");
+      return;
+    }
+    if (!/^[a-zA-Z0-9_-]{3,32}$/.test(requestedAlias)) {
+      setAliasChangeError(
+        "Alias moet 3-32 tekens zijn en mag alleen letters, cijfers, _ en - bevatten."
+      );
+      return;
+    }
+
+    setAliasChangeError(null);
+    setAliasChangeStatus(null);
+    setIsAliasChangeSubmitting(true);
+    try {
+      const response = await fetch("/api/account/alias-change-proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestedAlias })
+      });
+      const payload = (await response.json()) as { message?: string; error?: string };
+      if (!response.ok) {
+        setAliasChangeError(payload.error ?? "Voorstel indienen mislukt.");
+        return;
+      }
+      setAliasChangeDraft("");
+      setAliasChangeStatus(payload.message ?? "Aliaswijziging is voorgelegd aan het bestuur.");
+      await loadAll({ silent: true });
+    } catch {
+      setAliasChangeError("Netwerkfout bij indienen van aliaswijziging.");
+    } finally {
+      setIsAliasChangeSubmitting(false);
     }
   }
 
@@ -1701,7 +2087,7 @@ export function TasksClient({ alias }: { alias: string }) {
         return;
       }
 
-      setAccountRole(payload.data.role);
+      setAccountIsBestuur(payload.data.isBestuur);
       setIsProfileDialogOpen(false);
       setProfileDraft(null);
       setProfileError(null);
@@ -1715,14 +2101,27 @@ export function TasksClient({ alias }: { alias: string }) {
 
   const focusedTask = focusedTaskId ? tasksById.get(focusedTaskId) ?? null : null;
   const editingTask = editingTaskId ? tasksById.get(editingTaskId) ?? null : null;
+  const canEditTaskDetails = editingTask?.canManage ?? false;
+  const canEditCoordinatorList = Boolean(
+    editingTask &&
+      editingTask.coordinationType === "ORGANISEREN" &&
+      (editingTask.canEditCoordinators || canEditTaskDetails)
+  );
   const copySourceTask = copySourceTaskId ? tasksById.get(copySourceTaskId) ?? null : null;
   const copyTargetTask =
     subtaskFormMode === "copy" && creatingSubtaskForTaskId
       ? tasksById.get(creatingSubtaskForTaskId) ?? null
       : null;
+  const newSubtaskTargetTask =
+    subtaskFormMode === "new" && creatingSubtaskForTaskId
+      ? tasksById.get(creatingSubtaskForTaskId) ?? null
+      : null;
   const copySourcePath = copySourceTask
     ? buildTaskPath(copySourceTask, tasksById).join(" > ")
     : "onbekende bron";
+  const newSubtaskTargetPath = newSubtaskTargetTask
+    ? buildTaskPath(newSubtaskTargetTask, tasksById).join(" > ")
+    : "onbekende parent";
   const tasksToRender = focusedTask ? [focusedTask] : visibleTasks;
   const breadcrumbTasks = focusedTask
     ? (() => {
@@ -1861,10 +2260,11 @@ export function TasksClient({ alias }: { alias: string }) {
                   setSubtaskFormMode("new");
                   setCopySourceTaskId(null);
                   resetCopyDateDialog();
+                  void loadAll({ silent: true });
                 }}
                 disabled={taskMenuView === view}
               >
-                {labelForMenuView(view)}
+                {labelForMenuViewWithCount(view)}
               </button>
             ))}
           </div>
@@ -1884,8 +2284,14 @@ export function TasksClient({ alias }: { alias: string }) {
               <article key={item.id} className="card">
                 <p>
                   <strong>{item.taskTitle}</strong>
-                  {item.teamName ? ` (${item.teamName})` : ""}
+                  {item.proposalType === "TAAK" && item.teamName ? ` (${item.teamName})` : ""}
                 </p>
+                {item.proposalType === "ALIAS_WIJZIGING" ? (
+                  <p className="muted">
+                    Huidige alias: {item.currentAlias ?? "-"} | Gewenste alias:{" "}
+                    {item.requestedAlias ?? "-"}
+                  </p>
+                ) : null}
                 <p className="muted">
                   Van: {item.proposerAlias} | Aan: {item.proposedAlias ?? "open"} |{" "}
                   Status: {labelForOpenTaskStatus(item.status)} |{" "}
@@ -2017,7 +2423,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 value={applyParentTaskId}
                 onChange={(event) => setApplyParentTaskId(event.target.value)}
               >
-                <option value="">Besturen vereniging</option>
+                <option value="">Geen parent (topniveau)</option>
                 {manageableTasks.map((task) => (
                   <option key={task.id} value={task.id}>
                     {task.title}
@@ -2073,6 +2479,7 @@ export function TasksClient({ alias }: { alias: string }) {
           ) : null}
           {tasksToRender.map((task) => {
           const canManageTask = manageableTaskIds.has(task.id);
+          const canEditTask = canManageTask || task.canEditCoordinators;
           const canProposeTask =
             canManageTask && (task.status === "TOEGEWEZEN" || task.status === "BESCHIKBAAR");
           const isEditingTask = editingTaskId === task.id;
@@ -2081,6 +2488,7 @@ export function TasksClient({ alias }: { alias: string }) {
           const subtasks = childrenByParentId.get(task.id) ?? [];
           const taskOwnCoordinatorAliases = getTaskOwnCoordinatorAliases(task);
           const taskCoordinatorAliases = getTaskCoordinatorAliases(task);
+          const taskAssigneeAliases = getTaskAssigneeAliases(task);
           const taskPath = buildTaskPath(task, tasksById);
           const taskChain = buildTaskChain(task, tasksById);
           const parentTaskChain = taskChain.slice(0, -1);
@@ -2115,13 +2523,18 @@ export function TasksClient({ alias }: { alias: string }) {
                 }`;
           const availableTaskPoints = taskPoints - totalSubtaskPoints;
           const pointsPerCoordinator =
-            taskCoordinatorAliases.length > 0
-              ? availableTaskPoints / taskCoordinatorAliases.length
+            taskAssigneeAliases.length > 0
+              ? availableTaskPoints / taskAssigneeAliases.length
               : availableTaskPoints;
           const canManageTaskParent = task.parentId ? manageableTaskIds.has(task.parentId) : false;
           const canMoveTask = canManageTaskParent;
-          const canDeleteTask = canManageTaskParent;
-          const canRegisterTask = task.canOpen && task.status === "BESCHIKBAAR" && !isCreatingSubtask;
+          const canDeleteTask = canManageTaskParent || (!task.parentId && canManageTask);
+          const isLeafTask = subtasks.length === 0;
+          const canRegisterTask =
+            task.canOpen &&
+            task.status === "BESCHIKBAAR" &&
+            !isCreatingSubtask &&
+            (task.coordinationType === "DELEGEREN" || isLeafTask);
           const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
           const showInlineTaskActions = canRegisterTask || canReleaseTask || canProposeTask;
           const isOpenTasksListView = taskMenuView === "BESCHIKBAAR" && !focusedTaskId;
@@ -2131,7 +2544,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 `Punten (eigen): ${formatPoints(taskPoints)}`,
                 `Uitgegeven subtaken: ${formatPoints(totalSubtaskPoints)}`,
                 `Beschikbaar: ${formatPoints(availableTaskPoints)}`,
-                `Per coordinator: ${formatPoints(pointsPerCoordinator)}`
+                `Per toegewezen coordinator: ${formatPoints(pointsPerCoordinator)}`
               ];
           const infoPanelStyle = {
             display: "grid",
@@ -2218,6 +2631,10 @@ export function TasksClient({ alias }: { alias: string }) {
                     Jouw recht: {labelForPermission(task)}
                   </p>
                   <p className="muted" style={infoLineStyle}>
+                    Werkwijze: {labelForCoordinationType(task.coordinationType)} | Instelling:{" "}
+                    {labelForOwnCoordinationType(task.ownCoordinationType)}
+                  </p>
+                  <p className="muted" style={infoLineStyle}>
                     Start: {new Date(task.date).toLocaleString("nl-NL")} | Einde:{" "}
                     {new Date(task.endTime).toLocaleString("nl-NL")}
                   </p>
@@ -2260,7 +2677,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 >
                   {ICON_OPEN}
                 </button>
-                {canManageTask ? (
+                {canEditTask ? (
                   <button
                     type="button"
                     onClick={() => onStartEdit(task)}
@@ -2533,164 +2950,6 @@ export function TasksClient({ alias }: { alias: string }) {
                       </>
                     )}
 
-                    {isCreatingSubtask && subtaskFormMode === "new" ? (
-                      <form className="grid" onSubmit={(event) => onCreateSubtask(event, task.id)}>
-                        <h3>Nieuwe subtaak</h3>
-                        <label>
-                          Titel
-                          <input
-                            value={subtaskDraft.title}
-                            onChange={(event) =>
-                              setSubtaskDraft((current) => ({
-                                ...current,
-                                title: event.target.value
-                              }))
-                            }
-                            required
-                          />
-                        </label>
-                        <label>
-                          Beschrijving
-                          <input
-                            value={subtaskDraft.description}
-                            onChange={(event) =>
-                              setSubtaskDraft((current) => ({
-                                ...current,
-                                description: event.target.value
-                              }))
-                            }
-                            required
-                          />
-                        </label>
-                        <label>
-                          Team (optioneel)
-                          <input
-                            value={subtaskDraft.teamName}
-                            onChange={(event) =>
-                              setSubtaskDraft((current) => ({
-                                ...current,
-                                teamName: event.target.value
-                              }))
-                            }
-                            placeholder="bijv. Meiden A2"
-                          />
-                        </label>
-                        <label>
-                          Punten
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={subtaskDraft.points}
-                            onChange={(event) =>
-                              setSubtaskDraft((current) => ({
-                                ...current,
-                                points: event.target.value
-                              }))
-                            }
-                            required
-                          />
-                        </label>
-                        <label>
-                          Begindatum
-                          <input
-                            type="date"
-                            value={subtaskDraft.startDate}
-                            onChange={(event) =>
-                              setSubtaskDraft((current) => ({
-                                ...current,
-                                startDate: event.target.value
-                              }))
-                            }
-                            required
-                          />
-                        </label>
-                        <label>
-                          Begintijd
-                          <input
-                            type="time"
-                            value={subtaskDraft.startTime}
-                            onChange={(event) =>
-                              setSubtaskDraft((current) => ({
-                                ...current,
-                                startTime: event.target.value
-                              }))
-                            }
-                            required
-                          />
-                        </label>
-                        <label>
-                          Einddatum
-                          <input
-                            type="date"
-                            value={subtaskDraft.endDate}
-                            onChange={(event) =>
-                              setSubtaskDraft((current) => ({
-                                ...current,
-                                endDate: event.target.value
-                              }))
-                            }
-                            required
-                          />
-                        </label>
-                        <label>
-                          Eindtijd
-                          <input
-                            type="time"
-                            value={subtaskDraft.endTime}
-                            onChange={(event) =>
-                              setSubtaskDraft((current) => ({
-                                ...current,
-                                endTime: event.target.value
-                              }))
-                            }
-                            required
-                          />
-                        </label>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "0.5rem",
-                            flexWrap: "nowrap",
-                            alignItems: "center"
-                          }}
-                        >
-                          <button
-                            type="submit"
-                            disabled={activeTaskId === task.id}
-                            style={{ whiteSpace: "nowrap" }}
-                            title="Opslaan"
-                            aria-label="Opslaan"
-                          >
-                            {activeTaskId === task.id
-                              ? `${ICON_SAVE}...`
-                              : "Subtaak aanmaken"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={onCancelSubtask}
-                            disabled={activeTaskId === task.id}
-                            style={{ whiteSpace: "nowrap" }}
-                            title="Annuleren"
-                            aria-label="Annuleren"
-                          >
-                            {ICON_CANCEL}
-                          </button>
-                          {task.status === "BESCHIKBAAR" ? (
-                            <button
-                              type="button"
-                              onClick={() => onRegister(task.id)}
-                              disabled={activeTaskId === task.id}
-                              style={{ whiteSpace: "nowrap" }}
-                              title="Schrijf in"
-                              aria-label="Schrijf in"
-                            >
-                              {activeTaskId === task.id ? `${ICON_REGISTER}...` : ICON_REGISTER}
-                            </button>
-                          ) : null}
-                        </div>
-                      </form>
-                    ) : null}
                   </div>
 
                   {!isOpenTasksListView &&
@@ -2783,6 +3042,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 onChange={(event) =>
                   setEditDraft((current) => (current ? { ...current, title: event.target.value } : current))
                 }
+                disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
                 required
               />
             </label>
@@ -2795,105 +3055,279 @@ export function TasksClient({ alias }: { alias: string }) {
                     current ? { ...current, description: event.target.value } : current
                   )
                 }
+                disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
                 required
               />
             </label>
             <label>
-              Lange beschrijving
-              <textarea
-                rows={6}
-                value={editDraft.longDescription}
+              Werkwijze
+              <select
+                value={editDraft.coordinationType}
                 onChange={(event) =>
                   setEditDraft((current) =>
-                    current ? { ...current, longDescription: event.target.value } : current
+                    current
+                      ? {
+                          ...current,
+                          coordinationType: event.target.value as DraftCoordinationChoice
+                        }
+                      : current
                   )
                 }
-                placeholder="Vul uitgebreide informatie in."
-                disabled={activeTaskId === editingTask.id}
-              />
+                disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
+              >
+                <option value="INHERIT">Overerven</option>
+                <option value="ORGANISEREN">Organiseren</option>
+                <option value="DELEGEREN">Delegeren</option>
+              </select>
             </label>
-            {!editingTask.parentId ? (
+            <div
+              role="tablist"
+              aria-label="Taak bewerken tabs"
+              style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+            >
+              {([
+                { id: "LONG_DESCRIPTION", label: "Lange beschrijving" },
+                { id: "COORDINATORS", label: "Coordinatoren" },
+                { id: "DATE_TIME", label: "Datum-tijd" }
+              ] as const).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={editTaskTab === tab.id}
+                  onClick={() => setEditTaskTab(tab.id)}
+                  style={{
+                    border: editTaskTab === tab.id ? "1px solid #1d4ed8" : "1px solid #60a5fa",
+                    background: editTaskTab === tab.id ? "#1d4ed8" : "#dbeafe",
+                    color: editTaskTab === tab.id ? "#ffffff" : "#1e3a8a",
+                    fontWeight: editTaskTab === tab.id ? 700 : 500
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {editTaskTab === "LONG_DESCRIPTION" ? (
               <label>
-                Punten
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={editDraft.points}
+                Lange beschrijving
+                <textarea
+                  rows={6}
+                  value={editDraft.longDescription}
                   onChange={(event) =>
                     setEditDraft((current) =>
-                      current ? { ...current, points: event.target.value } : current
+                      current ? { ...current, longDescription: event.target.value } : current
                     )
                   }
-                  required
+                  placeholder="Vul uitgebreide informatie in."
+                  disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
                 />
               </label>
             ) : null}
-            <div className="grid grid-2">
-              <label>
-                Begindatum
-                <input
-                  type="date"
-                  value={editDraft.startDate}
-                  onChange={(event) =>
-                    setEditDraft((current) =>
-                      current ? { ...current, startDate: event.target.value } : current
-                    )
-                  }
-                  required
-                />
-              </label>
-              <label>
-                Begintijd
-                <input
-                  type="time"
-                  value={editDraft.startTime}
-                  onChange={(event) =>
-                    setEditDraft((current) =>
-                      current ? { ...current, startTime: event.target.value } : current
-                    )
-                  }
-                  required
-                />
-              </label>
-              <label>
-                Einddatum
-                <input
-                  type="date"
-                  value={editDraft.endDate}
-                  onChange={(event) =>
-                    setEditDraft((current) =>
-                      current ? { ...current, endDate: event.target.value } : current
-                    )
-                  }
-                  required
-                />
-              </label>
-              <label>
-                Eindtijd
-                <input
-                  type="time"
-                  value={editDraft.endTime}
-                  onChange={(event) =>
-                    setEditDraft((current) =>
-                      current ? { ...current, endTime: event.target.value } : current
-                    )
-                  }
-                  required
-                />
-              </label>
-            </div>
-            <label>
-              Locatie (optioneel)
-              <input
-                value={editDraft.location}
-                onChange={(event) =>
-                  setEditDraft((current) =>
-                    current ? { ...current, location: event.target.value } : current
-                  )
-                }
-              />
-            </label>
+            {editTaskTab === "COORDINATORS" ? (
+              canEditCoordinatorList ? (
+                <div className="card grid" style={{ padding: "0.65rem" }}>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Coordinatoren beheren (organisator)
+                  </p>
+                  {editDraft.coordinatorAliases.length > 0 ? (
+                    <ul
+                      style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "grid", gap: "0.35rem" }}
+                    >
+                      {editDraft.coordinatorAliases.map((coordinatorAlias) => (
+                        <li
+                          key={coordinatorAlias}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "0.5rem"
+                          }}
+                        >
+                          <span>{coordinatorAlias === alias ? `${coordinatorAlias} (ik)` : coordinatorAlias}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      coordinatorAliases: current.coordinatorAliases.filter(
+                                        (candidateAlias) => candidateAlias !== coordinatorAlias
+                                      )
+                                    }
+                                  : current
+                              )
+                            }
+                            disabled={activeTaskId === editingTask.id}
+                            title="Coordinator verwijderen"
+                            aria-label="Coordinator verwijderen"
+                          >
+                            -
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="muted" style={{ margin: 0 }}>
+                      Geen expliciete coordinatoren. Deze taak erft coordinatoren van de parent.
+                    </p>
+                  )}
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <label style={{ margin: 0, minWidth: "13rem", flex: "1 1 13rem" }}>
+                      Alias toevoegen
+                      <select
+                        value={coordinatorAliasToAdd}
+                        onChange={(event) => setCoordinatorAliasToAdd(event.target.value)}
+                        disabled={
+                          activeTaskId === editingTask.id ||
+                          activeUserAliases.every(
+                            (candidateAlias) => editDraft.coordinatorAliases.includes(candidateAlias)
+                          )
+                        }
+                      >
+                        {activeUserAliases.filter(
+                          (candidateAlias) => !editDraft.coordinatorAliases.includes(candidateAlias)
+                        ).length === 0 ? (
+                          <option value="">Geen aliassen beschikbaar</option>
+                        ) : (
+                          activeUserAliases
+                            .filter((candidateAlias) => !editDraft.coordinatorAliases.includes(candidateAlias))
+                            .map((candidateAlias) => (
+                              <option key={candidateAlias} value={candidateAlias}>
+                                {candidateAlias === alias ? `${candidateAlias} (ik)` : candidateAlias}
+                              </option>
+                            ))
+                        )}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditDraft((current) => {
+                          if (!current || !coordinatorAliasToAdd) {
+                            return current;
+                          }
+                          return {
+                            ...current,
+                            coordinatorAliases: uniqueSortedAliases([
+                              ...current.coordinatorAliases,
+                              coordinatorAliasToAdd
+                            ])
+                          };
+                        })
+                      }
+                      disabled={
+                        !coordinatorAliasToAdd ||
+                        activeTaskId === editingTask.id ||
+                        editDraft.coordinatorAliases.includes(coordinatorAliasToAdd)
+                      }
+                      title="Coordinator toevoegen"
+                      aria-label="Coordinator toevoegen"
+                    >
+                      {ICON_ADD}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="card" style={{ padding: "0.65rem" }}>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Je hebt geen rechten om coordinatoren voor deze taak te beheren.
+                  </p>
+                </div>
+              )
+            ) : null}
+            {editTaskTab === "DATE_TIME" ? (
+              <>
+                {!editingTask.parentId ? (
+                  <label>
+                    Punten
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={editDraft.points}
+                      onChange={(event) =>
+                        setEditDraft((current) =>
+                          current ? { ...current, points: event.target.value } : current
+                        )
+                      }
+                      disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
+                      required
+                    />
+                  </label>
+                ) : null}
+                <div className="grid grid-2">
+                  <label>
+                    Begindatum
+                    <input
+                      type="date"
+                      value={editDraft.startDate}
+                      onChange={(event) =>
+                        setEditDraft((current) =>
+                          current ? { ...current, startDate: event.target.value } : current
+                        )
+                      }
+                      disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Begintijd
+                    <input
+                      type="time"
+                      value={editDraft.startTime}
+                      onChange={(event) =>
+                        setEditDraft((current) =>
+                          current ? { ...current, startTime: event.target.value } : current
+                        )
+                      }
+                      disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Einddatum
+                    <input
+                      type="date"
+                      value={editDraft.endDate}
+                      onChange={(event) =>
+                        setEditDraft((current) =>
+                          current ? { ...current, endDate: event.target.value } : current
+                        )
+                      }
+                      disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Eindtijd
+                    <input
+                      type="time"
+                      value={editDraft.endTime}
+                      onChange={(event) =>
+                        setEditDraft((current) =>
+                          current ? { ...current, endTime: event.target.value } : current
+                        )
+                      }
+                      disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
+                      required
+                    />
+                  </label>
+                </div>
+                <label>
+                  Locatie (optioneel)
+                  <input
+                    value={editDraft.location}
+                    onChange={(event) =>
+                      setEditDraft((current) =>
+                        current ? { ...current, location: event.target.value } : current
+                      )
+                    }
+                    disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
+                  />
+                </label>
+              </>
+            ) : null}
             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button
                 type="button"
@@ -2981,7 +3415,10 @@ export function TasksClient({ alias }: { alias: string }) {
           >
             <h3>Account</h3>
             <p className="muted" style={{ margin: 0 }}>
-              Alias: {alias} | Rol: {accountRole ?? "-"}
+              Alias: {alias} | Bestuur: {accountIsBestuur === null ? "-" : accountIsBestuur ? "ja" : "nee"}
+            </p>
+            <p className="muted" style={{ margin: 0 }}>
+              Bondsnummer: {accountBondsnummer ?? "-"} | Totaal aantal punten: {formatPoints(totalAccountPoints)}
             </p>
             {accountSettingsError ? <p className="muted">{accountSettingsError}</p> : null}
             {accountSettingsStatus ? <p className="muted">{accountSettingsStatus}</p> : null}
@@ -3039,11 +3476,41 @@ export function TasksClient({ alias }: { alias: string }) {
               />
             </label>
 
+            <div className="card" style={{ padding: "0.75rem" }}>
+              <p style={{ margin: "0 0 0.35rem 0", fontWeight: 600 }}>
+                Aliaswijziging voorleggen aan bestuur
+              </p>
+              <p className="muted" style={{ margin: "0 0 0.5rem 0" }}>
+                Vraag een nieuwe alias aan. Bestuur kan dit accepteren of afwijzen bij openstaande
+                voorstellen.
+              </p>
+              <label>
+                Nieuwe alias
+                <input
+                  value={aliasChangeDraft}
+                  onChange={(event) => setAliasChangeDraft(event.target.value)}
+                  placeholder="bijv. JanA2"
+                  disabled={isAliasChangeSubmitting}
+                />
+              </label>
+              {aliasChangeError ? <p className="muted">{aliasChangeError}</p> : null}
+              {aliasChangeStatus ? <p className="muted">{aliasChangeStatus}</p> : null}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => void onSubmitAliasChangeProposal()}
+                  disabled={isAliasChangeSubmitting || aliasChangeDraft.trim().length === 0}
+                >
+                  {isAliasChangeSubmitting ? "Voorleggen..." : "Voorleggen aan bestuur"}
+                </button>
+              </div>
+            </div>
+
             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button
                 type="button"
                 onClick={onCloseAccountSettingsDialog}
-                disabled={isAccountSettingsSaving}
+                disabled={isAccountSettingsSaving || isAliasChangeSubmitting}
               >
                 Annuleren
               </button>
@@ -3077,7 +3544,7 @@ export function TasksClient({ alias }: { alias: string }) {
           >
             <h3>Profiel</h3>
             <p className="muted" style={{ margin: 0 }}>
-              Alias: {alias} | Rol: {accountRole ?? "-"}
+              Alias: {alias} | Bestuur: {accountIsBestuur === null ? "-" : accountIsBestuur ? "ja" : "nee"}
             </p>
             {profileError ? <p className="muted">{profileError}</p> : null}
             {profileStatus ? <p className="muted">{profileStatus}</p> : null}
@@ -3170,17 +3637,20 @@ export function TasksClient({ alias }: { alias: string }) {
             </p>
             <label>
               Lid
-              <select
+              <input
+                type="text"
                 value={proposeDialogAlias}
                 onChange={(event) => setProposeDialogAlias(event.target.value)}
-              >
-                {otherAliases.map((candidateAlias) => (
-                  <option key={candidateAlias} value={candidateAlias}>
-                    {candidateAlias}
-                  </option>
-                ))}
-              </select>
+                list="propose-alias-suggestions"
+                placeholder="Bestaande of nieuwe alias"
+                autoFocus
+              />
             </label>
+            <datalist id="propose-alias-suggestions">
+              {otherAliases.map((candidateAlias) => (
+                <option key={candidateAlias} value={candidateAlias} />
+              ))}
+            </datalist>
             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button
                 type="button"
@@ -3240,6 +3710,177 @@ export function TasksClient({ alias }: { alias: string }) {
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {newSubtaskTargetTask ? (
+        <div
+          onClick={activeTaskId === newSubtaskTargetTask.id ? undefined : onCancelSubtask}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <form
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Nieuwe subtaak"
+            onSubmit={(event) => onCreateSubtask(event, newSubtaskTargetTask.id)}
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "36rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3>Nieuwe subtaak onder {newSubtaskTargetPath}</h3>
+            <label>
+              Titel
+              <input
+                value={subtaskDraft.title}
+                onChange={(event) =>
+                  setSubtaskDraft((current) => ({
+                    ...current,
+                    title: event.target.value
+                  }))
+                }
+                disabled={activeTaskId === newSubtaskTargetTask.id}
+                required
+              />
+            </label>
+            <label>
+              Beschrijving
+              <input
+                value={subtaskDraft.description}
+                onChange={(event) =>
+                  setSubtaskDraft((current) => ({
+                    ...current,
+                    description: event.target.value
+                  }))
+                }
+                disabled={activeTaskId === newSubtaskTargetTask.id}
+                required
+              />
+            </label>
+            <label>
+              Team (optioneel)
+              <input
+                value={subtaskDraft.teamName}
+                onChange={(event) =>
+                  setSubtaskDraft((current) => ({
+                    ...current,
+                    teamName: event.target.value
+                  }))
+                }
+                disabled={activeTaskId === newSubtaskTargetTask.id}
+                placeholder="bijv. Meiden A2"
+              />
+            </label>
+            <label>
+              Punten
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={subtaskDraft.points}
+                onChange={(event) =>
+                  setSubtaskDraft((current) => ({
+                    ...current,
+                    points: event.target.value
+                  }))
+                }
+                disabled={activeTaskId === newSubtaskTargetTask.id}
+                required
+              />
+            </label>
+            <label>
+              Werkwijze
+              <select
+                value={subtaskDraft.coordinationType}
+                onChange={(event) =>
+                  setSubtaskDraft((current) => ({
+                    ...current,
+                    coordinationType: event.target.value as DraftCoordinationChoice
+                  }))
+                }
+                disabled={activeTaskId === newSubtaskTargetTask.id}
+              >
+                <option value="INHERIT">Overerven</option>
+                <option value="ORGANISEREN">Organiseren</option>
+                <option value="DELEGEREN">Delegeren</option>
+              </select>
+            </label>
+            <label>
+              Begin
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <input
+                  type="date"
+                  value={subtaskDraft.startDate}
+                  onChange={(event) =>
+                    setSubtaskDraft((current) => ({
+                      ...current,
+                      startDate: event.target.value
+                    }))
+                  }
+                  disabled={activeTaskId === newSubtaskTargetTask.id}
+                  required
+                />
+                <input
+                  type="time"
+                  value={subtaskDraft.startTime}
+                  onChange={(event) =>
+                    setSubtaskDraft((current) => ({
+                      ...current,
+                      startTime: event.target.value
+                    }))
+                  }
+                  disabled={activeTaskId === newSubtaskTargetTask.id}
+                  required
+                />
+              </div>
+            </label>
+            <label>
+              Eind
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <input
+                  type="date"
+                  value={subtaskDraft.endDate}
+                  onChange={(event) =>
+                    setSubtaskDraft((current) => ({
+                      ...current,
+                      endDate: event.target.value
+                    }))
+                  }
+                  disabled={activeTaskId === newSubtaskTargetTask.id}
+                  required
+                />
+                <input
+                  type="time"
+                  value={subtaskDraft.endTime}
+                  onChange={(event) =>
+                    setSubtaskDraft((current) => ({
+                      ...current,
+                      endTime: event.target.value
+                    }))
+                  }
+                  disabled={activeTaskId === newSubtaskTargetTask.id}
+                  required
+                />
+              </div>
+            </label>
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={onCancelSubtask}
+                disabled={activeTaskId === newSubtaskTargetTask.id}
+              >
+                Annuleren
+              </button>
+              <button type="submit" disabled={activeTaskId === newSubtaskTargetTask.id}>
+                {activeTaskId === newSubtaskTargetTask.id ? "Opslaan..." : "Opslaan"}
+              </button>
+            </div>
+          </form>
         </div>
       ) : null}
 
@@ -3322,6 +3963,23 @@ export function TasksClient({ alias }: { alias: string }) {
                 disabled={activeTaskId === copyTargetTask.id}
                 required
               />
+            </label>
+            <label>
+              Werkwijze
+              <select
+                value={subtaskDraft.coordinationType}
+                onChange={(event) =>
+                  setSubtaskDraft((current) => ({
+                    ...current,
+                    coordinationType: event.target.value as DraftCoordinationChoice
+                  }))
+                }
+                disabled={activeTaskId === copyTargetTask.id}
+              >
+                <option value="INHERIT">Overerven</option>
+                <option value="ORGANISEREN">Organiseren</option>
+                <option value="DELEGEREN">Delegeren</option>
+              </select>
             </label>
             <label>
               Begin

@@ -261,13 +261,16 @@ async function ensureMemberAlias(prefix, excludeAliases = new Set()) {
 }
 
 async function loadAllowlistBondsnummers() {
-  const path = new URL("../data/bondsnummers.json", import.meta.url);
+  const path = new URL("../data/relatiecodes.csv", import.meta.url);
   const contents = await readFile(path, "utf8");
-  const parsed = JSON.parse(contents);
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-  return parsed.filter((value) => typeof value === "string");
+  return Array.from(
+    new Set(
+      contents
+        .split(/\r?\n/)
+        .map((value) => value.trim().toUpperCase())
+        .filter((value) => value.length > 1)
+    )
+  );
 }
 
 async function loginAsKnownAliasViaBondsProbe(targetAlias, bondsnummers) {

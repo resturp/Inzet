@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { PrismaClient, TaskStatus, UserRole } from "@prisma/client";
+import { PrismaClient, TaskCoordinationType, TaskStatus, UserRole } from "@prisma/client";
 import { hashPassword } from "../src/lib/password";
 
 const prisma = new PrismaClient();
@@ -8,7 +8,8 @@ const IMPORT_TIME_ZONE = "Europe/Amsterdam";
 
 type CsvUser = {
   alias: string;
-  password: string;
+  bondsnummer: string;
+  password: string | null;
   email: string | null;
 };
 
@@ -85,6 +86,17 @@ async function readCsvFromFirstExisting(paths: string[]): Promise<string> {
     }
   }
   return "";
+}
+
+async function readRelatiecodesFromCsv(): Promise<string[]> {
+  const raw = await readCsvFromFirstExisting([
+    path.join(process.cwd(), "data", "relatiecodes.csv"),
+    path.join(process.cwd(), "data", "relationcodes.csv")
+  ]);
+  const rows = parseCsvRows(raw);
+  return rows
+    .map((row) => (row[0] ?? "").trim())
+    .filter((value) => value.length > 1);
 }
 
 function normalizeAlias(value: string): string {
@@ -209,35 +221,35 @@ function parseDateTime(value: string): Date | null {
 
 async function seedUsersFromCsv(): Promise<Map<string, CsvUser>> {
   const raw = await readCsvFromFirstExisting([
+    path.join(process.cwd(), "data", "alias.csv"),
     path.join(process.cwd(), "data", "user.csv"),
     path.join(process.cwd(), "data", "users.csv")
   ]);
+  const relatiecodes = await readRelatiecodesFromCsv();
 
   const rows = parseCsvRows(raw);
   const usersByAlias = new Map<string, CsvUser>();
-  const usedEmails = new Set<string>();
 
-  for (const row of rows) {
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
     const alias = normalizeAlias(row[0] ?? "");
-    const password = (row[1] ?? "").trim();
+    const passwordRaw = (row[1] ?? "").trim();
+    const password = passwordRaw.length > 0 ? passwordRaw : null;
     const emailRaw = (row[2] ?? "").trim().toLowerCase();
     const email = emailRaw.length > 0 ? emailRaw : null;
+    const bondsnummer = relatiecodes[index] ?? generatedBondsnummer(alias, index);
 
-    if (!alias || !password) {
+    if (!alias) {
       continue;
     }
 
     const existing = usersByAlias.get(alias);
-    const chosenEmail =
-      email && (!usedEmails.has(email) || existing?.email === email) ? email : existing?.email ?? null;
-    if (chosenEmail) {
-      usedEmails.add(chosenEmail);
-    }
 
     usersByAlias.set(alias, {
       alias,
-      password,
-      email: chosenEmail
+      bondsnummer: existing?.bondsnummer ?? bondsnummer,
+      password: existing?.password ?? password,
+      email: email ?? existing?.email ?? null
     });
   }
 
@@ -252,23 +264,24 @@ async function seedUsersFromCsv(): Promise<Map<string, CsvUser>> {
       continue;
     }
 
-    const passwordHash = await hashPassword(user.password);
+    const passwordHash = user.password ? await hashPassword(user.password) : null;
     await prisma.user.upsert({
       where: { alias },
       update: {
         isActive: true,
+        bondsnummer: user.bondsnummer,
         passwordHash,
         email: user.email,
-        emailVerifiedAt: user.email ? new Date() : null
+        emailVerifiedAt: user.email && user.password ? new Date() : null
       },
       create: {
         alias,
-        bondsnummer: generatedBondsnummer(alias, index),
+        bondsnummer: user.bondsnummer,
         role: UserRole.LID,
         isActive: true,
         passwordHash,
         email: user.email,
-        emailVerifiedAt: user.email ? new Date() : null
+        emailVerifiedAt: user.email && user.password ? new Date() : null
       }
     });
   }
@@ -449,6 +462,7 @@ async function seedTasksFromCsv(rootTemplateId: string | null): Promise<void> {
           startTime,
           endTime,
           templateId: node.title === rootTitle ? rootTemplateId : null,
+          coordinationType: node.title === rootTitle ? TaskCoordinationType.ORGANISEREN : null,
           status:
             node.coordinatorAliases.size > 0 ? TaskStatus.TOEGEWEZEN : TaskStatus.BESCHIKBAAR
         },

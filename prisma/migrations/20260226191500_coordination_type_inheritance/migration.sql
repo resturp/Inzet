@@ -1,0 +1,3 @@
+ALTER TABLE "Task"
+ALTER COLUMN "coordinationType" DROP NOT NULL,
+ALTER COLUMN "coordinationType" DROP DEFAULT;

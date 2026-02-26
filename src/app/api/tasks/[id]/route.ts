@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
-import { canManageTaskByOwnership } from "@/lib/authorization";
+import { canEditTaskCoordinatorsByOrganization, canManageTaskByOwnership } from "@/lib/authorization";
 import { prisma } from "@/lib/prisma";
 import { sanitizeNullableText, sanitizeNullableTrimmedText, sanitizeTrimmedText } from "@/lib/sanitize";
 import { pointsToStorage } from "@/lib/task-points";
@@ -12,6 +12,8 @@ const patchTaskSchema = z.object({
   description: z.string().trim().min(2).optional(),
   longDescription: z.string().max(20000).nullable().optional(),
   teamName: z.string().trim().max(100).nullable().optional(),
+  coordinationType: z.enum(["DELEGEREN", "ORGANISEREN"]).nullable().optional(),
+  coordinatorAliases: z.array(z.string().trim().min(1)).optional(),
   points: z.number().finite().int().nonnegative().optional(),
   date: z.string().datetime().optional(),
   startTime: z.string().datetime().nullable().optional(),
@@ -33,6 +35,12 @@ async function collectSubtreeTaskIds(rootTaskId: string): Promise<string[]> {
   }
 
   return ids;
+}
+
+function uniqueSortedAliases(aliases: Iterable<string>): string[] {
+  return Array.from(new Set(Array.from(aliases).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right, "nl-NL")
+  );
 }
 
 export async function PATCH(
@@ -70,12 +78,18 @@ export async function PATCH(
   }
 
   const canEditTask = await canManageTaskByOwnership(sessionUser.alias, task.id);
+  const canEditCoordinatorsByOrganization = await canEditTaskCoordinatorsByOrganization(
+    sessionUser.alias,
+    task.id
+  );
+  const hasCoordinatorUpdate = parsed.data.coordinatorAliases !== undefined;
   const hasPointsUpdate = parsed.data.points !== undefined;
-  const hasOtherUpdates =
+  const hasBaseUpdates =
     parsed.data.title !== undefined ||
     parsed.data.description !== undefined ||
     parsed.data.longDescription !== undefined ||
     parsed.data.teamName !== undefined ||
+    parsed.data.coordinationType !== undefined ||
     parsed.data.date !== undefined ||
     parsed.data.startTime !== undefined ||
     parsed.data.endTime !== undefined ||
@@ -87,8 +101,16 @@ export async function PATCH(
   }
 
   if (!canEditTask) {
-    const mayOnlyUpdateSubtaskPoints = Boolean(task.parentId && hasPointsUpdate && !hasOtherUpdates);
-    if (!mayOnlyUpdateSubtaskPoints || !canManageParent) {
+    const mayOnlyUpdateSubtaskPoints = Boolean(
+      task.parentId && hasPointsUpdate && !hasBaseUpdates && !hasCoordinatorUpdate
+    );
+    const mayOnlyUpdateCoordinators = Boolean(
+      hasCoordinatorUpdate && !hasPointsUpdate && !hasBaseUpdates && canEditCoordinatorsByOrganization
+    );
+    if (!mayOnlyUpdateSubtaskPoints && !mayOnlyUpdateCoordinators) {
+      return NextResponse.json({ error: "Geen rechten op deze taak" }, { status: 403 });
+    }
+    if (mayOnlyUpdateSubtaskPoints && !canManageParent) {
       return NextResponse.json({ error: "Geen rechten op deze taak" }, { status: 403 });
     }
   }
@@ -100,11 +122,32 @@ export async function PATCH(
     );
   }
 
+  let coordinatorAliases: string[] | undefined = undefined;
+  if (hasCoordinatorUpdate) {
+    coordinatorAliases = uniqueSortedAliases(
+      (parsed.data.coordinatorAliases ?? []).map((alias) => alias.trim()).filter((alias) => alias.length > 0)
+    );
+
+    const activeUsers = await prisma.user.findMany({
+      where: { alias: { in: coordinatorAliases }, isActive: true },
+      select: { alias: true }
+    });
+    const activeAliasSet = new Set(activeUsers.map((user) => user.alias));
+    const unknownOrInactive = coordinatorAliases.filter((alias) => !activeAliasSet.has(alias));
+    if (unknownOrInactive.length > 0) {
+      return NextResponse.json(
+        { error: `Onbekende of inactieve coordinator(en): ${unknownOrInactive.join(", ")}` },
+        { status: 400 }
+      );
+    }
+  }
+
   const baseUpdateData = {
     title: sanitizedTitle,
     description: sanitizedDescription,
     longDescription: sanitizedLongDescription,
     teamName: sanitizedTeamName,
+    coordinationType: parsed.data.coordinationType,
     date: parsed.data.date ? new Date(parsed.data.date) : undefined,
     startTime:
       parsed.data.startTime === undefined
@@ -116,24 +159,46 @@ export async function PATCH(
     location: sanitizedLocation
   };
 
-  const updatedTask = await prisma.task.update({
-    where: { id },
-    data:
-      canEditTask || !hasPointsUpdate
-        ? {
-            ...baseUpdateData,
-            points: parsed.data.points === undefined ? undefined : pointsToStorage(parsed.data.points)
-          }
-        : {
-            points: pointsToStorage(parsed.data.points!)
-          }
+  const updatedTask = await prisma.$transaction(async (tx) => {
+    if (hasCoordinatorUpdate) {
+      await tx.taskCoordinator.deleteMany({
+        where: { taskId: task.id }
+      });
+      if ((coordinatorAliases ?? []).length > 0) {
+        await tx.taskCoordinator.createMany({
+          data: (coordinatorAliases ?? []).map((userAlias) => ({
+            taskId: task.id,
+            userAlias
+          }))
+        });
+      }
+    }
+
+    return tx.task.update({
+      where: { id },
+      data:
+        canEditTask || !hasPointsUpdate
+          ? {
+              ...baseUpdateData,
+              points: parsed.data.points === undefined ? undefined : pointsToStorage(parsed.data.points)
+            }
+          : {
+              points: pointsToStorage(parsed.data.points!)
+            }
+    });
   });
 
   await writeAuditLog({
     actorAlias: sessionUser.alias,
     actionType: "TASK_UPDATED",
     entityType: "Task",
-    entityId: updatedTask.id
+    entityId: updatedTask.id,
+    payload:
+      hasCoordinatorUpdate
+        ? {
+            coordinatorAliasesAfter: coordinatorAliases ?? []
+          }
+        : undefined
   });
 
   return NextResponse.json({ data: updatedTask }, { status: 200 });
@@ -161,15 +226,21 @@ export async function DELETE(
     return NextResponse.json({ error: "Taak niet gevonden" }, { status: 404 });
   }
   if (!task.parentId) {
-    return NextResponse.json({ error: "Root-taak kan niet worden verwijderd" }, { status: 409 });
-  }
-
-  const canManageParent = await canManageTaskByOwnership(sessionUser.alias, task.parentId);
-  if (!canManageParent) {
-    return NextResponse.json(
-      { error: "Geen rechten om deze subtaak te verwijderen" },
-      { status: 403 }
-    );
+    const canManageRootTask = await canManageTaskByOwnership(sessionUser.alias, task.id);
+    if (!canManageRootTask) {
+      return NextResponse.json(
+        { error: "Geen rechten om deze root-taak te verwijderen" },
+        { status: 403 }
+      );
+    }
+  } else {
+    const canManageParent = await canManageTaskByOwnership(sessionUser.alias, task.parentId);
+    if (!canManageParent) {
+      return NextResponse.json(
+        { error: "Geen rechten om deze subtaak te verwijderen" },
+        { status: 403 }
+      );
+    }
   }
 
   const subtreeTaskIds = await collectSubtreeTaskIds(task.id);

@@ -1,4 +1,3 @@
-import { TaskStatus, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 type MinimalTask = {
@@ -79,28 +78,15 @@ async function normalizeInheritedOwners() {
 }
 
 export async function ensureGovernanceBootstrap(loginAlias: string) {
-  let bestuur = await prisma.user.findFirst({
-    where: { role: UserRole.BESTUUR, isActive: true },
-    orderBy: { createdAt: "asc" }
-  });
-
-  if (!bestuur) {
-    bestuur = await prisma.user.update({
-      where: { alias: loginAlias },
-      data: { role: UserRole.BESTUUR }
+  if (loginAlias !== "Bestuur") {
+    const placeholder = await prisma.user.findUnique({
+      where: { alias: "Bestuur" },
+      select: { alias: true, email: true, isActive: true }
     });
-  }
-
-  if (bestuur.alias === "Bestuur" && loginAlias !== "Bestuur") {
-    const placeholder = await prisma.user.findUnique({ where: { alias: "Bestuur" } });
-    if (placeholder && !placeholder.email) {
-      bestuur = await prisma.user.update({
-        where: { alias: loginAlias },
-        data: { role: UserRole.BESTUUR }
-      });
+    if (placeholder && !placeholder.email && placeholder.isActive) {
       await prisma.user.update({
         where: { alias: "Bestuur" },
-        data: { role: UserRole.LID, isActive: false }
+        data: { isActive: false }
       });
     }
   }
@@ -145,93 +131,6 @@ export async function ensureGovernanceBootstrap(loginAlias: string) {
           description: subtemplate.description,
           defaultPoints: subtemplate.defaultPoints,
           parentTemplateId: teamTemplate.id
-        }
-      });
-    }
-  }
-
-  let rootTask = await prisma.task.findFirst({
-    where: { title: "Besturen vereniging", parentId: null },
-    include: {
-      ownCoordinators: {
-        select: { userAlias: true }
-      }
-    }
-  });
-
-  if (!rootTask) {
-    rootTask = await prisma.task.create({
-      data: {
-        title: "Besturen vereniging",
-        description: "Root taak voor bestuur",
-        ownCoordinators: {
-          create: [{ userAlias: bestuur.alias }]
-        },
-        points: 1600,
-        date: new Date("2026-01-01T00:00:00.000Z"),
-        endTime: new Date("2026-12-31T23:59:59.000Z"),
-        templateId: template.id,
-        status: TaskStatus.TOEGEWEZEN
-      },
-      include: {
-        ownCoordinators: {
-          select: { userAlias: true }
-        }
-      }
-    });
-  } else {
-    const rootOwnAliases = uniqueSortedAliases(rootTask.ownCoordinators.map((item) => item.userAlias));
-    const needsCoordinatorTransfer =
-      rootOwnAliases.length === 1 && rootOwnAliases[0] === "Bestuur" && bestuur.alias !== "Bestuur";
-    const needsOwnerRestore = rootOwnAliases.length === 0;
-    const needsStatusFix = rootTask.status !== TaskStatus.TOEGEWEZEN;
-
-    if (needsStatusFix) {
-      rootTask = await prisma.task.update({
-        where: { id: rootTask.id },
-        data: {
-          status: TaskStatus.TOEGEWEZEN
-        },
-        include: {
-          ownCoordinators: {
-            select: { userAlias: true }
-          }
-        }
-      });
-    }
-
-    if (needsCoordinatorTransfer) {
-      await prisma.taskCoordinator.deleteMany({
-        where: {
-          taskId: rootTask.id,
-          userAlias: "Bestuur"
-        }
-      });
-      await prisma.taskCoordinator.upsert({
-        where: {
-          taskId_userAlias: {
-            taskId: rootTask.id,
-            userAlias: bestuur.alias
-          }
-        },
-        update: {},
-        create: {
-          taskId: rootTask.id,
-          userAlias: bestuur.alias
-        }
-      });
-    } else if (needsOwnerRestore) {
-      await prisma.taskCoordinator.upsert({
-        where: {
-          taskId_userAlias: {
-            taskId: rootTask.id,
-            userAlias: bestuur.alias
-          }
-        },
-        update: {},
-        create: {
-          taskId: rootTask.id,
-          userAlias: bestuur.alias
         }
       });
     }

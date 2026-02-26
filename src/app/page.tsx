@@ -23,8 +23,14 @@ export default async function HomePage() {
           <p className="muted">
             {alias
               ? `Je bent ingelogd als ${alias}.`
-              : "Activeer of gebruik je account met bondsnummer + magic link."}
+              : "Bestaand account: e-mailadres + wachtwoord. Eerste keer: relatiecode + e-mailadres."}
           </p>
+          {!alias ? (
+            <p className="muted">
+              Een e-mailadres kan bij meerdere accounts horen; een account heeft altijd een
+              unieke alias.
+            </p>
+          ) : null}
           <p>
             <Link href="/login">Ga naar login</Link>
           </p>
