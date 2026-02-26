@@ -1,6 +1,8 @@
 # Dependencies
 /node_modules/
-data/*.csv
+
+#data
+/data/*.csv
 
 # Next.js build/cache output
 /.next/
