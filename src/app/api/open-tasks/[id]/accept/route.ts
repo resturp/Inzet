@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import { isBestuurAlias, resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
-import { notifyProposalAccepted } from "@/lib/notifications";
+import { notifyProposalResponded } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { canActorDecideProposal, resolveCoordinatorAliasesAfterAccept } from "@/lib/rules";
 
@@ -76,10 +76,11 @@ export async function POST(
       }
     });
 
-    void notifyProposalAccepted({
+    void notifyProposalResponded({
       recipientAlias: aliasChangeProposal.requestedAlias,
       actorAlias: sessionUser.alias,
-      taskTitle: "Aliaswijziging"
+      taskTitle: "Aliaswijziging",
+      response: "ACCEPTED"
     }).catch((error) => {
       console.error("Failed to notify accepted alias change proposal", {
         proposalId: aliasChangeProposal.id,
@@ -167,10 +168,12 @@ export async function POST(
     }
   });
 
-  void notifyProposalAccepted({
+  void notifyProposalResponded({
     recipientAlias: openTask.proposerAlias,
     actorAlias: sessionUser.alias,
-    taskTitle: openTask.task.title
+    taskTitle: openTask.task.title,
+    taskId: openTask.taskId,
+    response: "ACCEPTED"
   }).catch((error) => {
     console.error("Failed to notify accepted task proposal", { openTaskId: openTask.id, error });
   });

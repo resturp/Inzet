@@ -106,6 +106,14 @@ type TaskEditDraft = {
 
 type EditTaskTab = "LONG_DESCRIPTION" | "COORDINATORS" | "DATE_TIME";
 type AccountSettingsTab = "WACHTWOORD" | "NOTIFICATIES" | "ALIAS";
+type DeepLinkDialog = "account" | "profile";
+type TasksDeepLink = {
+  view?: TaskMenuView;
+  taskId?: string;
+  proposalId?: string;
+  dialog?: DeepLinkDialog;
+  accountTab?: AccountSettingsTab;
+};
 
 type ReleaseDialogTask = {
   id: string;
@@ -221,8 +229,8 @@ const NOTIFICATION_CATEGORY_META: Record<
     description: "Voorstellen waarop jij moet accepteren of afwijzen."
   },
   PROPOSAL_ACCEPTED: {
-    label: "Akkoord op jouw voorstel",
-    description: "Als een voorstel van jou geaccepteerd is."
+    label: "Reactie op jouw voorstel",
+    description: "Als een voorstel van jou geaccepteerd of afgewezen is."
   },
   TASK_CHANGED_AS_COORDINATOR: {
     label: "Wijzigingen op coordinatietaken",
@@ -297,6 +305,56 @@ function labelForMenuView(view: TaskMenuView): string {
 
 function labelForOpenTaskStatus(status: ApiOpenTask["status"]): string {
   return status === "AFGEWEZEN" ? "afgewezen" : "open";
+}
+
+function isTaskMenuView(value: string | null | undefined): value is TaskMenuView {
+  return value === "BESCHIKBAAR" || value === "TOEGEWEZEN" || value === "OPEN_VOORSTELLEN";
+}
+
+function isAccountSettingsTab(value: string | null | undefined): value is AccountSettingsTab {
+  return value === "WACHTWOORD" || value === "NOTIFICATIES" || value === "ALIAS";
+}
+
+function parseTasksDeepLink(search: string): TasksDeepLink | null {
+  const params = new URLSearchParams(search);
+  const parsed: TasksDeepLink = {};
+
+  const rawView = params.get("view");
+  if (isTaskMenuView(rawView)) {
+    parsed.view = rawView;
+  }
+
+  const rawTaskId = params.get("task")?.trim();
+  if (rawTaskId) {
+    parsed.taskId = rawTaskId;
+  }
+
+  const rawProposalId = params.get("proposal")?.trim();
+  if (rawProposalId) {
+    parsed.proposalId = rawProposalId;
+  }
+
+  const rawDialog = params.get("dialog")?.trim().toLowerCase();
+  if (rawDialog === "account" || rawDialog === "profile") {
+    parsed.dialog = rawDialog;
+  }
+
+  const rawAccountTab = params.get("accountTab")?.trim().toUpperCase();
+  if (isAccountSettingsTab(rawAccountTab)) {
+    parsed.accountTab = rawAccountTab;
+  }
+
+  if (
+    !parsed.view &&
+    !parsed.taskId &&
+    !parsed.proposalId &&
+    !parsed.dialog &&
+    !parsed.accountTab
+  ) {
+    return null;
+  }
+
+  return parsed;
 }
 
 function renderReleaseIcon(isPending: boolean) {
@@ -633,6 +691,11 @@ export function TasksClient({ alias }: { alias: string }) {
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [subtaskPointsDraftById, setSubtaskPointsDraftById] = useState<Record<string, string>>({});
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const deepLinkRef = useRef<TasksDeepLink | null>(null);
+  const deepLinkTaskOrProposalHandledRef = useRef(false);
+  const deepLinkDialogHandledRef = useRef(false);
+  const openAccountSettingsDialogRef = useRef<((preferredTab?: AccountSettingsTab) => Promise<void>) | null>(null);
+  const openProfileDialogRef = useRef<(() => Promise<void>) | null>(null);
   const isRefreshingRef = useRef(false);
   const lastKnownVersionRef = useRef(0);
 
@@ -1048,6 +1111,91 @@ export function TasksClient({ alias }: { alias: string }) {
       setAssignedAliasFilter(alias);
     }
   }, [alias, assignedAliasFilter, assignedAliasOptions]);
+
+  useEffect(() => {
+    deepLinkRef.current = parseTasksDeepLink(window.location.search);
+  }, []);
+
+  useEffect(() => {
+    if (deepLinkTaskOrProposalHandledRef.current) {
+      return;
+    }
+
+    const deepLink = deepLinkRef.current;
+    if (!deepLink) {
+      deepLinkTaskOrProposalHandledRef.current = true;
+      return;
+    }
+
+    if (deepLink.view) {
+      setTaskMenuView(deepLink.view);
+      setIsTaskMenuOpen(false);
+    }
+
+    if (isLoading) {
+      return;
+    }
+
+    if (deepLink.proposalId) {
+      setTaskMenuView("OPEN_VOORSTELLEN");
+      setIsTaskMenuOpen(false);
+      setFocusedTaskId(null);
+      window.setTimeout(() => {
+        document
+          .getElementById(`open-proposal-${deepLink.proposalId}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 0);
+      deepLinkTaskOrProposalHandledRef.current = true;
+      return;
+    }
+
+    if (deepLink.taskId) {
+      if (tasksById.has(deepLink.taskId)) {
+        setTaskMenuView("BESCHIKBAAR");
+        setIsTaskMenuOpen(false);
+        setFocusedTaskId(deepLink.taskId);
+        setEditingTaskId(null);
+        setEditDraft(null);
+        setMovingTaskId(null);
+        setMoveTargetParentId("");
+        setCreatingSubtaskForTaskId(null);
+        setSubtaskDraft(initialSubtask);
+        setSubtaskFormMode("new");
+        setCopySourceTaskId(null);
+        setCopyDateHandlingMode("KEEP");
+        setCopyDateShiftAmount("1");
+        setCopyDateShiftUnit("days");
+        setError(null);
+      } else {
+        setError((current) => current ?? "Taak uit link niet gevonden of niet zichtbaar.");
+      }
+      deepLinkTaskOrProposalHandledRef.current = true;
+      return;
+    }
+
+    deepLinkTaskOrProposalHandledRef.current = true;
+  }, [isLoading, tasksById]);
+
+  useEffect(() => {
+    if (deepLinkDialogHandledRef.current) {
+      return;
+    }
+
+    const deepLink = deepLinkRef.current;
+    if (!deepLink?.dialog) {
+      deepLinkDialogHandledRef.current = true;
+      return;
+    }
+
+    deepLinkDialogHandledRef.current = true;
+
+    if (deepLink.dialog === "account") {
+      void openAccountSettingsDialogRef.current?.(deepLink.accountTab ?? "WACHTWOORD");
+      return;
+    }
+
+    void openProfileDialogRef.current?.();
+  }, []);
 
   useEffect(() => {
     if (!isUserMenuOpen) {
@@ -1948,13 +2096,13 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
-  async function onOpenAccountSettingsDialog() {
+  async function onOpenAccountSettingsDialog(preferredTab: AccountSettingsTab = "WACHTWOORD") {
     setIsUserMenuOpen(false);
     setAccountSettingsError(null);
     setAccountSettingsStatus(null);
     setAliasChangeError(null);
     setAliasChangeStatus(null);
-    setAccountSettingsTab("WACHTWOORD");
+    setAccountSettingsTab(preferredTab);
     setAliasChangeDraft("");
     setIsAccountLoading(true);
 
@@ -2208,6 +2356,9 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
+  openAccountSettingsDialogRef.current = onOpenAccountSettingsDialog;
+  openProfileDialogRef.current = onOpenProfileDialog;
+
   const focusedTask = focusedTaskId ? tasksById.get(focusedTaskId) ?? null : null;
   const editingTask = editingTaskId ? tasksById.get(editingTaskId) ?? null : null;
   const canEditTaskDetails = editingTask?.canManage ?? false;
@@ -2391,7 +2542,7 @@ export function TasksClient({ alias }: { alias: string }) {
             <p className="muted">Geen openstaande voorstellen.</p>
           ) : (
             openTasks.map((item) => (
-              <article key={item.id} className="card">
+              <article key={item.id} id={`open-proposal-${item.id}`} className="card">
                 <p>
                   <strong>{item.taskTitle}</strong>
                   {item.proposalType === "TAAK" && item.teamName ? ` (${item.teamName})` : ""}

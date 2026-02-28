@@ -112,6 +112,7 @@ export async function POST(
         taskTitle: task.title,
         proposerAlias: openTask.proposerAlias,
         proposedAlias: openTask.proposedAlias!,
+        openTaskId: openTask.id,
         actorAlias: sessionUser.alias
       });
     } catch (error) {

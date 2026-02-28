@@ -24,6 +24,11 @@ const DIGEST_DELIVERIES: NotificationDelivery[] = [
   NotificationDelivery.WEEKLY,
   NotificationDelivery.MONTHLY
 ];
+const DEFAULT_APP_BASE_URL = "http://localhost:3000";
+const NOTIFICATION_SETTINGS_HINT =
+  "Je kunt je notificatie-instellingen wijzigen op de accountpagina van vczwolle.frii.nl.";
+const NOTIFICATION_MAIL_CLOSING =
+  "Hartelijk dank voor je actieve bijdrage aan de sportiviteit en het plezier binnen onze vereniging.";
 
 export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
   NotificationCategory.NEW_PROPOSAL,
@@ -43,6 +48,70 @@ export const NOTIFICATION_DEFAULT_DELIVERY: NotificationSettingsMap = {
 
 function uniqueValues<T extends string>(values: Iterable<T>): T[] {
   return Array.from(new Set(Array.from(values).filter(Boolean))) as T[];
+}
+
+function appBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (!configured) {
+    return DEFAULT_APP_BASE_URL;
+  }
+  return configured.replace(/\/+$/, "");
+}
+
+function buildAppUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${appBaseUrl()}${normalizedPath}`;
+}
+
+function accountDeepLinkUrl(): string {
+  return buildAppUrl("/tasks?dialog=account&accountTab=NOTIFICATIES");
+}
+
+function taskDeepLinkUrl(taskId: string): string {
+  return buildAppUrl(`/tasks?task=${encodeURIComponent(taskId)}&view=BESCHIKBAAR`);
+}
+
+function proposalDeepLinkUrl(proposalId: string): string {
+  return buildAppUrl(`/tasks?view=OPEN_VOORSTELLEN&proposal=${encodeURIComponent(proposalId)}`);
+}
+
+function withLinks(
+  lines: readonly string[],
+  links: ReadonlyArray<{ label: string; url: string | null }>
+): string {
+  const linkLines = links
+    .filter((link): link is { label: string; url: string } => Boolean(link.url))
+    .map((link) => `${link.label}: ${link.url}`);
+
+  if (linkLines.length === 0) {
+    return [...lines, "", NOTIFICATION_SETTINGS_HINT, `Accountpagina: ${accountDeepLinkUrl()}`].join(
+      "\n"
+    );
+  }
+
+  return [
+    ...lines,
+    "",
+    ...linkLines,
+    "",
+    NOTIFICATION_SETTINGS_HINT,
+    `Accountpagina: ${accountDeepLinkUrl()}`
+  ].join("\n");
+}
+
+function withNotificationMailEnvelope(userAlias: string, body: string): string {
+  return [
+    `Beste ${userAlias},`,
+    "",
+    "Dit bericht ontvang je omdat er een relevante update voor jou is in Inzet.",
+    "",
+    body,
+    "",
+    NOTIFICATION_MAIL_CLOSING,
+    "",
+    "--",
+    "Inzet notificatie"
+  ].join("\n");
 }
 
 function digestIntervalMs(delivery: NotificationDelivery): number {
@@ -66,7 +135,7 @@ function labelForCategory(category: NotificationCategory): string {
     case NotificationCategory.NEW_PROPOSAL:
       return "Nieuwe voorstellen";
     case NotificationCategory.PROPOSAL_ACCEPTED:
-      return "Akkoord op je voorstel";
+      return "Reactie op jouw voorstel";
     case NotificationCategory.TASK_CHANGED_AS_COORDINATOR:
       return "Wijzigingen op je coordinatietaken";
     case NotificationCategory.TASK_BECAME_AVAILABLE_AS_COORDINATOR:
@@ -189,7 +258,7 @@ async function dispatchCategoryMessages(
         await sendMail({
           to: user.email,
           subject: message.subject,
-          text: `${message.body}\n\n--\nInzet notificatie`
+          text: withNotificationMailEnvelope(message.userAlias, message.body)
         });
       } catch (error) {
         console.error("Failed to send immediate notification", {
@@ -370,11 +439,17 @@ export async function flushDueNotificationDigests(params?: {
         to: preference.user.email,
         subject: digestSubject,
         text: [
+          `Beste ${preference.userAlias},`,
+          "",
+          "Dit bericht ontvang je omdat er een relevante update voor jou is in Inzet.",
+          "",
           `Je hebt ${pending.length} nieuwe notificatie(s) in categorie \"${labelForCategory(
             preference.category
           )}\".`,
           "",
           ...digestLines,
+          "",
+          NOTIFICATION_MAIL_CLOSING,
           "",
           "--",
           "Inzet notificatie digest"
@@ -418,6 +493,7 @@ export async function notifyTaskProposalDecisionRequired(params: {
   taskTitle: string;
   proposerAlias: string;
   proposedAlias: string;
+  openTaskId?: string;
   effectiveCoordinatorAliases?: readonly string[];
   actorAlias?: string;
 }): Promise<void> {
@@ -448,11 +524,20 @@ export async function notifyTaskProposalDecisionRequired(params: {
     decisionAliases.map((userAlias) => ({
       userAlias,
       subject: `Nieuw voorstel: ${params.taskTitle}`,
-      body: [
-        `Er staat een voorstel klaar voor taak \"${params.taskTitle}\".`,
-        `Voorgesteld door: ${params.proposerAlias}`,
-        `Voorgesteld aan: ${params.proposedAlias}`
-      ].join("\n")
+      body: withLinks(
+        [
+          `Er staat een voorstel klaar voor taak \"${params.taskTitle}\".`,
+          `Voorgesteld door: ${params.proposerAlias}`,
+          `Voorgesteld aan: ${params.proposedAlias}`
+        ],
+        [
+          {
+            label: "Naar voorstel",
+            url: params.openTaskId ? proposalDeepLinkUrl(params.openTaskId) : null
+          },
+          { label: "Naar taak", url: taskDeepLinkUrl(params.taskId) }
+        ]
+      )
     })),
     params.actorAlias ? [params.actorAlias] : []
   );
@@ -461,6 +546,7 @@ export async function notifyTaskProposalDecisionRequired(params: {
 export async function notifyAliasChangeDecisionRequired(params: {
   requesterAlias: string;
   requestedAlias: string;
+  proposalId?: string;
   decisionAliases: readonly string[];
   actorAlias?: string;
 }): Promise<void> {
@@ -474,10 +560,18 @@ export async function notifyAliasChangeDecisionRequired(params: {
     decisionAliases.map((userAlias) => ({
       userAlias,
       subject: `Nieuw voorstel: aliaswijziging ${params.requesterAlias}`,
-      body: [
-        `${params.requesterAlias} vraagt aliaswijziging aan.`,
-        `Nieuwe alias: ${params.requestedAlias}`
-      ].join("\n")
+      body: withLinks(
+        [
+          `${params.requesterAlias} vraagt aliaswijziging aan.`,
+          `Nieuwe alias: ${params.requestedAlias}`
+        ],
+        [
+          {
+            label: "Naar voorstel",
+            url: params.proposalId ? proposalDeepLinkUrl(params.proposalId) : null
+          }
+        ]
+      )
     })),
     params.actorAlias ? [params.actorAlias] : []
   );
@@ -487,14 +581,53 @@ export async function notifyProposalAccepted(params: {
   recipientAlias: string;
   actorAlias: string;
   taskTitle: string;
+  taskId?: string;
+  proposalId?: string;
 }): Promise<void> {
+  await notifyProposalResponded({
+    recipientAlias: params.recipientAlias,
+    actorAlias: params.actorAlias,
+    taskTitle: params.taskTitle,
+    taskId: params.taskId,
+    proposalId: params.proposalId,
+    response: "ACCEPTED"
+  });
+}
+
+export async function notifyProposalResponded(params: {
+  recipientAlias: string;
+  actorAlias: string;
+  taskTitle: string;
+  taskId?: string;
+  proposalId?: string;
+  response: "ACCEPTED" | "REJECTED";
+}): Promise<void> {
+  const accepted = params.response === "ACCEPTED";
   await dispatchCategoryMessages(
     NotificationCategory.PROPOSAL_ACCEPTED,
     [
       {
         userAlias: params.recipientAlias,
-        subject: `Voorstel geaccepteerd: ${params.taskTitle}`,
-        body: `${params.actorAlias} heeft een voorstel voor taak \"${params.taskTitle}\" geaccepteerd.`
+        subject: accepted
+          ? `Voorstel geaccepteerd: ${params.taskTitle}`
+          : `Voorstel afgewezen: ${params.taskTitle}`,
+        body: withLinks(
+          [
+            accepted
+              ? `${params.actorAlias} heeft een voorstel voor taak \"${params.taskTitle}\" geaccepteerd.`
+              : `${params.actorAlias} heeft een voorstel voor taak \"${params.taskTitle}\" afgewezen.`
+          ],
+          [
+            {
+              label: "Naar voorstel",
+              url: params.proposalId ? proposalDeepLinkUrl(params.proposalId) : null
+            },
+            {
+              label: "Naar taak",
+              url: params.taskId ? taskDeepLinkUrl(params.taskId) : null
+            }
+          ]
+        )
       }
     ],
     [params.actorAlias]
@@ -517,9 +650,12 @@ export async function notifyTaskChangedForEffectiveCoordinators(params: {
     coordinatorAliases.map((userAlias) => ({
       userAlias,
       subject: `Taak gewijzigd: ${params.taskTitle}`,
-      body: params.summary
-        ? `${params.actorAlias} heeft taak \"${params.taskTitle}\" gewijzigd.\n${params.summary}`
-        : `${params.actorAlias} heeft taak \"${params.taskTitle}\" gewijzigd.`
+      body: withLinks(
+        params.summary
+          ? [`${params.actorAlias} heeft taak \"${params.taskTitle}\" gewijzigd.`, params.summary]
+          : [`${params.actorAlias} heeft taak \"${params.taskTitle}\" gewijzigd.`],
+        [{ label: "Naar taak", url: taskDeepLinkUrl(params.taskId) }]
+      )
     })),
     [params.actorAlias]
   );
@@ -540,7 +676,10 @@ export async function notifyTaskBecameAvailableForEffectiveCoordinators(params: 
     coordinatorAliases.map((userAlias) => ({
       userAlias,
       subject: `Taak beschikbaar: ${params.taskTitle}`,
-      body: `${params.actorAlias} heeft taak \"${params.taskTitle}\" beschikbaar gesteld.`
+      body: withLinks(
+        [`${params.actorAlias} heeft taak \"${params.taskTitle}\" beschikbaar gesteld.`],
+        [{ label: "Naar taak", url: taskDeepLinkUrl(params.taskId) }]
+      )
     })),
     [params.actorAlias]
   );
@@ -646,7 +785,7 @@ export async function notifySubtasksCreatedForSubscriptions(params: {
     for (const [userAlias, nearest] of nearestSubscriptionByUser.entries()) {
       const current = linesByUserAlias.get(userAlias) ?? [];
       current.push(
-        `Nieuwe subtaak \"${createdTask.title}\" onder \"${nearest.parentTitle}\" (abonnement: \"${nearest.subscriptionTitle}\").`
+        `Nieuwe subtaak \"${createdTask.title}\" onder \"${nearest.parentTitle}\" (abonnement: \"${nearest.subscriptionTitle}\"). Taak: ${taskDeepLinkUrl(createdTask.id)}`
       );
       linesByUserAlias.set(userAlias, current);
     }
@@ -660,7 +799,7 @@ export async function notifySubtasksCreatedForSubscriptions(params: {
     ([userAlias, lines]) => ({
       userAlias,
       subject: `Nieuwe subtaken in je abonnementen (${lines.length})`,
-      body: lines.map((line, index) => `${index + 1}. ${line}`).join("\n")
+      body: withLinks(lines.map((line, index) => `${index + 1}. ${line}`), [])
     })
   );
 

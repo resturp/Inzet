@@ -143,6 +143,7 @@ export async function POST(
     taskTitle: task.title ?? openTask.taskId,
     proposerAlias: openTask.proposerAlias,
     proposedAlias: openTask.proposedAlias ?? openTask.proposerAlias,
+    openTaskId: openTask.id,
     effectiveCoordinatorAliases,
     actorAlias: sessionUser.alias
   }).catch((error) => {

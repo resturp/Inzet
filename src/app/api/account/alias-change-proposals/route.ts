@@ -124,6 +124,7 @@ export async function POST(request: Request) {
     await notifyAliasChangeDecisionRequired({
       requesterAlias: proposal.requesterAlias,
       requestedAlias: proposal.requestedAlias,
+      proposalId: proposal.id,
       decisionAliases: bestuurAliases,
       actorAlias: sessionUser.alias
     });

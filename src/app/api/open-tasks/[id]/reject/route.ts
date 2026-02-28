@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import { isBestuurAlias, resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
+import { notifyProposalResponded } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { canActorDecideProposal } from "@/lib/rules";
 
@@ -51,6 +52,19 @@ export async function POST(
       }
     });
 
+    void notifyProposalResponded({
+      recipientAlias: aliasChangeProposal.requesterAlias,
+      actorAlias: sessionUser.alias,
+      taskTitle: "Aliaswijziging",
+      proposalId: aliasChangeProposal.id,
+      response: "REJECTED"
+    }).catch((error) => {
+      console.error("Failed to notify rejected alias change proposal", {
+        proposalId: aliasChangeProposal.id,
+        error
+      });
+    });
+
     return NextResponse.json({ message: "Aliaswijziging afgewezen" }, { status: 200 });
   }
 
@@ -86,6 +100,17 @@ export async function POST(
     actionType: "OPEN_TASK_REJECTED",
     entityType: "OpenTask",
     entityId: openTask.id
+  });
+
+  void notifyProposalResponded({
+    recipientAlias: openTask.proposerAlias,
+    actorAlias: sessionUser.alias,
+    taskTitle: openTask.task.title,
+    taskId: openTask.taskId,
+    proposalId: openTask.id,
+    response: "REJECTED"
+  }).catch((error) => {
+    console.error("Failed to notify rejected task proposal", { openTaskId: openTask.id, error });
   });
 
   return NextResponse.json({ message: "Voorstel afgewezen" }, { status: 200 });

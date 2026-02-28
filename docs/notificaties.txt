@@ -1,0 +1,83 @@
+# Notificatie-overzicht
+
+## Vast e-mailtemplate
+- Aanhef: `Beste {alias},`
+- Redenregel: `Dit bericht ontvang je omdat er een relevante update voor jou is in Inzet.`
+- Afsluiting: `Hartelijk dank voor je actieve bijdrage aan de sportiviteit en het plezier binnen onze vereniging.`
+
+## Nieuwe voorstellen
+- Nieuw voorstel voor taak
+  - Onderwerp: `Nieuw voorstel: {taaktitel}`
+  - Bericht (tussen aanhef en afsluiting):
+    - `Er staat een voorstel klaar voor taak "{taaktitel}".`
+    - `Voorgesteld door: {proposerAlias}`
+    - `Voorgesteld aan: {proposedAlias}`
+    - `Naar voorstel: {deeplink-voorstel}`
+    - `Naar taak: {deeplink-taak}`
+    - `Je kunt je notificatie-instellingen wijzigen op de accountpagina van vczwolle.frii.nl.`
+    - `Accountpagina: {deeplink-account}`
+- Nieuw voorstel voor aliaswijziging
+  - Onderwerp: `Nieuw voorstel: aliaswijziging {requesterAlias}`
+  - Bericht (tussen aanhef en afsluiting):
+    - `{requesterAlias} vraagt aliaswijziging aan.`
+    - `Nieuwe alias: {requestedAlias}`
+    - `Naar voorstel: {deeplink-voorstel}`
+    - `Je kunt je notificatie-instellingen wijzigen op de accountpagina van vczwolle.frii.nl.`
+    - `Accountpagina: {deeplink-account}`
+
+## Reactie op jouw voorstel
+- Voorstel geaccepteerd (taak)
+  - Onderwerp: `Voorstel geaccepteerd: {taaktitel}`
+  - Bericht (tussen aanhef en afsluiting):
+    - `{actorAlias} heeft een voorstel voor taak "{taaktitel}" geaccepteerd.`
+    - `Naar taak: {deeplink-taak}`
+    - `Je kunt je notificatie-instellingen wijzigen op de accountpagina van vczwolle.frii.nl.`
+    - `Accountpagina: {deeplink-account}`
+- Voorstel afgewezen (taak)
+  - Onderwerp: `Voorstel afgewezen: {taaktitel}`
+  - Bericht (tussen aanhef en afsluiting):
+    - `{actorAlias} heeft een voorstel voor taak "{taaktitel}" afgewezen.`
+    - `Naar voorstel: {deeplink-voorstel}`
+    - `Naar taak: {deeplink-taak}`
+    - `Je kunt je notificatie-instellingen wijzigen op de accountpagina van vczwolle.frii.nl.`
+    - `Accountpagina: {deeplink-account}`
+- Voorstel geaccepteerd (aliaswijziging)
+  - Onderwerp: `Voorstel geaccepteerd: Aliaswijziging`
+  - Bericht (tussen aanhef en afsluiting):
+    - `{actorAlias} heeft een voorstel voor taak "Aliaswijziging" geaccepteerd.`
+    - `Je kunt je notificatie-instellingen wijzigen op de accountpagina van vczwolle.frii.nl.`
+    - `Accountpagina: {deeplink-account}`
+- Voorstel afgewezen (aliaswijziging)
+  - Onderwerp: `Voorstel afgewezen: Aliaswijziging`
+  - Bericht (tussen aanhef en afsluiting):
+    - `{actorAlias} heeft een voorstel voor taak "Aliaswijziging" afgewezen.`
+    - `Naar voorstel: {deeplink-voorstel}`
+    - `Je kunt je notificatie-instellingen wijzigen op de accountpagina van vczwolle.frii.nl.`
+    - `Accountpagina: {deeplink-account}`
+
+## Wijzigingen op coordinatietaken
+- Taak gewijzigd
+  - Onderwerp: `Taak gewijzigd: {taaktitel}`
+  - Bericht (tussen aanhef en afsluiting):
+    - Zonder samenvatting: `{actorAlias} heeft taak "{taaktitel}" gewijzigd.`
+    - Met samenvatting: `{actorAlias} heeft taak "{taaktitel}" gewijzigd.` + extra samenvatting op nieuwe regel.
+    - `Naar taak: {deeplink-taak}`
+    - `Je kunt je notificatie-instellingen wijzigen op de accountpagina van vczwolle.frii.nl.`
+    - `Accountpagina: {deeplink-account}`
+
+## Beschikbaar gestelde taken
+- Taak opnieuw beschikbaar
+  - Onderwerp: `Taak beschikbaar: {taaktitel}`
+  - Bericht (tussen aanhef en afsluiting):
+    - `{actorAlias} heeft taak "{taaktitel}" beschikbaar gesteld.`
+    - `Naar taak: {deeplink-taak}`
+    - `Je kunt je notificatie-instellingen wijzigen op de accountpagina van vczwolle.frii.nl.`
+    - `Accountpagina: {deeplink-account}`
+
+## Nieuwe subtaken op abonnementen
+- Nieuwe subtaken binnen abonnementen (gegroepeerd)
+  - Onderwerp: `Nieuwe subtaken in je abonnementen ({aantal})`
+  - Bericht (tussen aanhef en afsluiting): genummerde lijst met regels zoals:
+    - `Nieuwe subtaak "{subtaak}" onder "{parentTaak}" (abonnement: "{abonnementTaak}"). Taak: {deeplink-taak}`
+    - `Je kunt je notificatie-instellingen wijzigen op de accountpagina van vczwolle.frii.nl.`
+    - `Accountpagina: {deeplink-account}`

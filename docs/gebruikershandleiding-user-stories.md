@@ -134,6 +134,9 @@ Je bent ingelogged en komt op `/tasks`.
 ## US-04 - Uitloggen
 Als gebruiker wil ik veilig uitloggen, zodat mijn sessie niet actief blijft.
 
+Uitleg:
+Uitloggen verwijdert je sessiecookie. Daarna ben je niet meer geauthenticeerd en kom je terug op het inlogscherm.
+
 Stappen:
 1. Open rechtsboven het alias-menu.
 2. Klik `Log uit`.
@@ -204,6 +207,9 @@ Je ziet beschikbare taken met kerninformatie en acties.
 ## US-9 - Taak openen en context begrijpen
 Als vrijwilliger wil ik een taak kunnen openen met pad/breadcrumb, zodat ik context van parent/subtaken begrijp.
 
+Uitleg:
+Taken hangen in een boomstructuur. Via het pad zie je waar een taak in de vereniging valt en welke subtaken erbij horen.
+
 Stappen:
 1. Klik `Open` bij een taak.
 2. Bekijk taakdetails, pad en subtaken.
@@ -213,6 +219,9 @@ Je kunt door de taakstructuur navigeren.
 
 ## US-10 - Inschrijven op een taak
 Als vrijwilliger wil ik me op een taak inschrijven, zodat ik kan bijdragen.
+
+Uitleg:
+Inschrijven is geen directe toewijzing. Er wordt eerst een voorstel aangemaakt dat door een bevoegde beslisser geaccepteerd of afgewezen wordt.
 
 Stappen:
 1. Open `Openstaande taken`.
@@ -225,6 +234,9 @@ Er wordt een voorstel aangemaakt dat geaccepteerd of afgewezen kan worden.
 ## US-11 - Status van voorstellen volgen
 Als gebruiker wil ik zien wat er met mijn voorstellen gebeurt, zodat ik weet waar ik aan toe ben.
 
+Uitleg:
+In deze lijst zie je zowel taakvoorstellen als aliaswijzigingsvoorstellen die voor jou relevant zijn.
+
 Stappen:
 1. Open menu `☰`.
 2. Kies `Openstaande voorstellen`.
@@ -234,6 +246,9 @@ Je ziet open en afgewezen voorstellen inclusief status en tijd.
 
 ## US-12 - Afgewezen voorstel als gezien markeren
 Als gebruiker wil ik afgewezen voorstellen kunnen sluiten, zodat mijn lijst schoon blijft.
+
+Uitleg:
+Een afgewezen voorstel blijft zichtbaar totdat je het bevestigt met `Gezien`.
 
 Stappen:
 1. Open `Openstaande voorstellen`.
@@ -246,6 +261,9 @@ Melding verdwijnt uit de lijst.
 ## US-13 - Taakabonnement aan/uit
 Als gebruiker wil ik me abonneren op taken, zodat ik updates over nieuwe subtaken ontvang.
 
+Uitleg:
+Met een abonnement ontvang je meldingen over nieuwe subtaken onder die taak. De frequentie bepaal je in je accountinstellingen.
+
 Stappen:
 1. Zoek taak in overzicht.
 2. Klik het notificatie-icoon (aan/uit).
@@ -255,6 +273,9 @@ Abonnement wordt opgeslagen; notificaties volgen je accountinstellingen.
 
 ## US-14 - Subtaak aanmaken
 Als coordinator wil ik een subtaak aanmaken, zodat werk opgesplitst kan worden.
+
+Uitleg:
+Met subtaken verdeel je werk en punten over kleinere, beheersbare onderdelen.
 
 Stappen:
 1. Open een beheerde taak.
@@ -268,6 +289,9 @@ Subtaak staat onder de parent-taak.
 ## US-15 - Subtaak kopieren
 Als coordinator wil ik een bestaande subtaak kopieren, zodat ik sneller vergelijkbare taken kan aanmaken.
 
+Uitleg:
+Kopieren neemt structuur en velden over. Je kunt daarna datum/tijd laten staan of als geheel verschuiven.
+
 Stappen:
 1. Open parent-taak.
 2. Klik `Kopieer` bij een subtaak.
@@ -279,6 +303,9 @@ Er wordt een nieuwe gekopieerde taak(subboom) aangemaakt.
 
 ## US-16 - Taak bewerken
 Als coordinator wil ik taakdetails kunnen wijzigen, zodat planning en inhoud up-to-date blijven.
+
+Uitleg:
+Bewerken is bedoeld voor inhoud, planning en coordinatie-instellingen. Wijzigingen worden vastgelegd in de auditlog.
 
 Stappen:
 1. Open taak.
@@ -292,6 +319,9 @@ Taak is bijgewerkt en auditlog is vastgelegd.
 ## US-17 - Coordinators beheren (organiseren-context)
 Als coordinator-organisator wil ik coordinatoren op een taak beheren, zodat eigenaarschap goed verdeeld blijft.
 
+Uitleg:
+Dit kan alleen in de juiste coordinatiecontext en met voldoende rechten. Anders wordt de wijziging geweigerd.
+
 Stappen:
 1. Open taak > `Bewerk`.
 2. Ga naar tab `Coordinatoren`.
@@ -304,6 +334,9 @@ Coordinatorlijst is aangepast (mits rechten/werkwijze dit toestaan).
 ## US-18 - Subtaakpunten aanpassen vanuit parent
 Als coordinator van een parent-taak wil ik subtaakpunten aanpassen, zodat puntenverdeling klopt.
 
+Uitleg:
+Je kunt punten direct in de parentweergave bijsturen om snel te herverdelen zonder elke subtaak apart te openen.
+
 Stappen:
 1. Open parent-taak.
 2. Wijzig puntenveld bij subtaak.
@@ -314,6 +347,9 @@ Subtaakpunten worden opgeslagen.
 
 ## US-19 - Iemand voorstellen voor een taak
 Als coordinator wil ik iemand voorstellen voor een taak, zodat overdracht mogelijk is.
+
+Uitleg:
+Bij een bestaande actieve alias ontstaat een voorstel. Voor een nieuwe alias kan het systeem de toewijzing direct verwerken.
 
 Stappen:
 1. Open taak.
@@ -327,6 +363,9 @@ Voorstel verschijnt in `Openstaande voorstellen`.
 ## US-20 - Taak beschikbaar stellen (loslaten)
 Als coordinator wil ik een taak beschikbaar stellen, zodat anderen zich kunnen inschrijven.
 
+Uitleg:
+Loslaten haalt de taak uit actieve toewijzing van de huidige coordinator en zet de taak weer open voor inschrijving.
+
 Stappen:
 1. Open toegewezen taak.
 2. Klik `Stel beschikbaar`.
@@ -337,6 +376,9 @@ Taakstatus wordt weer `BESCHIKBAAR`.
 
 ## US-21 - Taak verplaatsen
 Als coordinator wil ik een subtaak naar een andere parent verplaatsen, zodat de structuur logisch blijft.
+
+Uitleg:
+Verplaatsen herstructureert de taakboom. Het systeem bewaakt teamconsistentie, rechten en geldige parent-kind-relaties.
 
 Stappen:
 1. Open taak.
@@ -350,6 +392,9 @@ Taak verhuist; systeem controleert rechten, teamregels en cycles.
 ## US-22 - Taak/subtaak verwijderen
 Als coordinator wil ik taken kunnen verwijderen, zodat verouderde onderdelen verdwijnen.
 
+Uitleg:
+Verwijderen werkt op de hele subboom onder de gekozen taak. Gebruik dit alleen als herstel via bewerken of verplaatsen niet passend is.
+
 Stappen:
 1. Open taak.
 2. Klik `Verwijder`.
@@ -360,6 +405,9 @@ Taak en onderliggende subtaken worden verwijderd.
 
 ## US-23 - Voorstel accepteren
 Als bevoegde beslisser wil ik voorstellen accepteren, zodat taken goed toegewezen worden.
+
+Uitleg:
+Wie mag beslissen hangt af van het type voorstel en de coordinatierelatie op de taak.
 
 Stappen:
 1. Open `Openstaande voorstellen`.
@@ -372,6 +420,9 @@ Taaktoewijzing wordt doorgevoerd.
 ## US-24 - Voorstel afwijzen
 Als bevoegde beslisser wil ik voorstellen afwijzen, zodat onjuiste toewijzingen worden tegengehouden.
 
+Uitleg:
+Afwijzen blokkeert de voorgestelde toewijzing. De indiener ziet daarna dat het voorstel is afgewezen.
+
 Stappen:
 1. Open `Openstaande voorstellen`.
 2. Kies voorstel.
@@ -382,6 +433,9 @@ Voorstelstatus wordt afgewezen.
 
 ## US-26 - Aliaswijziging accepteren
 Als bestuur wil ik aliaswijzigingen kunnen accepteren, zodat legitieme naamwijzigingen doorgezet worden.
+
+Uitleg:
+Alleen bestuur kan aliaswijzigingen definitief doorvoeren.
 
 Stappen:
 1. Open `Openstaande voorstellen`.
@@ -394,6 +448,9 @@ Alias wordt aangepast.
 ## US-27 - Aliaswijziging afwijzen
 Als bestuur wil ik aliaswijzigingen kunnen afwijzen, zodat conflicterende namen niet worden doorgevoerd.
 
+Uitleg:
+Afwijzen houdt de huidige alias in stand en voorkomt naamconflicten of onduidelijkheid.
+
 Stappen:
 1. Open `Openstaande voorstellen`.
 2. Kies aliaswijziging.
@@ -405,6 +462,9 @@ Voorstel krijgt status afgewezen.
 ## US-29 - Realtime wijzigingen terugzien
 Als gebruiker wil ik wijzigingen snel terugzien zonder handmatig refreshen, zodat ik met actuele data werk.
 
+Uitleg:
+De taakpagina kijkt op de achtergrond naar dataveranderingen en ververst waar nodig automatisch.
+
 Stappen:
 1. Laat taakscherm open.
 2. Wacht op wijzigingen door anderen.
@@ -414,6 +474,9 @@ UI ververst automatisch via versie-watch.
 
 ## US-30 - Te weinig punten in parent-taak
 Als coordinator wil ik weten wat er gebeurt bij puntentekort, zodat ik planning kan bijsturen.
+
+Uitleg:
+Een parent-taak heeft een beperkt puntenbudget. Als dat budget op is, kan een nieuwe subtaak geen positieve punten meer krijgen.
 
 Gedrag:
 Nieuwe subtaak wordt aangemaakt met `0` punten.
@@ -425,6 +488,9 @@ Aanpak:
 ## US-31 - Geen rechten op actie
 Als gebruiker wil ik begrijpen waarom een actie niet kan, zodat ik weet wie moet handelen.
 
+Uitleg:
+Rechten worden bepaald op basis van je effectieve coordinatierol in de taakstructuur.
+
 Gedrag:
 Systeem geeft foutmelding zoals `Geen rechten`.
 
@@ -435,11 +501,17 @@ Aanpak:
 ## US-32 - Verplaatsing veroorzaakt cycle
 Als coordinator wil ik beschermd worden tegen ongeldige structuur, zodat de taakboom consistent blijft.
 
+Uitleg:
+Een cycle betekent dat een taak (indirect) onder zichzelf zou komen te hangen. Dat maakt de boom ongeldig.
+
 Gedrag:
 Verplaatsing wordt geweigerd met cycle-fout.
 
 ## US-33 - Organiseren-taak met subtaken
 Als vrijwilliger wil ik weten waarom ik soms niet op een hoofdtaak kan inschrijven.
+
+Uitleg:
+Bij `ORGANISEREN` wordt werk bedoeld verdeeld over subtaken. Daarom schrijf je in op een concrete bladtaak.
 
 Gedrag:
 Bij `ORGANISEREN` en bestaande subtaken kun je alleen op bladtaken inschrijven.
@@ -447,12 +519,18 @@ Bij `ORGANISEREN` en bestaande subtaken kun je alleen op bladtaken inschrijven.
 ## US-34 - Magic link ongeldig of verlopen
 Als gebruiker wil ik snel herstellen van een verlopen link.
 
+Uitleg:
+Magic links zijn tijdelijk geldig en eenmalig bruikbaar. Daarna moet je een nieuwe aanvragen.
+
 Aanpak:
 1. Vraag een nieuwe magic link aan via `Eerste keer` of passende flow.
 2. Gebruik de nieuwste link binnen 20 minuten.
 
 ## US-35 - Conflict met alias of inlogcombinatie
 Als gebruiker wil ik duidelijke feedback bij conflict, zodat ik een alternatief kan kiezen.
+
+Uitleg:
+De app bewaakt uniciteit van aliassen en voorkomt onduidelijke inlogcombinaties.
 
 Voorbeelden:
 - Alias al in gebruik.
@@ -463,6 +541,9 @@ Kies een andere alias en/of een ander wachtwoord.
 
 ## US-36 - Sessieverlies tijdens gebruik
 Als gebruiker wil ik weten wat te doen bij `Niet ingelogd`.
+
+Uitleg:
+Bij verlopen of ontbrekende sessie word je automatisch teruggestuurd naar de loginpagina.
 
 Aanpak:
 1. Log opnieuw in.
