@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { flushDueNotificationDigests } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
 
@@ -17,5 +18,8 @@ export async function getSessionUser() {
   if (!user || !user.isActive) {
     return null;
   }
+  void flushDueNotificationDigests({ userAliases: [alias] }).catch((error) => {
+    console.error("Failed to flush due notification digests", { alias, error });
+  });
   return user;
 }

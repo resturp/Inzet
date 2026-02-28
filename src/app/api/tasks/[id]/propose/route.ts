@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import { canManageTaskByOwnership } from "@/lib/authorization";
 import { addPrecreatedAlias } from "@/lib/precreated-aliases";
+import { notifyTaskProposalDecisionRequired } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { resolveCoordinatorAliasesAfterAccept } from "@/lib/rules";
 
@@ -104,6 +105,21 @@ export async function POST(
       entityId: openTask.id,
       payload: { proposedAlias: proposed.alias }
     });
+
+    try {
+      await notifyTaskProposalDecisionRequired({
+        taskId: task.id,
+        taskTitle: task.title,
+        proposerAlias: openTask.proposerAlias,
+        proposedAlias: openTask.proposedAlias!,
+        actorAlias: sessionUser.alias
+      });
+    } catch (error) {
+      console.error("Failed to notify decision makers for proposal", {
+        openTaskId: openTask.id,
+        error
+      });
+    }
 
     return NextResponse.json({ data: openTask }, { status: 201 });
   }

@@ -29,6 +29,23 @@ enum OpenTaskStatus {
   AFGEWEZEN
 }
 
+enum NotificationCategory {
+  NEW_PROPOSAL
+  PROPOSAL_ACCEPTED
+  TASK_CHANGED_AS_COORDINATOR
+  TASK_BECAME_AVAILABLE_AS_COORDINATOR
+  SUBTASK_CREATED_IN_SUBSCRIPTION
+}
+
+enum NotificationDelivery {
+  OFF
+  IMMEDIATE
+  HOURLY
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 model User {
   alias                   String               @id
   bondsnummer             String
@@ -45,6 +62,11 @@ model User {
   proposerOpenTasks       OpenTask[]           @relation("OpenTaskProposer")
   aliasChangeProposals    AliasChangeProposal[]
   magicLinkTokens         MagicLinkToken[]
+  taskSubscriptions       TaskSubscription[]
+  notificationPreferences NotificationPreference[]
+  notificationEvents      NotificationEvent[]
+
+  @@index([isActive, alias])
 }
 
 model TaskTemplate {
@@ -80,6 +102,10 @@ model Task {
   coordinationType TaskCoordinationType?
   createdAt       DateTime          @default(now())
   openTasks       OpenTask[]
+  subscriptions   TaskSubscription[]
+
+  @@index([parentId])
+  @@index([status, date])
 }
 
 model TaskCoordinator {
@@ -105,6 +131,8 @@ model OpenTask {
   createdAt     DateTime       @default(now())
 
   @@unique([taskId, proposerAlias, proposedAlias, status])
+  @@index([status, createdAt])
+  @@index([proposerAlias, status, createdAt])
 }
 
 model AliasChangeProposal {
@@ -118,6 +146,45 @@ model AliasChangeProposal {
 
   @@unique([requesterAlias, status])
   @@index([status, createdAt])
+  @@index([requestedAlias, status])
+}
+
+model TaskSubscription {
+  id        String   @id @default(cuid())
+  taskId    String
+  userAlias String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user      User     @relation(fields: [userAlias], references: [alias], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([taskId, userAlias])
+  @@index([userAlias])
+}
+
+model NotificationPreference {
+  userAlias       String
+  category        NotificationCategory
+  delivery        NotificationDelivery @default(OFF)
+  lastDigestSentAt DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  user            User                 @relation(fields: [userAlias], references: [alias], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([userAlias, category])
+  @@index([category, delivery])
+}
+
+model NotificationEvent {
+  id         String               @id @default(cuid())
+  userAlias  String
+  category   NotificationCategory
+  subject    String
+  body       String
+  createdAt  DateTime             @default(now())
+  deliveredAt DateTime?
+  user       User                 @relation(fields: [userAlias], references: [alias], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userAlias, category, deliveredAt, createdAt])
 }
 
 model AuditLog {
@@ -142,4 +209,5 @@ model MagicLinkToken {
   createdAt DateTime  @default(now())
 
   @@index([email, bondsnummer])
+  @@index([tokenHash, usedAt, expiresAt, createdAt])
 }

@@ -7,6 +7,13 @@ type SendMailInput = {
   text: string;
 };
 
+function shouldSendMail(): boolean {
+  if (process.env.NODE_ENV === "production") {
+    return true;
+  }
+  return process.env.SENDMAIL_IN_DEV?.trim().toLowerCase() === "true";
+}
+
 function sanitizeHeaderValue(value: string): string {
   return value.replace(/[\r\n]+/g, " ").trim();
 }
@@ -20,6 +27,10 @@ function extractAddress(value: string): string | null {
 }
 
 export async function sendMail({ to, subject, text }: SendMailInput): Promise<void> {
+  if (!shouldSendMail()) {
+    return;
+  }
+
   const from = sanitizeHeaderValue(
     process.env.MAIL_FROM?.trim() || "Inzet VC Zwolle <noreply@vczwolle.frii.nl>"
   );

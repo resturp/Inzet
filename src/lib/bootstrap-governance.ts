@@ -91,50 +91,5 @@ export async function ensureGovernanceBootstrap(loginAlias: string) {
     }
   }
 
-  const template =
-    (await prisma.taskTemplate.findFirst({
-      where: { title: "Top level Sjabloon", parentTemplateId: null }
-    })) ??
-    (await prisma.taskTemplate.create({
-      data: {
-        title: "Top level Sjabloon",
-        description: "Root sjabloon voor verenigingstaken"
-      }
-    }));
-
-  const teamTemplate =
-    (await prisma.taskTemplate.findFirst({
-      where: { title: "Coachen team", parentTemplateId: template.id }
-    })) ??
-    (await prisma.taskTemplate.create({
-      data: {
-        title: "Coachen team",
-        description: "Sjabloon voor taken rond coaching van een team.",
-        parentTemplateId: template.id,
-        defaultPoints: 100
-      }
-    }));
-
-  const defaultTeamSubtemplates = [
-    { title: "Teamfoto maken", description: "Maak en verstuur de teamfoto.", defaultPoints: 30 },
-    { title: "Rijden", description: "Regel en/of uitvoer van vervoer.", defaultPoints: 20 },
-    { title: "Wassen", description: "Wasschema beheren en uitvoeren.", defaultPoints: 15 }
-  ];
-  for (const subtemplate of defaultTeamSubtemplates) {
-    const exists = await prisma.taskTemplate.findFirst({
-      where: { title: subtemplate.title, parentTemplateId: teamTemplate.id }
-    });
-    if (!exists) {
-      await prisma.taskTemplate.create({
-        data: {
-          title: subtemplate.title,
-          description: subtemplate.description,
-          defaultPoints: subtemplate.defaultPoints,
-          parentTemplateId: teamTemplate.id
-        }
-      });
-    }
-  }
-
   await normalizeInheritedOwners();
 }

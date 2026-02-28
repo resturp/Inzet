@@ -21,6 +21,10 @@ import {
   remainingOwnPoints,
   sumStoredPoints
 } from "@/lib/task-points";
+import {
+  notifySubtasksCreatedForSubscriptions,
+  notifyTaskBecameAvailableForEffectiveCoordinators
+} from "@/lib/notifications";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(2),
@@ -33,7 +37,6 @@ const createTaskSchema = z.object({
   startTime: z.string().datetime().optional(),
   endTime: z.string().datetime(),
   location: z.string().trim().optional(),
-  templateId: z.string().trim().optional(),
   coordinationType: z.enum(["DELEGEREN", "ORGANISEREN"]).nullable().optional()
 });
 
@@ -67,6 +70,10 @@ export async function GET() {
       },
       ownCoordinators: {
         select: { userAlias: true }
+      },
+      subscriptions: {
+        where: { userAlias: sessionUser.alias },
+        select: { id: true }
       },
       points: true,
       date: true,
@@ -116,6 +123,7 @@ export async function GET() {
       coordinationType: effectiveCoordinationType,
       ownCoordinationType: task.coordinationType,
       ownCoordinatorAliases,
+      isSubscribed: task.subscriptions.length > 0,
       coordinatorAliases,
       coordinatorAlias: primaryCoordinatorAlias(coordinatorAliases),
       canRead,
@@ -251,7 +259,6 @@ export async function POST(request: Request) {
         startTime: parsed.data.startTime ? new Date(parsed.data.startTime) : null,
         endTime: new Date(parsed.data.endTime),
         location,
-        templateId: parsed.data.templateId,
         status: TaskStatus.BESCHIKBAAR,
         coordinationType
       }
@@ -265,6 +272,22 @@ export async function POST(request: Request) {
     entityId: task.id,
     payload: { parentId: task.parentId, ownCoordinatorAliases, coordinationType }
   });
+
+  try {
+    await Promise.all([
+      notifyTaskBecameAvailableForEffectiveCoordinators({
+        taskId: task.id,
+        taskTitle: task.title,
+        actorAlias: sessionUser.alias
+      }),
+      notifySubtasksCreatedForSubscriptions({
+        actorAlias: sessionUser.alias,
+        createdTasks: [{ id: task.id, title: task.title, parentId: task.parentId }]
+      })
+    ]);
+  } catch (error) {
+    console.error("Failed to send task creation notifications", { taskId: task.id, error });
+  }
 
   return NextResponse.json({ data: task }, { status: 201 });
 }

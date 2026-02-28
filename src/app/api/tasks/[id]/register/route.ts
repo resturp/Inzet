@@ -2,8 +2,76 @@ import { TaskStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
-import { canOpenTaskByOwnership, resolveEffectiveCoordinationType } from "@/lib/authorization";
+import {
+  hasTaskPermissionFromMap,
+  resolveEffectiveCoordinatorAliasesFromMap,
+  resolveEffectiveCoordinationTypeFromMap
+} from "@/lib/authorization";
+import { notifyTaskProposalDecisionRequired } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+
+type AccessTaskNode = {
+  id: string;
+  parentId: string | null;
+  coordinationType: "DELEGEREN" | "ORGANISEREN" | null;
+  ownCoordinatorAliases: string[];
+};
+
+type AccessTaskRow = {
+  id: string;
+  parentId: string | null;
+  coordinationType: "DELEGEREN" | "ORGANISEREN" | null;
+  ownCoordinators: Array<{ userAlias: string }>;
+} | null;
+
+function uniqueSortedAliases(aliases: Iterable<string>): string[] {
+  return Array.from(new Set(Array.from(aliases).filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right, "nl-NL")
+  );
+}
+
+async function buildAccessPathMap(taskId: string): Promise<Map<string, AccessTaskNode>> {
+  const byId = new Map<string, AccessTaskNode>();
+  const visited = new Set<string>();
+  let currentId: string | null = taskId;
+
+  while (currentId) {
+    if (visited.has(currentId)) {
+      break;
+    }
+    visited.add(currentId);
+
+    const row: AccessTaskRow = await prisma.task.findUnique({
+      where: { id: currentId },
+      select: {
+        id: true,
+        parentId: true,
+        coordinationType: true,
+        ownCoordinators: {
+          select: { userAlias: true }
+        }
+      }
+    });
+
+    if (!row) {
+      break;
+    }
+
+    byId.set(row.id, {
+      id: row.id,
+      parentId: row.parentId,
+      coordinationType:
+        row.coordinationType === "DELEGEREN" || row.coordinationType === "ORGANISEREN"
+          ? row.coordinationType
+          : null,
+      ownCoordinatorAliases: uniqueSortedAliases(row.ownCoordinators.map((item) => item.userAlias))
+    });
+
+    currentId = row.parentId;
+  }
+
+  return byId;
+}
 
 export async function POST(
   _request: Request,
@@ -19,6 +87,7 @@ export async function POST(
     where: { id },
     select: {
       id: true,
+      title: true,
       status: true
     }
   });
@@ -26,14 +95,16 @@ export async function POST(
   if (!task) {
     return NextResponse.json({ error: "Taak niet gevonden" }, { status: 404 });
   }
-  const canOpen = await canOpenTaskByOwnership(sessionUser.alias, task.id);
+  const accessPathMap = await buildAccessPathMap(task.id);
+  const canOpen = hasTaskPermissionFromMap(sessionUser.alias, task.id, "OPEN", accessPathMap);
   if (!canOpen) {
     return NextResponse.json({ error: "Geen recht om deze taak te openen" }, { status: 403 });
   }
   if (task.status !== TaskStatus.BESCHIKBAAR) {
     return NextResponse.json({ error: "Taak is niet beschikbaar voor inschrijving" }, { status: 409 });
   }
-  const effectiveCoordinationType = await resolveEffectiveCoordinationType(task.id);
+  const effectiveCoordinationType = resolveEffectiveCoordinationTypeFromMap(task.id, accessPathMap);
+  const effectiveCoordinatorAliases = resolveEffectiveCoordinatorAliasesFromMap(task.id, accessPathMap);
   if (effectiveCoordinationType === "ORGANISEREN") {
     const firstChild = await prisma.task.findFirst({
       where: { parentId: task.id },
@@ -65,6 +136,20 @@ export async function POST(
     actionType: "TASK_REGISTERED",
     entityType: "OpenTask",
     entityId: openTask.id
+  });
+
+  void notifyTaskProposalDecisionRequired({
+    taskId: openTask.taskId,
+    taskTitle: task.title ?? openTask.taskId,
+    proposerAlias: openTask.proposerAlias,
+    proposedAlias: openTask.proposedAlias ?? openTask.proposerAlias,
+    effectiveCoordinatorAliases,
+    actorAlias: sessionUser.alias
+  }).catch((error) => {
+    console.error("Failed to notify decision makers for registration proposal", {
+      openTaskId: openTask.id,
+      error
+    });
   });
 
   return NextResponse.json({ data: openTask }, { status: 201 });

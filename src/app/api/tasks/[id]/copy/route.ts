@@ -4,6 +4,10 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import { canManageTaskByOwnership } from "@/lib/authorization";
+import {
+  notifySubtasksCreatedForSubscriptions,
+  notifyTaskBecameAvailableForEffectiveCoordinators
+} from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import {
   sanitizeNullableText,
@@ -62,7 +66,13 @@ type TaskNode = {
   startTime: Date | null;
   endTime: Date;
   location: string | null;
-  templateId: string | null;
+  status: TaskStatus;
+};
+
+type CreatedTaskSummary = {
+  id: string;
+  title: string;
+  parentId: string | null;
   status: TaskStatus;
 };
 
@@ -225,7 +235,6 @@ export async function POST(
             startTime: true,
             endTime: true,
             location: true,
-            templateId: true,
             status: true
           }
         }),
@@ -271,7 +280,6 @@ export async function POST(
             startTime: true,
             endTime: true,
             location: true,
-            templateId: true,
             status: true
           }
         });
@@ -305,7 +313,7 @@ export async function POST(
       const dateTimeHandling: DateTimeHandling = parsed.data.dateTimeHandling ?? {
         mode: "KEEP"
       };
-      const createdIds: string[] = [];
+      const createdTasks: CreatedTaskSummary[] = [];
       const requestedRootPoints =
         override?.points !== undefined ? override.points : parseStoredPoints(sourceTask.points);
       const rootDirectChildren = childrenByParent.get(sourceTask.id) ?? [];
@@ -366,11 +374,15 @@ export async function POST(
             override?.location === undefined
               ? (sanitizeNullableTrimmedText(sourceTask.location) ?? null)
               : override.location,
-          templateId: sourceTask.templateId,
           status: sourceTask.status
         }
       });
-      createdIds.push(rootCopy.id);
+      createdTasks.push({
+        id: rootCopy.id,
+        title: rootCopy.title,
+        parentId: rootCopy.parentId,
+        status: rootCopy.status
+      });
 
       async function cloneChildren(oldParentId: string, newParentId: string): Promise<void> {
         const children = childrenByParent.get(oldParentId) ?? [];
@@ -395,11 +407,15 @@ export async function POST(
               startTime: childDates.startTime,
               endTime: childDates.endTime,
               location: sanitizeNullableTrimmedText(child.location) ?? null,
-              templateId: child.templateId,
               status: child.status
             }
           });
-          createdIds.push(createdChild.id);
+          createdTasks.push({
+            id: createdChild.id,
+            title: createdChild.title,
+            parentId: createdChild.parentId,
+            status: createdChild.status
+          });
           await cloneChildren(child.id, createdChild.id);
         }
       }
@@ -408,8 +424,9 @@ export async function POST(
 
       return {
         rootId: rootCopy.id,
-        createdCount: createdIds.length,
-        pointsZeroed: shouldZeroSubtree
+        createdCount: createdTasks.length,
+        pointsZeroed: shouldZeroSubtree,
+        createdTasks
       };
     });
 
@@ -426,7 +443,45 @@ export async function POST(
       }
     });
 
-    return NextResponse.json({ data: result }, { status: 201 });
+    try {
+      await notifySubtasksCreatedForSubscriptions({
+        actorAlias: sessionUser.alias,
+        createdTasks: result.createdTasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          parentId: task.parentId
+        }))
+      });
+
+      const availableTasks = result.createdTasks.filter(
+        (task) => task.status === TaskStatus.BESCHIKBAAR
+      );
+      await Promise.all(
+        availableTasks.map((task) =>
+          notifyTaskBecameAvailableForEffectiveCoordinators({
+            taskId: task.id,
+            taskTitle: task.title,
+            actorAlias: sessionUser.alias
+          })
+        )
+      );
+    } catch (error) {
+      console.error("Failed to send notifications for copied task subtree", {
+        sourceTaskId,
+        error
+      });
+    }
+
+    return NextResponse.json(
+      {
+        data: {
+          rootId: result.rootId,
+          createdCount: result.createdCount,
+          pointsZeroed: result.pointsZeroed
+        }
+      },
+      { status: 201 }
+    );
   } catch (error) {
     if (error instanceof Error && error.message === "SOURCE_NOT_FOUND") {
       return NextResponse.json({ error: "Bron-taak niet gevonden" }, { status: 404 });

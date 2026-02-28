@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
+import { resolveBestuurAliases } from "@/lib/authorization";
+import { notifyAliasChangeDecisionRequired } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
 const ALIAS_PATTERN = /^[a-zA-Z0-9_-]{3,32}$/;
@@ -116,6 +118,21 @@ export async function POST(request: Request) {
       requestedAlias: proposal.requestedAlias
     }
   });
+
+  try {
+    const bestuurAliases = await resolveBestuurAliases();
+    await notifyAliasChangeDecisionRequired({
+      requesterAlias: proposal.requesterAlias,
+      requestedAlias: proposal.requestedAlias,
+      decisionAliases: bestuurAliases,
+      actorAlias: sessionUser.alias
+    });
+  } catch (error) {
+    console.error("Failed to notify bestuur about alias proposal", {
+      proposalId: proposal.id,
+      error
+    });
+  }
 
   return NextResponse.json(
     {

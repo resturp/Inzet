@@ -6,7 +6,7 @@ Fase 1 bootstrap van de MVP op basis van:
 
 ## Wat staat er nu
 - Next.js App Router skeleton (TypeScript).
-- Prisma schema met kernentiteiten (`User`, `Task`, `OpenTask`, `TaskTemplate`, `AuditLog`, `MagicLinkToken`).
+- Prisma schema met kernentiteiten (`User`, `Task`, `OpenTask`, `AuditLog`, `MagicLinkToken`).
 - API-routes voor:
   - magic link request/verify
   - taken aanmaken/bewerken
@@ -14,7 +14,7 @@ Fase 1 bootstrap van de MVP op basis van:
   - accept/reject van open tasks
   - leden sync (bestuur)
   - taakrapportage
-- Seed script voor root data (`Bestuur`, `Besturen vereniging`, `Top level Sjabloon`).
+- Seed script voor root data (`Bestuur`, `Besturen vereniging`).
 
 ## Lokale start
 1. Maak `.env` op basis van `.env.example`.
@@ -36,6 +36,7 @@ Fase 1 bootstrap van de MVP op basis van:
   - `MAIL_ENVELOPE_FROM` (bijv. `noreply@vczwolle.frii.nl`)
   - `MAIL_MESSAGE_ID_DOMAIN` (bijv. `vczwolle.frii.nl`)
   - `SENDMAIL_PATH` (standaard `/usr/sbin/sendmail`)
+  - `SENDMAIL_IN_DEV` (`true` om in development toch echt e-mail te versturen; standaard `false`)
 - Op de server moet een MTA aanwezig zijn die `sendmail -t -i` ondersteunt (bijv. Postfix).
 
 ## Docker Compose

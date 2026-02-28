@@ -117,7 +117,11 @@ export default function LoginPage() {
         if (!isCancelled) {
           setCreateEmail(payload.data.email);
           setCreateBondsnummer(payload.data.bondsnummer);
-          setClaimableAliases(payload.data.claimableAliases);
+          setClaimableAliases(
+            [...payload.data.claimableAliases].sort((left, right) =>
+              left.localeCompare(right, "nl-NL", { sensitivity: "base" })
+            )
+          );
           setSelectedAlias("");
           setStatus("Kies een bestaande alias of verzin een nieuwe alias.");
         }

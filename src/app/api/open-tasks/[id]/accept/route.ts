@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import { isBestuurAlias, resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
+import { notifyProposalAccepted } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { canActorDecideProposal, resolveCoordinatorAliasesAfterAccept } from "@/lib/rules";
 
@@ -14,12 +15,22 @@ export async function POST(
   if (!sessionUser) {
     return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
   }
-  const sessionIsBestuur = await isBestuurAlias(sessionUser.alias);
 
   const { id } = await context.params;
   const openTask = await prisma.openTask.findUnique({
     where: { id },
-    include: { task: true }
+    select: {
+      id: true,
+      taskId: true,
+      proposerAlias: true,
+      proposedAlias: true,
+      status: true,
+      task: {
+        select: {
+          title: true
+        }
+      }
+    }
   });
   if (!openTask) {
     const aliasChangeProposal = await prisma.aliasChangeProposal.findUnique({
@@ -28,6 +39,7 @@ export async function POST(
     if (!aliasChangeProposal || aliasChangeProposal.status !== OpenTaskStatus.OPEN) {
       return NextResponse.json({ error: "Open voorstel niet gevonden" }, { status: 404 });
     }
+    const sessionIsBestuur = await isBestuurAlias(sessionUser.alias);
     if (!sessionIsBestuur) {
       return NextResponse.json(
         { error: "Alleen bestuur mag aliaswijzigingen accepteren" },
@@ -64,6 +76,17 @@ export async function POST(
       }
     });
 
+    void notifyProposalAccepted({
+      recipientAlias: aliasChangeProposal.requestedAlias,
+      actorAlias: sessionUser.alias,
+      taskTitle: "Aliaswijziging"
+    }).catch((error) => {
+      console.error("Failed to notify accepted alias change proposal", {
+        proposalId: aliasChangeProposal.id,
+        error
+      });
+    });
+
     return NextResponse.json({ message: "Aliaswijziging geaccepteerd" }, { status: 200 });
   }
 
@@ -78,13 +101,21 @@ export async function POST(
   }
   const proposedAlias = openTask.proposedAlias;
 
-  const effectiveCoordinatorAliases = await resolveEffectiveCoordinatorAliases(openTask.taskId);
-  const allowed = canActorDecideProposal({
-    proposerAlias: openTask.proposerAlias,
-    proposedAlias: openTask.proposedAlias,
-    actorAlias: sessionUser.alias,
-    effectiveCoordinatorAliases
-  });
+  let allowed = false;
+  if (
+    openTask.proposedAlias === sessionUser.alias &&
+    openTask.proposerAlias !== openTask.proposedAlias
+  ) {
+    allowed = true;
+  } else {
+    const effectiveCoordinatorAliases = await resolveEffectiveCoordinatorAliases(openTask.taskId);
+    allowed = canActorDecideProposal({
+      proposerAlias: openTask.proposerAlias,
+      proposedAlias: openTask.proposedAlias,
+      actorAlias: sessionUser.alias,
+      effectiveCoordinatorAliases
+    });
+  }
 
   if (!allowed) {
     return NextResponse.json({ error: "Geen rechten om voorstel te accepteren" }, { status: 403 });
@@ -134,6 +165,14 @@ export async function POST(
       newCoordinator: proposedAlias,
       effectiveCoordinatorAliasesAfter: desiredEffectiveCoordinatorAliases
     }
+  });
+
+  void notifyProposalAccepted({
+    recipientAlias: openTask.proposerAlias,
+    actorAlias: sessionUser.alias,
+    taskTitle: openTask.task.title
+  }).catch((error) => {
+    console.error("Failed to notify accepted task proposal", { openTaskId: openTask.id, error });
   });
 
   return NextResponse.json({ message: "Voorstel geaccepteerd" }, { status: 200 });

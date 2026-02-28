@@ -3,6 +3,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import { canEditTaskCoordinatorsByOrganization, canManageTaskByOwnership } from "@/lib/authorization";
+import { notifyTaskChangedForEffectiveCoordinators } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { sanitizeNullableText, sanitizeNullableTrimmedText, sanitizeTrimmedText } from "@/lib/sanitize";
 import { pointsToStorage } from "@/lib/task-points";
@@ -200,6 +201,50 @@ export async function PATCH(
           }
         : undefined
   });
+
+  const changedParts: string[] = [];
+  if (parsed.data.title !== undefined || parsed.data.description !== undefined) {
+    changedParts.push("titel/beschrijving");
+  }
+  if (parsed.data.longDescription !== undefined) {
+    changedParts.push("lange beschrijving");
+  }
+  if (parsed.data.teamName !== undefined) {
+    changedParts.push("team");
+  }
+  if (parsed.data.coordinationType !== undefined || parsed.data.coordinatorAliases !== undefined) {
+    changedParts.push("coordinatoren/werkwijze");
+  }
+  if (parsed.data.points !== undefined) {
+    changedParts.push("punten");
+  }
+  if (
+    parsed.data.date !== undefined ||
+    parsed.data.startTime !== undefined ||
+    parsed.data.endTime !== undefined
+  ) {
+    changedParts.push("planning");
+  }
+  if (parsed.data.location !== undefined) {
+    changedParts.push("locatie");
+  }
+
+  try {
+    await notifyTaskChangedForEffectiveCoordinators({
+      taskId: updatedTask.id,
+      taskTitle: updatedTask.title,
+      actorAlias: sessionUser.alias,
+      summary:
+        changedParts.length > 0
+          ? `Aangepast: ${Array.from(new Set(changedParts)).join(", ")}.`
+          : undefined
+    });
+  } catch (error) {
+    console.error("Failed to notify task coordinators about changes", {
+      taskId: updatedTask.id,
+      error
+    });
+  }
 
   return NextResponse.json({ data: updatedTask }, { status: 200 });
 }

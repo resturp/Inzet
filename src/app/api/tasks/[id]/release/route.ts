@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import { canManageTaskByOwnership, resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
+import { notifyTaskBecameAvailableForEffectiveCoordinators } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { resolveOwnCoordinatorAliasesAfterRelease } from "@/lib/rules";
 
@@ -77,6 +78,16 @@ export async function POST(
       ownCoordinatorAliasesAfter: nextOwnCoordinatorAliases
     }
   });
+
+  try {
+    await notifyTaskBecameAvailableForEffectiveCoordinators({
+      taskId: task.id,
+      taskTitle: task.title,
+      actorAlias: sessionUser.alias
+    });
+  } catch (error) {
+    console.error("Failed to notify task availability", { taskId: task.id, error });
+  }
 
   return NextResponse.json({ data: updated }, { status: 200 });
 }

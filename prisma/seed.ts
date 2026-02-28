@@ -8,7 +8,7 @@ const IMPORT_TIME_ZONE = "Europe/Amsterdam";
 
 type CsvUser = {
   alias: string;
-  bondsnummer: string;
+  bondsnummer: string | null;
   password: string | null;
   email: string | null;
 };
@@ -88,17 +88,6 @@ async function readCsvFromFirstExisting(paths: string[]): Promise<string> {
   return "";
 }
 
-async function readRelatiecodesFromCsv(): Promise<string[]> {
-  const raw = await readCsvFromFirstExisting([
-    path.join(process.cwd(), "data", "relatiecodes.csv"),
-    path.join(process.cwd(), "data", "relationcodes.csv")
-  ]);
-  const rows = parseCsvRows(raw);
-  return rows
-    .map((row) => (row[0] ?? "").trim())
-    .filter((value) => value.length > 1);
-}
-
 function normalizeAlias(value: string): string {
   return value.trim();
 }
@@ -115,6 +104,10 @@ function toSafeIdFragment(value: string): string {
 
 function generatedBondsnummer(alias: string, index: number): string {
   return `CSV-${toSafeIdFragment(alias)}-${String(index + 1).padStart(3, "0")}`;
+}
+
+function pendingBondsnummer(alias: string, index: number): string {
+  return `PENDING-${toSafeIdFragment(alias)}-${String(index + 1).padStart(3, "0")}`;
 }
 
 function dateTimePartsInTimeZone(
@@ -225,7 +218,6 @@ async function seedUsersFromCsv(): Promise<Map<string, CsvUser>> {
     path.join(process.cwd(), "data", "user.csv"),
     path.join(process.cwd(), "data", "users.csv")
   ]);
-  const relatiecodes = await readRelatiecodesFromCsv();
 
   const rows = parseCsvRows(raw);
   const usersByAlias = new Map<string, CsvUser>();
@@ -237,7 +229,8 @@ async function seedUsersFromCsv(): Promise<Map<string, CsvUser>> {
     const password = passwordRaw.length > 0 ? passwordRaw : null;
     const emailRaw = (row[2] ?? "").trim().toLowerCase();
     const email = emailRaw.length > 0 ? emailRaw : null;
-    const bondsnummer = relatiecodes[index] ?? generatedBondsnummer(alias, index);
+    const bondsnummerRaw = (row[3] ?? "").trim().toUpperCase();
+    const bondsnummer = bondsnummerRaw.length > 0 ? bondsnummerRaw : null;
 
     if (!alias) {
       continue;
@@ -264,19 +257,35 @@ async function seedUsersFromCsv(): Promise<Map<string, CsvUser>> {
       continue;
     }
 
-    const passwordHash = user.password ? await hashPassword(user.password) : null;
-    await prisma.user.upsert({
+    const existing = await prisma.user.findUnique({
       where: { alias },
-      update: {
-        isActive: true,
-        bondsnummer: user.bondsnummer,
-        passwordHash,
-        email: user.email,
-        emailVerifiedAt: user.email && user.password ? new Date() : null
-      },
-      create: {
+      select: { bondsnummer: true, email: true, passwordHash: true }
+    });
+    const passwordHash = user.password ? await hashPassword(user.password) : null;
+
+    const hasClaimedCredentials = Boolean(existing?.email || existing?.passwordHash);
+    const bondsnummerForSeed =
+      user.bondsnummer ??
+      (hasClaimedCredentials ? existing?.bondsnummer ?? pendingBondsnummer(alias, index) : pendingBondsnummer(alias, index));
+
+    if (existing) {
+      await prisma.user.update({
+        where: { alias },
+        data: {
+          isActive: true,
+          bondsnummer: bondsnummerForSeed,
+          passwordHash,
+          email: user.email,
+          emailVerifiedAt: user.email && user.password ? new Date() : null
+        }
+      });
+      continue;
+    }
+
+    await prisma.user.create({
+      data: {
         alias,
-        bondsnummer: user.bondsnummer,
+        bondsnummer: bondsnummerForSeed,
         role: UserRole.LID,
         isActive: true,
         passwordHash,
@@ -300,14 +309,14 @@ async function ensureUserExists(alias: string, indexHint: number): Promise<void>
   await prisma.user.create({
     data: {
       alias,
-      bondsnummer: generatedBondsnummer(alias, indexHint),
+      bondsnummer: pendingBondsnummer(alias, indexHint),
       role: UserRole.LID,
       isActive: true
     }
   });
 }
 
-async function seedTasksFromCsv(rootTemplateId: string | null): Promise<void> {
+async function seedTasksFromCsv(): Promise<void> {
   const taskRaw = await readCsvFromFirstExisting([
     path.join(process.cwd(), "data", "task.csv"),
     path.join(process.cwd(), "data", "tasks.csv")
@@ -461,7 +470,6 @@ async function seedTasksFromCsv(rootTemplateId: string | null): Promise<void> {
           date: startTime,
           startTime,
           endTime,
-          templateId: node.title === rootTitle ? rootTemplateId : null,
           coordinationType: node.title === rootTitle ? TaskCoordinationType.ORGANISEREN : null,
           status:
             node.coordinatorAliases.size > 0 ? TaskStatus.TOEGEWEZEN : TaskStatus.BESCHIKBAAR
@@ -528,55 +536,6 @@ async function seedTasksFromCsv(rootTemplateId: string | null): Promise<void> {
   });
 }
 
-async function ensureTemplates() {
-  const topTemplate =
-    (await prisma.taskTemplate.findFirst({
-      where: { title: "Top level Sjabloon", parentTemplateId: null }
-    })) ??
-    (await prisma.taskTemplate.create({
-      data: {
-        title: "Top level Sjabloon",
-        description: "Root sjabloon voor verenigingstaken"
-      }
-    }));
-
-  const teamTemplate =
-    (await prisma.taskTemplate.findFirst({
-      where: { title: "Coachen team", parentTemplateId: topTemplate.id }
-    })) ??
-    (await prisma.taskTemplate.create({
-      data: {
-        title: "Coachen team",
-        description: "Sjabloon voor taken rond coaching van een team.",
-        parentTemplateId: topTemplate.id,
-        defaultPoints: 100
-      }
-    }));
-
-  const defaultTeamSubtemplates = [
-    { title: "Teamfoto maken", description: "Maak en verstuur de teamfoto.", defaultPoints: 30 },
-    { title: "Rijden", description: "Regel en/of uitvoer van vervoer.", defaultPoints: 20 },
-    { title: "Wassen", description: "Wasschema beheren en uitvoeren.", defaultPoints: 15 }
-  ];
-  for (const subtemplate of defaultTeamSubtemplates) {
-    const exists = await prisma.taskTemplate.findFirst({
-      where: { title: subtemplate.title, parentTemplateId: teamTemplate.id }
-    });
-    if (!exists) {
-      await prisma.taskTemplate.create({
-        data: {
-          title: subtemplate.title,
-          description: subtemplate.description,
-          defaultPoints: subtemplate.defaultPoints,
-          parentTemplateId: teamTemplate.id
-        }
-      });
-    }
-  }
-
-  return topTemplate.id;
-}
-
 async function main() {
   await prisma.magicLinkToken.deleteMany();
   await prisma.openTask.deleteMany();
@@ -585,8 +544,7 @@ async function main() {
   await prisma.user.deleteMany();
 
   await seedUsersFromCsv();
-  const rootTemplateId = await ensureTemplates();
-  await seedTasksFromCsv(rootTemplateId);
+  await seedTasksFromCsv();
 }
 
 main()

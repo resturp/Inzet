@@ -28,6 +28,7 @@ type ApiTask = {
   canOpen: boolean;
   canManage: boolean;
   canEditCoordinators: boolean;
+  isSubscribed: boolean;
 };
 
 type DraftCoordinationChoice = "INHERIT" | "DELEGEREN" | "ORGANISEREN";
@@ -38,6 +39,8 @@ type ApiOpenTask = {
   taskId: string | null;
   taskTitle: string;
   teamName: string | null;
+  taskDate: string | null;
+  taskStartTime: string | null;
   proposerAlias: string;
   proposedAlias: string | null;
   currentAlias: string | null;
@@ -51,14 +54,6 @@ type ApiUser = {
   alias: string;
 };
 
-type ApiTemplate = {
-  id: string;
-  title: string;
-  description: string;
-  parentTemplateId: string | null;
-  defaultPoints: number | null;
-};
-
 type ApiAccount = {
   alias: string;
   bondsnummer: string;
@@ -66,7 +61,19 @@ type ApiAccount = {
   isBestuur: boolean;
   aboutMe: string | null;
   profilePhotoData: string | null;
+  notificationSettings: NotificationSettings;
 };
+
+type NotificationCategory =
+  | "NEW_PROPOSAL"
+  | "PROPOSAL_ACCEPTED"
+  | "TASK_CHANGED_AS_COORDINATOR"
+  | "TASK_BECAME_AVAILABLE_AS_COORDINATOR"
+  | "SUBTASK_CREATED_IN_SUBSCRIPTION";
+
+type NotificationDelivery = "OFF" | "IMMEDIATE" | "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY";
+
+type NotificationSettings = Record<NotificationCategory, NotificationDelivery>;
 
 type DraftSubtask = {
   title: string;
@@ -81,7 +88,7 @@ type DraftSubtask = {
 };
 
 type TaskStatusFilter = "BESCHIKBAAR" | "TOEGEWEZEN";
-type TaskMenuView = TaskStatusFilter | "OPEN_VOORSTELLEN" | "SJABLONEN";
+type TaskMenuView = TaskStatusFilter | "OPEN_VOORSTELLEN";
 
 type TaskEditDraft = {
   title: string;
@@ -98,6 +105,7 @@ type TaskEditDraft = {
 };
 
 type EditTaskTab = "LONG_DESCRIPTION" | "COORDINATORS" | "DATE_TIME";
+type AccountSettingsTab = "WACHTWOORD" | "NOTIFICATIES" | "ALIAS";
 
 type ReleaseDialogTask = {
   id: string;
@@ -127,6 +135,7 @@ type AccountSettingsDraft = {
   currentPassword: string;
   newPassword: string;
   newPasswordConfirm: string;
+  notificationSettings: NotificationSettings;
 };
 
 type ProfileDraft = {
@@ -158,6 +167,8 @@ const ICON_ADD = "+";
 const ICON_BACK = "↩";
 const ICON_ACCEPT = "✓";
 const ICON_REJECT = "✕";
+const ICON_SAVE = "💾";
+const ICON_CARET_DOWN = "▾";
 const VCZ_LOGO_URL =
   "https://usercontent.one/wp/www.vczwolle.nl/wp-content/uploads/Logo-nieuw-V1-VCZ.png?media=1660898964";
 const MAX_PROFILE_FILE_BYTES = 2 * 1024 * 1024;
@@ -191,6 +202,49 @@ const COPY_SHIFT_UNITS: Array<{ value: CopyDateShiftUnit; label: string }> = [
   { value: "weeks", label: "weken" },
   { value: "months", label: "maanden" },
   { value: "years", label: "jaren" }
+];
+
+const NOTIFICATION_CATEGORY_ORDER: NotificationCategory[] = [
+  "NEW_PROPOSAL",
+  "PROPOSAL_ACCEPTED",
+  "TASK_CHANGED_AS_COORDINATOR",
+  "TASK_BECAME_AVAILABLE_AS_COORDINATOR",
+  "SUBTASK_CREATED_IN_SUBSCRIPTION"
+];
+
+const NOTIFICATION_CATEGORY_META: Record<
+  NotificationCategory,
+  { label: string; description: string }
+> = {
+  NEW_PROPOSAL: {
+    label: "Nieuwe voorstellen",
+    description: "Voorstellen waarop jij moet accepteren of afwijzen."
+  },
+  PROPOSAL_ACCEPTED: {
+    label: "Akkoord op jouw voorstel",
+    description: "Als een voorstel van jou geaccepteerd is."
+  },
+  TASK_CHANGED_AS_COORDINATOR: {
+    label: "Wijzigingen op coordinatietaken",
+    description: "Wanneer anderen taken wijzigen waar jij coordinator van bent."
+  },
+  TASK_BECAME_AVAILABLE_AS_COORDINATOR: {
+    label: "Beschikbaar gesteld voor jou",
+    description: "Taken die beschikbaar worden waarbij jij effectief coordinator bent."
+  },
+  SUBTASK_CREATED_IN_SUBSCRIPTION: {
+    label: "Nieuwe subtaken op abonnementen",
+    description: "Nieuwe (sub)subtaken onder taken waarop je geabonneerd bent."
+  }
+};
+
+const NOTIFICATION_DELIVERY_OPTIONS: Array<{ value: NotificationDelivery; label: string }> = [
+  { value: "OFF", label: "Uit" },
+  { value: "IMMEDIATE", label: "Direct" },
+  { value: "HOURLY", label: "Digest per uur" },
+  { value: "DAILY", label: "Digest per dag" },
+  { value: "WEEKLY", label: "Digest per week" },
+  { value: "MONTHLY", label: "Digest per maand" }
 ];
 
 function labelForStatus(status: ApiTask["status"]): string {
@@ -238,8 +292,6 @@ function labelForMenuView(view: TaskMenuView): string {
       return "Toegewezen taken";
     case "OPEN_VOORSTELLEN":
       return "Openstaande voorstellen";
-    case "SJABLONEN":
-      return "Sjablonen";
   }
 }
 
@@ -254,6 +306,31 @@ function renderReleaseIcon(isPending: boolean) {
       <span style={RELEASE_ICON_RIGHT_STYLE}>☜</span>
       {isPending ? "..." : null}
     </span>
+  );
+}
+
+function renderSubscriptionIcon(isSubscribed: boolean, isPending: boolean) {
+  if (isPending) {
+    return "...";
+  }
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: "block", color: "#bfdbfe" }}
+    >
+      <path
+        d="M15 17H9L10.5 15.5V11C10.5 9.35 11.85 8 13.5 8V7.5C13.5 6.67 12.83 6 12 6C11.17 6 10.5 6.67 10.5 7.5V8C8.85 8 7.5 9.35 7.5 11V15.5L9 17H3V18.5H21V17H15ZM12 21C12.83 21 13.5 20.33 13.5 19.5H10.5C10.5 20.33 11.17 21 12 21Z"
+        fill="currentColor"
+      />
+      {isSubscribed ? (
+        <path d="M4 4L20 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      ) : null}
+    </svg>
   );
 }
 
@@ -356,6 +433,33 @@ function combineDateAndTime(dateValue: string, timeValue: string): string | null
   return parsed.toISOString();
 }
 
+function formatNlDateTime(value: string | null): string {
+  if (!value) {
+    return "-";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "-";
+  }
+  return parsed.toLocaleString("nl-NL");
+}
+
+function filenameFromContentDisposition(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const simpleMatch = value.match(/filename="?([^";]+)"?/i);
+  return simpleMatch?.[1] ?? null;
+}
+
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
@@ -430,12 +534,39 @@ function buildTaskChain(task: ApiTask, tasksById: Map<string, ApiTask>): ApiTask
   return chain;
 }
 
+function defaultNotificationSettings(): NotificationSettings {
+  return {
+    NEW_PROPOSAL: "IMMEDIATE",
+    PROPOSAL_ACCEPTED: "IMMEDIATE",
+    TASK_CHANGED_AS_COORDINATOR: "DAILY",
+    TASK_BECAME_AVAILABLE_AS_COORDINATOR: "IMMEDIATE",
+    SUBTASK_CREATED_IN_SUBSCRIPTION: "HOURLY"
+  };
+}
+
+function normalizeNotificationSettings(
+  settings: Partial<NotificationSettings> | null | undefined
+): NotificationSettings {
+  const defaults = defaultNotificationSettings();
+  if (!settings) {
+    return defaults;
+  }
+  for (const category of NOTIFICATION_CATEGORY_ORDER) {
+    const current = settings[category];
+    if (current) {
+      defaults[category] = current;
+    }
+  }
+  return defaults;
+}
+
 function accountSettingsDraftFromAccount(account: ApiAccount): AccountSettingsDraft {
   return {
     email: account.email ?? "",
     currentPassword: "",
     newPassword: "",
-    newPasswordConfirm: ""
+    newPasswordConfirm: "",
+    notificationSettings: normalizeNotificationSettings(account.notificationSettings)
   };
 }
 
@@ -451,18 +582,12 @@ export function TasksClient({ alias }: { alias: string }) {
   const [tasks, setTasks] = useState<ApiTask[]>([]);
   const [openTasks, setOpenTasks] = useState<ApiOpenTask[]>([]);
   const [users, setUsers] = useState<ApiUser[]>([]);
-  const [templates, setTemplates] = useState<ApiTemplate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [downloadMenuTaskId, setDownloadMenuTaskId] = useState<string | null>(null);
+  const [downloadMenuPosition, setDownloadMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const [subtaskDraft, setSubtaskDraft] = useState<DraftSubtask>(initialSubtask);
-  const [templateTitle, setTemplateTitle] = useState("");
-  const [templateDescription, setTemplateDescription] = useState("");
-  const [templateParentId, setTemplateParentId] = useState("");
-  const [templatePoints, setTemplatePoints] = useState("10");
-  const [applyTemplateId, setApplyTemplateId] = useState("");
-  const [applyTeamName, setApplyTeamName] = useState("");
-  const [applyParentTaskId, setApplyParentTaskId] = useState("");
   const [isTaskMenuOpen, setIsTaskMenuOpen] = useState(false);
   const [taskMenuView, setTaskMenuView] = useState<TaskMenuView>("BESCHIKBAAR");
   const [didAutoOpenProposals, setDidAutoOpenProposals] = useState(false);
@@ -491,6 +616,7 @@ export function TasksClient({ alias }: { alias: string }) {
   const [isAccountSettingsDialogOpen, setIsAccountSettingsDialogOpen] = useState(false);
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
   const [accountSettingsDraft, setAccountSettingsDraft] = useState<AccountSettingsDraft | null>(null);
+  const [accountSettingsTab, setAccountSettingsTab] = useState<AccountSettingsTab>("WACHTWOORD");
   const [profileDraft, setProfileDraft] = useState<ProfileDraft | null>(null);
   const [accountIsBestuur, setAccountIsBestuur] = useState<boolean | null>(null);
   const [accountBondsnummer, setAccountBondsnummer] = useState<string | null>(null);
@@ -516,11 +642,6 @@ export function TasksClient({ alias }: { alias: string }) {
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
       ),
     [tasks]
-  );
-
-  const myCoordinatedTasks = useMemo(
-    () => sortedTasks.filter((task) => task.canManage),
-    [sortedTasks]
   );
 
   const tasksById = useMemo(
@@ -629,49 +750,7 @@ export function TasksClient({ alias }: { alias: string }) {
     );
   }, [sortedTasks]);
 
-  const manageableTasks = useMemo(
-    () => sortedTasks.filter((task) => manageableTaskIds.has(task.id)),
-    [manageableTaskIds, sortedTasks]
-  );
-
-  const canManageTemplates = useMemo(() => {
-    const bestuurTasks = sortedTasks.filter(
-      (task) => task.title.trim().toLocaleLowerCase("nl-NL") === "bestuur"
-    );
-    if (bestuurTasks.length > 0) {
-      let shallowestDepth = Number.POSITIVE_INFINITY;
-      const depthByTaskId = new Map<string, number>();
-      for (const task of bestuurTasks) {
-        const depth = buildTaskChain(task, tasksById).length - 1;
-        depthByTaskId.set(task.id, depth);
-        if (depth < shallowestDepth) {
-          shallowestDepth = depth;
-        }
-      }
-      const topBestuurTaskIds = new Set(
-        bestuurTasks
-          .filter((task) => depthByTaskId.get(task.id) === shallowestDepth)
-          .map((task) => task.id)
-      );
-      return myCoordinatedTasks.some((task) => topBestuurTaskIds.has(task.id));
-    }
-
-    return myCoordinatedTasks.some(
-      (task) => task.title === "Besturen vereniging" && task.parentId === null
-    );
-  }, [myCoordinatedTasks, sortedTasks, tasksById]);
-
-  const menuViews = useMemo(() => {
-    const base: TaskMenuView[] = [
-      "BESCHIKBAAR",
-      "TOEGEWEZEN",
-      "OPEN_VOORSTELLEN"
-    ];
-    if (canManageTemplates) {
-      base.push("SJABLONEN");
-    }
-    return base;
-  }, [canManageTemplates]);
+  const menuViews: TaskMenuView[] = ["BESCHIKBAAR", "TOEGEWEZEN", "OPEN_VOORSTELLEN"];
 
   const isTaskListView =
     taskMenuView === "BESCHIKBAAR" ||
@@ -818,25 +897,33 @@ export function TasksClient({ alias }: { alias: string }) {
     [router]
   );
 
-  const loadAll = useCallback(async (options?: { silent?: boolean; knownVersion?: number }) => {
+  const loadAll = useCallback(async (options?: {
+    silent?: boolean;
+    knownVersion?: number;
+    includeUsers?: boolean;
+  }) => {
     if (isRefreshingRef.current) {
       return;
     }
     isRefreshingRef.current = true;
     const isSilent = options?.silent === true;
+    const includeUsers = options?.includeUsers !== false;
     if (!isSilent) {
       setIsLoading(true);
       setError(null);
     }
     try {
-      const [tasksRes, openTasksRes, usersRes, templatesRes] = await Promise.all([
+      const [tasksRes, openTasksRes, usersRes] = await Promise.all([
         fetch("/api/tasks", { cache: "no-store" }),
         fetch("/api/open-tasks", { cache: "no-store" }),
-        fetch("/api/users", { cache: "no-store" }),
-        fetch("/api/templates", { cache: "no-store" })
+        includeUsers ? fetch("/api/users", { cache: "no-store" }) : Promise.resolve(null)
       ]);
 
-      if ([tasksRes, openTasksRes, usersRes, templatesRes].some((res) => res.status === 401)) {
+      if (
+        [tasksRes, openTasksRes, usersRes]
+          .filter((res): res is Response => res !== null)
+          .some((res) => res.status === 401)
+      ) {
         router.replace("/login");
         return;
       }
@@ -846,11 +933,9 @@ export function TasksClient({ alias }: { alias: string }) {
         data?: ApiOpenTask[];
         error?: string;
       };
-      const usersPayload = (await usersRes.json()) as { data?: ApiUser[]; error?: string };
-      const templatesPayload = (await templatesRes.json()) as {
-        data?: ApiTemplate[];
-        error?: string;
-      };
+      const usersPayload = includeUsers
+        ? ((await usersRes?.json()) as { data?: ApiUser[]; error?: string })
+        : null;
 
       if (!tasksRes.ok) {
         if (!isSilent) {
@@ -864,23 +949,18 @@ export function TasksClient({ alias }: { alias: string }) {
         }
         return;
       }
-      if (!usersRes.ok) {
+      if (includeUsers && usersRes && !usersRes.ok) {
         if (!isSilent) {
-          setError(usersPayload.error ?? "Ledenlijst kon niet worden geladen.");
-        }
-        return;
-      }
-      if (!templatesRes.ok) {
-        if (!isSilent) {
-          setError(templatesPayload.error ?? "Sjablonen konden niet worden geladen.");
+          setError(usersPayload?.error ?? "Ledenlijst kon niet worden geladen.");
         }
         return;
       }
 
       setTasks(tasksPayload.data ?? []);
       setOpenTasks(openTasksPayload.data ?? []);
-      setUsers(usersPayload.data ?? []);
-      setTemplates(templatesPayload.data ?? []);
+      if (includeUsers && usersPayload) {
+        setUsers(usersPayload.data ?? []);
+      }
       if (!isSilent) {
         setSubtaskPointsDraftById({});
       }
@@ -988,6 +1068,25 @@ export function TasksClient({ alias }: { alias: string }) {
   }, [isUserMenuOpen]);
 
   useEffect(() => {
+    if (!downloadMenuTaskId) {
+      return;
+    }
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (target.closest('[data-download-menu-root="true"]')) {
+        return;
+      }
+      setDownloadMenuTaskId(null);
+      setDownloadMenuPosition(null);
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    return () => window.removeEventListener("mousedown", onPointerDown);
+  }, [downloadMenuTaskId]);
+
+  useEffect(() => {
     if (!proposeDialogTask) {
       return;
     }
@@ -1002,6 +1101,12 @@ export function TasksClient({ alias }: { alias: string }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") {
+        return;
+      }
+
+      if (downloadMenuTaskId) {
+        setDownloadMenuTaskId(null);
+        setDownloadMenuPosition(null);
         return;
       }
 
@@ -1056,6 +1161,7 @@ export function TasksClient({ alias }: { alias: string }) {
       if (isAccountSettingsDialogOpen) {
         if (!isAccountSettingsSaving) {
           setIsAccountSettingsDialogOpen(false);
+          setAccountSettingsTab("WACHTWOORD");
           setAccountSettingsDraft(null);
           setAccountSettingsError(null);
           setAccountSettingsStatus(null);
@@ -1090,7 +1196,8 @@ export function TasksClient({ alias }: { alias: string }) {
     proposeDialogTask,
     registerSuccessTaskTitle,
     releaseDialogTask,
-    subtaskFormMode
+    subtaskFormMode,
+    downloadMenuTaskId
   ]);
 
   useEffect(() => {
@@ -1114,13 +1221,11 @@ export function TasksClient({ alias }: { alias: string }) {
       setMovingTaskId(null);
       setMoveTargetParentId("");
     }
-  }, [creatingSubtaskForTaskId, editingTaskId, focusedTaskId, movingTaskId, tasksById]);
-
-  useEffect(() => {
-    if (taskMenuView === "SJABLONEN" && !canManageTemplates) {
-      setTaskMenuView("BESCHIKBAAR");
+    if (downloadMenuTaskId && !tasksById.has(downloadMenuTaskId)) {
+      setDownloadMenuTaskId(null);
+      setDownloadMenuPosition(null);
     }
-  }, [canManageTemplates, taskMenuView]);
+  }, [creatingSubtaskForTaskId, downloadMenuTaskId, editingTaskId, focusedTaskId, movingTaskId, tasksById]);
 
   useEffect(() => {
     if (isLoading || didAutoOpenProposals) {
@@ -1173,10 +1278,72 @@ export function TasksClient({ alias }: { alias: string }) {
         setError(payload.error ?? "Inschrijven is mislukt.");
         return;
       }
-      await loadAll();
       setRegisterSuccessTaskTitle(taskTitle);
+      void loadAll({ silent: true, includeUsers: false });
     } catch {
       setError("Netwerkfout bij inschrijven.");
+    } finally {
+      setActiveTaskId(null);
+    }
+  }
+
+  async function onDownloadTaskPointsCsv(
+    taskId: string,
+    taskTitle: string,
+    view: "SUMMARY" | "DETAIL" = "SUMMARY"
+  ) {
+    setActiveTaskId(taskId);
+    setDownloadMenuTaskId(null);
+    setDownloadMenuPosition(null);
+    setError(null);
+    try {
+      const query = new URLSearchParams({ view });
+      const response = await fetch(`/api/reports/tasks/${taskId}/points-csv?${query.toString()}`, {
+        cache: "no-store"
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        setError(payload?.error ?? "CSV export is mislukt.");
+        return;
+      }
+
+      const blob = await response.blob();
+      const headerFilename = filenameFromContentDisposition(response.headers.get("content-disposition"));
+      const fallbackPrefix = view === "DETAIL" ? "punten_detail" : "punten";
+      const fallbackFilename = `${fallbackPrefix}_${taskTitle.replace(/\s+/g, "_")}.csv`;
+      const downloadFilename = headerFilename ?? fallbackFilename;
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = downloadFilename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setError("Netwerkfout bij CSV export.");
+    } finally {
+      setActiveTaskId(null);
+    }
+  }
+
+  async function onToggleTaskSubscription(taskId: string, subscribed: boolean) {
+    setActiveTaskId(taskId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/subscription`, {
+        method: subscribed ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error ?? "Abonnement bijwerken is mislukt.");
+        return;
+      }
+      await loadAll({ silent: true, includeUsers: false });
+    } catch {
+      setError("Netwerkfout bij bijwerken van abonnement.");
     } finally {
       setActiveTaskId(null);
     }
@@ -1210,7 +1377,7 @@ export function TasksClient({ alias }: { alias: string }) {
         return;
       }
       setReleaseDialogTask(null);
-      await loadAll();
+      await loadAll({ includeUsers: false });
     } catch {
       setError("Netwerkfout bij vrijgeven van taak.");
     } finally {
@@ -1265,7 +1432,7 @@ export function TasksClient({ alias }: { alias: string }) {
       }
       setProposeDialogTask(null);
       setProposeDialogAlias("");
-      await loadAll();
+      await loadAll({ includeUsers: false });
     } catch {
       setError("Netwerkfout bij voorstel.");
     } finally {
@@ -1287,7 +1454,8 @@ export function TasksClient({ alias }: { alias: string }) {
         setError(payload.error ?? "Actie op voorstel mislukt.");
         return;
       }
-      await loadAll();
+      setOpenTasks((current) => current.filter((item) => item.id !== openTaskId));
+      void loadAll({ silent: true, includeUsers: false });
     } catch {
       setError("Netwerkfout bij verwerken van voorstel.");
     } finally {
@@ -1309,7 +1477,8 @@ export function TasksClient({ alias }: { alias: string }) {
         setError(payload.error ?? "Melding sluiten mislukt.");
         return;
       }
-      await loadAll();
+      setOpenTasks((current) => current.filter((item) => item.id !== openTaskId));
+      void loadAll({ silent: true, includeUsers: false });
     } catch {
       setError("Netwerkfout bij sluiten van melding.");
     } finally {
@@ -1380,7 +1549,7 @@ export function TasksClient({ alias }: { alias: string }) {
       setSubtaskFormMode("new");
       setCopySourceTaskId(null);
       resetCopyDateDialog();
-      await loadAll();
+      await loadAll({ includeUsers: false });
     } catch {
       setError("Netwerkfout bij kopieren/aanmaken subtaak.");
     } finally {
@@ -1412,69 +1581,6 @@ export function TasksClient({ alias }: { alias: string }) {
       };
     }
     await submitSubtask(creatingSubtaskForTaskId, copyDateTimeHandling);
-  }
-
-  async function onCreateTemplate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const defaultPoints = parseNonNegativeIntegerInput(templatePoints);
-    if (defaultPoints === null) {
-      setError("Standaard punten moeten een geheel getal van 0 of hoger zijn.");
-      return;
-    }
-    setError(null);
-    try {
-      const response = await fetch("/api/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: templateTitle,
-          description: templateDescription,
-          parentTemplateId: templateParentId || undefined,
-          defaultPoints
-        })
-      });
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        setError(payload.error ?? "Sjabloon aanmaken mislukt.");
-        return;
-      }
-      setTemplateTitle("");
-      setTemplateDescription("");
-      setTemplateParentId("");
-      setTemplatePoints("10");
-      await loadAll();
-    } catch {
-      setError("Netwerkfout bij aanmaken sjabloon.");
-    }
-  }
-
-  async function onApplyTemplate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!applyTemplateId || !applyTeamName) {
-      setError("Kies een sjabloon en teamnaam.");
-      return;
-    }
-    setError(null);
-    try {
-      const response = await fetch(`/api/templates/${applyTemplateId}/apply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          teamName: applyTeamName,
-          parentTaskId: applyParentTaskId || undefined,
-          date: new Date().toISOString()
-        })
-      });
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        setError(payload.error ?? "Sjabloon toepassen mislukt.");
-        return;
-      }
-      setApplyTeamName("");
-      await loadAll();
-    } catch {
-      setError("Netwerkfout bij toepassen sjabloon.");
-    }
   }
 
   function onOpenTask(taskId: string) {
@@ -1653,7 +1759,7 @@ export function TasksClient({ alias }: { alias: string }) {
       }
       setEditingTaskId(null);
       setEditDraft(null);
-      await loadAll();
+      await loadAll({ includeUsers: false });
     } catch {
       setError("Netwerkfout bij bewerken van taak.");
     } finally {
@@ -1756,7 +1862,7 @@ export function TasksClient({ alias }: { alias: string }) {
       }
       setMovingTaskId(null);
       setMoveTargetParentId("");
-      await loadAll();
+      await loadAll({ includeUsers: false });
     } catch {
       setError("Netwerkfout bij verplaatsen van taak.");
     } finally {
@@ -1820,7 +1926,7 @@ export function TasksClient({ alias }: { alias: string }) {
         resetCopyDateDialog();
       }
       setDeleteDialogTask(null);
-      await loadAll();
+      await loadAll({ includeUsers: false });
     } catch {
       setError("Netwerkfout bij verwijderen van taak.");
     } finally {
@@ -1848,6 +1954,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setAccountSettingsStatus(null);
     setAliasChangeError(null);
     setAliasChangeStatus(null);
+    setAccountSettingsTab("WACHTWOORD");
     setAliasChangeDraft("");
     setIsAccountLoading(true);
 
@@ -1912,6 +2019,7 @@ export function TasksClient({ alias }: { alias: string }) {
       return;
     }
     setIsAccountSettingsDialogOpen(false);
+    setAccountSettingsTab("WACHTWOORD");
     setAccountSettingsDraft(null);
     setAccountSettingsError(null);
     setAccountSettingsStatus(null);
@@ -1994,7 +2102,8 @@ export function TasksClient({ alias }: { alias: string }) {
         body: JSON.stringify({
           email: trimmedEmail,
           currentPassword: accountSettingsDraft.currentPassword || undefined,
-          newPassword: accountSettingsDraft.newPassword || undefined
+          newPassword: accountSettingsDraft.newPassword || undefined,
+          notificationSettings: accountSettingsDraft.notificationSettings
         })
       });
       const payload = (await response.json()) as {
@@ -2051,7 +2160,7 @@ export function TasksClient({ alias }: { alias: string }) {
       }
       setAliasChangeDraft("");
       setAliasChangeStatus(payload.message ?? "Aliaswijziging is voorgelegd aan het bestuur.");
-      await loadAll({ silent: true });
+      await loadAll({ silent: true, includeUsers: false });
     } catch {
       setAliasChangeError("Netwerkfout bij indienen van aliaswijziging.");
     } finally {
@@ -2130,6 +2239,7 @@ export function TasksClient({ alias }: { alias: string }) {
         return firstOwnIndex >= 0 ? chain.slice(firstOwnIndex) : chain;
       })()
     : [];
+  const downloadMenuTask = downloadMenuTaskId ? tasksById.get(downloadMenuTaskId) ?? null : null;
 
   return (
     <div className="grid">
@@ -2292,6 +2402,11 @@ export function TasksClient({ alias }: { alias: string }) {
                     {item.requestedAlias ?? "-"}
                   </p>
                 ) : null}
+                {item.proposalType === "TAAK" ? (
+                  <p className="muted">
+                    Start: {formatNlDateTime(item.taskStartTime ?? item.taskDate)}
+                  </p>
+                ) : null}
                 <p className="muted">
                   Van: {item.proposerAlias} | Aan: {item.proposedAlias ?? "open"} |{" "}
                   Status: {labelForOpenTaskStatus(item.status)} |{" "}
@@ -2337,102 +2452,6 @@ export function TasksClient({ alias }: { alias: string }) {
               </article>
             ))
           )}
-        </section>
-      ) : null}
-
-      {taskMenuView === "SJABLONEN" && canManageTemplates ? (
-        <section className="card grid">
-          <h2>Sjablonen</h2>
-          <form className="grid" onSubmit={onCreateTemplate}>
-            <h3>Nieuw sjabloon</h3>
-            <label>
-              Titel
-              <input
-                value={templateTitle}
-                onChange={(event) => setTemplateTitle(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Beschrijving
-              <input
-                value={templateDescription}
-                onChange={(event) => setTemplateDescription(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Parent-sjabloon (optioneel)
-              <select
-                value={templateParentId}
-                onChange={(event) => setTemplateParentId(event.target.value)}
-              >
-                <option value="">Geen parent</option>
-                {templates.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Standaard punten
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={templatePoints}
-                onChange={(event) => setTemplatePoints(event.target.value)}
-                required
-              />
-            </label>
-            <button type="submit">Sjabloon opslaan</button>
-          </form>
-
-          <form className="grid" onSubmit={onApplyTemplate}>
-            <h3>Sjabloon toepassen op team</h3>
-            <label>
-              Sjabloon
-              <select
-                value={applyTemplateId}
-                onChange={(event) => setApplyTemplateId(event.target.value)}
-                required
-              >
-                <option value="">Kies sjabloon</option>
-                {templates
-                  .filter((item) => item.parentTemplateId !== null)
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.title}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              Teamnaam
-              <input
-                value={applyTeamName}
-                onChange={(event) => setApplyTeamName(event.target.value)}
-                placeholder="bijv. Meiden A2"
-                required
-              />
-            </label>
-            <label>
-              Parent-taak (optioneel)
-              <select
-                value={applyParentTaskId}
-                onChange={(event) => setApplyParentTaskId(event.target.value)}
-              >
-                <option value="">Geen parent (topniveau)</option>
-                {manageableTasks.map((task) => (
-                  <option key={task.id} value={task.id}>
-                    {task.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit">Pas sjabloon toe</button>
-          </form>
         </section>
       ) : null}
 
@@ -2536,6 +2555,7 @@ export function TasksClient({ alias }: { alias: string }) {
             !isCreatingSubtask &&
             (task.coordinationType === "DELEGEREN" || isLeafTask);
           const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
+          const canSubscribeTask = task.canRead || task.canOpen || canManageTask;
           const showInlineTaskActions = canRegisterTask || canReleaseTask || canProposeTask;
           const isOpenTasksListView = taskMenuView === "BESCHIKBAAR" && !focusedTaskId;
           const pointsLines = isOpenTasksListView
@@ -2677,6 +2697,72 @@ export function TasksClient({ alias }: { alias: string }) {
                 >
                   {ICON_OPEN}
                 </button>
+                <div
+                  data-download-menu-root="true"
+                  style={{ display: "inline-flex", alignItems: "center" }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => void onDownloadTaskPointsCsv(task.id, task.title)}
+                    disabled={activeTaskId === task.id}
+                    style={{
+                      whiteSpace: "nowrap",
+                      minWidth: "2.2rem",
+                      borderTopRightRadius: 0,
+                      borderBottomRightRadius: 0
+                    }}
+                    title="Download punten-CSV"
+                    aria-label="Download punten-CSV"
+                  >
+                    {activeTaskId === task.id ? "..." : ICON_SAVE}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      if (downloadMenuTaskId === task.id) {
+                        setDownloadMenuTaskId(null);
+                        setDownloadMenuPosition(null);
+                        return;
+                      }
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setDownloadMenuTaskId(task.id);
+                      setDownloadMenuPosition({ left: rect.left, top: rect.bottom + 6 });
+                    }}
+                    disabled={activeTaskId === task.id}
+                    style={{
+                      whiteSpace: "nowrap",
+                      minWidth: "1.8rem",
+                      paddingInline: "0.35rem",
+                      marginLeft: "-1px",
+                      borderTopLeftRadius: 0,
+                      borderBottomLeftRadius: 0
+                    }}
+                    title="Kies CSV-weergave"
+                    aria-label="Kies CSV-weergave"
+                  >
+                    {ICON_CARET_DOWN}
+                  </button>
+                </div>
+                {canSubscribeTask ? (
+                  <button
+                    type="button"
+                    onClick={() => void onToggleTaskSubscription(task.id, task.isSubscribed)}
+                    disabled={activeTaskId === task.id}
+                    style={{ whiteSpace: "nowrap" }}
+                    title={
+                      task.isSubscribed
+                        ? "Stop met notificaties over nieuwe subtaken"
+                        : "Abonneer op nieuwe subtaken"
+                    }
+                    aria-label={
+                      task.isSubscribed
+                        ? "Stop met notificaties over nieuwe subtaken"
+                        : "Abonneer op nieuwe subtaken"
+                    }
+                  >
+                    {renderSubscriptionIcon(task.isSubscribed, activeTaskId === task.id)}
+                  </button>
+                ) : null}
                 {canEditTask ? (
                   <button
                     type="button"
@@ -3351,6 +3437,45 @@ export function TasksClient({ alias }: { alias: string }) {
         </div>
       ) : null}
 
+      {downloadMenuTask && downloadMenuPosition ? (
+        <div
+          className="card"
+          data-download-menu-root="true"
+          style={{
+            position: "fixed",
+            left: `${downloadMenuPosition.left}px`,
+            top: `${downloadMenuPosition.top}px`,
+            minWidth: "12rem",
+            zIndex: 45,
+            display: "grid",
+            gap: "0.35rem"
+          }}
+        >
+          <button
+            type="button"
+            onClick={() =>
+              void onDownloadTaskPointsCsv(downloadMenuTask.id, downloadMenuTask.title, "SUMMARY")
+            }
+            disabled={activeTaskId === downloadMenuTask.id}
+            title="Zonder details"
+            aria-label="Zonder details"
+          >
+            Zonder details
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void onDownloadTaskPointsCsv(downloadMenuTask.id, downloadMenuTask.title, "DETAIL")
+            }
+            disabled={activeTaskId === downloadMenuTask.id}
+            title="Met details"
+            aria-label="Met details"
+          >
+            Met details
+          </button>
+        </div>
+      ) : null}
+
       {longDescriptionDialogTask ? (
         <div
           onClick={() => setLongDescriptionDialogTask(null)}
@@ -3423,88 +3548,166 @@ export function TasksClient({ alias }: { alias: string }) {
             {accountSettingsError ? <p className="muted">{accountSettingsError}</p> : null}
             {accountSettingsStatus ? <p className="muted">{accountSettingsStatus}</p> : null}
 
-            <label>
-              E-mailadres
-              <input
-                type="email"
-                value={accountSettingsDraft.email}
-                onChange={(event) =>
-                  setAccountSettingsDraft((current) =>
-                    current ? { ...current, email: event.target.value } : current
-                  )
-                }
-                required
-              />
-            </label>
-
-            <label>
-              Huidig wachtwoord (verplicht bij e-mail/wachtwoord wijzigen)
-              <input
-                type="password"
-                value={accountSettingsDraft.currentPassword}
-                onChange={(event) =>
-                  setAccountSettingsDraft((current) =>
-                    current ? { ...current, currentPassword: event.target.value } : current
-                  )
-                }
-              />
-            </label>
-
-            <label>
-              Nieuw wachtwoord (optioneel)
-              <input
-                type="password"
-                value={accountSettingsDraft.newPassword}
-                onChange={(event) =>
-                  setAccountSettingsDraft((current) =>
-                    current ? { ...current, newPassword: event.target.value } : current
-                  )
-                }
-              />
-            </label>
-
-            <label>
-              Bevestig nieuw wachtwoord
-              <input
-                type="password"
-                value={accountSettingsDraft.newPasswordConfirm}
-                onChange={(event) =>
-                  setAccountSettingsDraft((current) =>
-                    current ? { ...current, newPasswordConfirm: event.target.value } : current
-                  )
-                }
-              />
-            </label>
-
-            <div className="card" style={{ padding: "0.75rem" }}>
-              <p style={{ margin: "0 0 0.35rem 0", fontWeight: 600 }}>
-                Aliaswijziging voorleggen aan bestuur
-              </p>
-              <p className="muted" style={{ margin: "0 0 0.5rem 0" }}>
-                Vraag een nieuwe alias aan. Bestuur kan dit accepteren of afwijzen bij openstaande
-                voorstellen.
-              </p>
-              <label>
-                Nieuwe alias
-                <input
-                  value={aliasChangeDraft}
-                  onChange={(event) => setAliasChangeDraft(event.target.value)}
-                  placeholder="bijv. JanA2"
-                  disabled={isAliasChangeSubmitting}
-                />
-              </label>
-              {aliasChangeError ? <p className="muted">{aliasChangeError}</p> : null}
-              {aliasChangeStatus ? <p className="muted">{aliasChangeStatus}</p> : null}
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div
+              role="tablist"
+              aria-label="Account bewerken tabs"
+              style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+            >
+              {([
+                { id: "WACHTWOORD", label: "Wachtwoord" },
+                { id: "NOTIFICATIES", label: "Notificaties" },
+                { id: "ALIAS", label: "Alias" }
+              ] as const).map((tab) => (
                 <button
+                  key={tab.id}
                   type="button"
-                  onClick={() => void onSubmitAliasChangeProposal()}
-                  disabled={isAliasChangeSubmitting || aliasChangeDraft.trim().length === 0}
+                  role="tab"
+                  aria-selected={accountSettingsTab === tab.id}
+                  onClick={() => setAccountSettingsTab(tab.id)}
+                  style={{
+                    border: accountSettingsTab === tab.id ? "1px solid #1d4ed8" : "1px solid #60a5fa",
+                    background: accountSettingsTab === tab.id ? "#1d4ed8" : "#dbeafe",
+                    color: accountSettingsTab === tab.id ? "#ffffff" : "#1e3a8a",
+                    fontWeight: accountSettingsTab === tab.id ? 700 : 500
+                  }}
                 >
-                  {isAliasChangeSubmitting ? "Voorleggen..." : "Voorleggen aan bestuur"}
+                  {tab.label}
                 </button>
-              </div>
+              ))}
             </div>
+
+            {accountSettingsTab === "WACHTWOORD" ? (
+              <>
+                <label>
+                  E-mailadres
+                  <input
+                    type="email"
+                    value={accountSettingsDraft.email}
+                    onChange={(event) =>
+                      setAccountSettingsDraft((current) =>
+                        current ? { ...current, email: event.target.value } : current
+                      )
+                    }
+                    required
+                  />
+                </label>
+
+                <label>
+                  Huidig wachtwoord (verplicht bij e-mail/wachtwoord wijzigen)
+                  <input
+                    type="password"
+                    value={accountSettingsDraft.currentPassword}
+                    onChange={(event) =>
+                      setAccountSettingsDraft((current) =>
+                        current ? { ...current, currentPassword: event.target.value } : current
+                      )
+                    }
+                  />
+                </label>
+
+                <label>
+                  Nieuw wachtwoord (optioneel)
+                  <input
+                    type="password"
+                    value={accountSettingsDraft.newPassword}
+                    onChange={(event) =>
+                      setAccountSettingsDraft((current) =>
+                        current ? { ...current, newPassword: event.target.value } : current
+                      )
+                    }
+                  />
+                </label>
+
+                <label>
+                  Bevestig nieuw wachtwoord
+                  <input
+                    type="password"
+                    value={accountSettingsDraft.newPasswordConfirm}
+                    onChange={(event) =>
+                      setAccountSettingsDraft((current) =>
+                        current ? { ...current, newPasswordConfirm: event.target.value } : current
+                      )
+                    }
+                  />
+                </label>
+              </>
+            ) : null}
+
+            {accountSettingsTab === "NOTIFICATIES" ? (
+              <div className="card" style={{ padding: "0.75rem" }}>
+                <p style={{ margin: "0 0 0.35rem 0", fontWeight: 600 }}>E-mailnotificaties</p>
+                <p className="muted" style={{ margin: "0 0 0.5rem 0" }}>
+                  Stel per categorie in of je direct, via digest of geen e-mails wilt ontvangen.
+                </p>
+                <div className="grid" style={{ gap: "0.5rem" }}>
+                  {NOTIFICATION_CATEGORY_ORDER.map((category) => {
+                    const meta = NOTIFICATION_CATEGORY_META[category];
+                    return (
+                      <label key={category}>
+                        {meta.label}
+                        <select
+                          value={accountSettingsDraft.notificationSettings[category]}
+                          onChange={(event) =>
+                            setAccountSettingsDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    notificationSettings: {
+                                      ...current.notificationSettings,
+                                      [category]: event.target.value as NotificationDelivery
+                                    }
+                                  }
+                                : current
+                            )
+                          }
+                        >
+                          {NOTIFICATION_DELIVERY_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="muted" style={{ display: "block", marginTop: "0.2rem" }}>
+                          {meta.description}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {accountSettingsTab === "ALIAS" ? (
+              <div className="card" style={{ padding: "0.75rem" }}>
+                <p style={{ margin: "0 0 0.35rem 0", fontWeight: 600 }}>
+                  Aliaswijziging voorleggen aan bestuur
+                </p>
+                <p className="muted" style={{ margin: "0 0 0.5rem 0" }}>
+                  Vraag een nieuwe alias aan. Bestuur kan dit accepteren of afwijzen bij openstaande
+                  voorstellen.
+                </p>
+                <label>
+                  Nieuwe alias
+                  <input
+                    value={aliasChangeDraft}
+                    onChange={(event) => setAliasChangeDraft(event.target.value)}
+                    placeholder="bijv. JanA2"
+                    disabled={isAliasChangeSubmitting}
+                  />
+                </label>
+                {aliasChangeError ? <p className="muted">{aliasChangeError}</p> : null}
+                {aliasChangeStatus ? <p className="muted">{aliasChangeStatus}</p> : null}
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    type="button"
+                    onClick={() => void onSubmitAliasChangeProposal()}
+                    disabled={isAliasChangeSubmitting || aliasChangeDraft.trim().length === 0}
+                  >
+                    {isAliasChangeSubmitting ? "Voorleggen..." : "Voorleggen aan bestuur"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button
