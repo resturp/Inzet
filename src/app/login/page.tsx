@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CSRF_FIELD_NAME } from "@/lib/csrf";
+import { readCsrfTokenFromCookie } from "@/lib/csrf-client";
 
 type LoginMode = "password" | "request" | "create" | "magic";
 
@@ -60,6 +62,7 @@ export default function LoginPage() {
 
   const [magicLink, setMagicLink] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [csrfToken, setCsrfToken] = useState("");
 
   const [isPasswordLogin, setIsPasswordLogin] = useState(false);
   const [isRequestingMagicLink, setIsRequestingMagicLink] = useState(false);
@@ -90,6 +93,10 @@ export default function LoginPage() {
       setMode("magic");
       setStatus("Magic link uit URL geladen. Klik op Inloggen.");
     }
+  }, []);
+
+  useEffect(() => {
+    setCsrfToken(readCsrfTokenFromCookie());
   }, []);
 
   useEffect(() => {
@@ -334,6 +341,7 @@ export default function LoginPage() {
 
       {mode === "password" && (
         <form className="card grid" onSubmit={onPasswordLogin}>
+          <input type="hidden" name={CSRF_FIELD_NAME} value={csrfToken} readOnly />
           <h2>Login met e-mailadres + wachtwoord</h2>
           <label>
             E-mailadres
@@ -362,6 +370,7 @@ export default function LoginPage() {
 
       {mode === "request" && (
         <form className="card grid" onSubmit={onRequestMagicLink}>
+          <input type="hidden" name={CSRF_FIELD_NAME} value={csrfToken} readOnly />
           <h2>Eerste keer: vraag je magic link aan</h2>
           <label>
             Nevobo relatiecode
@@ -395,6 +404,7 @@ export default function LoginPage() {
 
       {mode === "create" && (
         <form className="card grid" onSubmit={onCreateAccount}>
+          <input type="hidden" name={CSRF_FIELD_NAME} value={csrfToken} readOnly />
           <h2>Maak account</h2>
           <p className="muted">
             Van sommige vrijwilligers hebben we alvast hun voornaam als alias aangemaakt,
@@ -481,6 +491,7 @@ export default function LoginPage() {
 
       {mode === "magic" && (
         <form className="card grid" onSubmit={onVerifyMagicLink}>
+          <input type="hidden" name={CSRF_FIELD_NAME} value={csrfToken} readOnly />
           <h2>Inloggen met bestaande magic link</h2>
           <label>
             Alias
