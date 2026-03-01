@@ -151,6 +151,19 @@ test("delegeren op parent geeft child-beheer exclusief aan child-coordinator", (
   assert.deepEqual(resolveEffectiveCoordinatorAliasesFromMap("child", tasks), ["thomas"]);
 });
 
+test("expliciet delegeren op child doorbreekt organiseren-cumulatie van parent", () => {
+  const tasks = taskMap([
+    { id: "root", parentId: null, coordinationType: "ORGANISEREN", ownCoordinatorAliases: ["edgar"] },
+    { id: "child", parentId: "root", coordinationType: "DELEGEREN", ownCoordinatorAliases: ["thomas"] },
+    { id: "leaf", parentId: "child", ownCoordinatorAliases: [] }
+  ]);
+
+  assert.equal(hasTaskPermissionFromMap("edgar", "child", "MANAGE", tasks), false);
+  assert.equal(hasTaskPermissionFromMap("edgar", "leaf", "MANAGE", tasks), false);
+  assert.deepEqual(resolveEffectiveCoordinatorAliasesFromMap("child", tasks), ["thomas"]);
+  assert.deepEqual(resolveEffectiveCoordinatorAliasesFromMap("leaf", tasks), ["thomas"]);
+});
+
 test("cycle in parent-structuur stopt veilig zonder rechten", () => {
   const tasks = taskMap([
     { id: "loop", parentId: "loop", ownCoordinatorAliases: [] }

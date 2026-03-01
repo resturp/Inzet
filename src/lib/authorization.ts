@@ -85,7 +85,7 @@ function resolveTaskAccessContextFromPath(pathFromRoot: readonly MinimalTask[]) 
       continue;
     }
 
-    if (inheritedCoordinationType === "ORGANISEREN") {
+    if (currentEffectiveCoordinationType === "ORGANISEREN") {
       effectiveCoordinatorAliases = uniqueSortedAliases([
         ...effectiveCoordinatorAliases,
         ...ownCoordinatorAliases
