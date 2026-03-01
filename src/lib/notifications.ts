@@ -1,5 +1,5 @@
-import { NotificationCategory, NotificationDelivery } from "@prisma/client";
-import { resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
+import { NotificationCategory, NotificationDelivery, TaskStatus } from "@prisma/client";
+import { resolveEffectiveCoordinationType, resolveEffectiveCoordinatorAliases } from "@/lib/authorization";
 import { sendMail } from "@/lib/mailer";
 import { prisma } from "@/lib/prisma";
 import { canActorDecideProposal } from "@/lib/rules";
@@ -17,6 +17,37 @@ type CreatedTaskNotificationInput = {
   title: string;
   parentId: string | null;
 };
+
+async function isTaskRegisterableByAnyUser(taskId: string): Promise<boolean> {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      status: true,
+      endTime: true
+    }
+  });
+  if (!task) {
+    return false;
+  }
+  if (task.status !== TaskStatus.BESCHIKBAAR) {
+    return false;
+  }
+  if (task.endTime.getTime() <= Date.now()) {
+    return false;
+  }
+
+  const effectiveCoordinationType = await resolveEffectiveCoordinationType(taskId);
+  if (effectiveCoordinationType !== "ORGANISEREN") {
+    return true;
+  }
+
+  const firstChild = await prisma.task.findFirst({
+    where: { parentId: taskId },
+    select: { id: true }
+  });
+  return !firstChild;
+}
 
 const DIGEST_DELIVERIES: NotificationDelivery[] = [
   NotificationDelivery.HOURLY,
@@ -666,6 +697,10 @@ export async function notifyTaskBecameAvailableForEffectiveCoordinators(params: 
   taskTitle: string;
   actorAlias: string;
 }): Promise<void> {
+  if (!(await isTaskRegisterableByAnyUser(params.taskId))) {
+    return;
+  }
+
   const coordinatorAliases = await resolveEffectiveCoordinatorAliases(params.taskId);
   if (coordinatorAliases.length === 0) {
     return;
@@ -731,8 +766,21 @@ export async function notifySubtasksCreatedForSubscriptions(params: {
   }
 
   const linesByUserAlias = new Map<string, string[]>();
+  const registerableByTaskId = new Map<string, boolean>();
 
   for (const createdTask of tasksWithParent) {
+    const registerableCached = registerableByTaskId.get(createdTask.id);
+    const registerable =
+      registerableCached === undefined
+        ? await isTaskRegisterableByAnyUser(createdTask.id)
+        : registerableCached;
+    if (registerableCached === undefined) {
+      registerableByTaskId.set(createdTask.id, registerable);
+    }
+    if (!registerable) {
+      continue;
+    }
+
     const ancestorChain = await resolveAncestorChain(createdTask.parentId);
     if (ancestorChain.length === 0) {
       continue;

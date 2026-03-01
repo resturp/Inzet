@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   areAliasSetsEqual,
+  canCreateSubtaskFromMap,
   canEditTaskCoordinatorsFromMap,
   hasTaskPermissionFromMap,
   primaryCoordinatorAlias,
@@ -199,6 +200,36 @@ test("coordinatorlijst aanpassen staat uit als taak effectief delegeren is", () 
 
   assert.equal(hasTaskPermissionFromMap("edgar", "child", "MANAGE", tasks), true);
   assert.equal(canEditTaskCoordinatorsFromMap("edgar", "child", tasks), false);
+});
+
+test("organiseren: toegewezen blad-coordinator krijgt niet automatisch subtaakrechten", () => {
+  const tasks = taskMap([
+    { id: "root", parentId: null, coordinationType: "ORGANISEREN", ownCoordinatorAliases: ["edgar"] },
+    { id: "leaf", parentId: "root", ownCoordinatorAliases: ["thomas"] }
+  ]);
+
+  assert.equal(hasTaskPermissionFromMap("thomas", "leaf", "MANAGE", tasks), true);
+  assert.equal(canCreateSubtaskFromMap("thomas", "leaf", tasks), false);
+});
+
+test("organiseren: bestaande effectieve coordinator behoudt subtaakrechten", () => {
+  const tasks = taskMap([
+    { id: "root", parentId: null, coordinationType: "ORGANISEREN", ownCoordinatorAliases: ["edgar"] },
+    { id: "leaf", parentId: "root", ownCoordinatorAliases: ["thomas"] }
+  ]);
+
+  assert.equal(hasTaskPermissionFromMap("edgar", "leaf", "MANAGE", tasks), true);
+  assert.equal(canCreateSubtaskFromMap("edgar", "leaf", tasks), true);
+});
+
+test("delegeren: expliciete coordinator mag subtaken maken", () => {
+  const tasks = taskMap([
+    { id: "root", parentId: null, coordinationType: "DELEGEREN", ownCoordinatorAliases: ["edgar"] },
+    { id: "leaf", parentId: "root", ownCoordinatorAliases: ["thomas"] }
+  ]);
+
+  assert.equal(hasTaskPermissionFromMap("thomas", "leaf", "MANAGE", tasks), true);
+  assert.equal(canCreateSubtaskFromMap("thomas", "leaf", tasks), true);
 });
 
 test("effective coordinators resolver pakt eerste coordinator-set in de keten", () => {

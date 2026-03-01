@@ -350,6 +350,44 @@ export function canEditTaskCoordinatorsFromMap(
   return organizerAliases.includes(alias);
 }
 
+export function canCreateSubtaskFromMap(
+  alias: string,
+  taskId: string,
+  tasksById: Map<string, MinimalTask>
+): boolean {
+  if (!hasTaskPermissionFromMap(alias, taskId, "MANAGE", tasksById)) {
+    return false;
+  }
+
+  const effectiveCoordinationType = resolveEffectiveCoordinationTypeFromMap(taskId, tasksById);
+  if (effectiveCoordinationType !== "ORGANISEREN") {
+    return true;
+  }
+
+  const task = tasksById.get(taskId);
+  if (!task) {
+    return false;
+  }
+
+  // Organiseren-regel:
+  // toewijzing op deze taak zelf geeft geen automatisch subtaakrecht.
+  // Alleen als actor zonder eigen toewijzing op deze taak al effectief coordinator zou zijn.
+  const ownWithoutActor = uniqueSortedAliases(
+    task.ownCoordinatorAliases.filter((candidateAlias) => candidateAlias !== alias)
+  );
+  if (ownWithoutActor.length === task.ownCoordinatorAliases.length) {
+    return true;
+  }
+
+  const adjustedTasksById = new Map(tasksById);
+  adjustedTasksById.set(taskId, {
+    ...task,
+    ownCoordinatorAliases: ownWithoutActor
+  });
+
+  return hasTaskPermissionFromMap(alias, taskId, "MANAGE", adjustedTasksById);
+}
+
 async function fetchMinimalTask(taskId: string): Promise<MinimalTask | null> {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -373,6 +411,23 @@ async function fetchMinimalTask(taskId: string): Promise<MinimalTask | null> {
     coordinationType: normalizeExplicitCoordinationType(task.coordinationType),
     ownCoordinatorAliases: uniqueSortedAliases(task.ownCoordinators.map((item) => item.userAlias))
   };
+}
+
+async function buildTaskLineageMap(taskId: string): Promise<Map<string, MinimalTask>> {
+  const byId = new Map<string, MinimalTask>();
+  const visited = new Set<string>();
+  let current = await fetchMinimalTask(taskId);
+
+  while (current) {
+    if (visited.has(current.id)) {
+      return new Map();
+    }
+    visited.add(current.id);
+    byId.set(current.id, current);
+    current = current.parentId ? await fetchMinimalTask(current.parentId) : null;
+  }
+
+  return byId;
 }
 
 export async function resolveEffectiveCoordinatorAliases(taskId: string): Promise<string[]> {
@@ -491,4 +546,15 @@ export async function canReadTaskByOwnership(alias: string, taskId: string): Pro
 
 export async function canManageTaskByOwnership(alias: string, taskId: string): Promise<boolean> {
   return hasTaskPermission(alias, taskId, "MANAGE");
+}
+
+export async function canCreateSubtaskByOwnership(
+  alias: string,
+  taskId: string
+): Promise<boolean> {
+  const tasksById = await buildTaskLineageMap(taskId);
+  if (!tasksById.has(taskId)) {
+    return false;
+  }
+  return canCreateSubtaskFromMap(alias, taskId, tasksById);
 }

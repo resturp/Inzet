@@ -88,7 +88,8 @@ export async function POST(
     select: {
       id: true,
       title: true,
-      status: true
+      status: true,
+      endTime: true
     }
   });
 
@@ -102,6 +103,12 @@ export async function POST(
   }
   if (task.status !== TaskStatus.BESCHIKBAAR) {
     return NextResponse.json({ error: "Taak is niet beschikbaar voor inschrijving" }, { status: 409 });
+  }
+  if (task.endTime.getTime() <= Date.now()) {
+    return NextResponse.json(
+      { error: "Taak is afgelopen en kan niet meer worden ingeschreven" },
+      { status: 409 }
+    );
   }
   const effectiveCoordinationType = resolveEffectiveCoordinationTypeFromMap(task.id, accessPathMap);
   const effectiveCoordinatorAliases = resolveEffectiveCoordinatorAliasesFromMap(task.id, accessPathMap);

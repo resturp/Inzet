@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/api-session";
-import { canManageTaskByOwnership } from "@/lib/authorization";
+import { canCreateSubtaskByOwnership, canManageTaskByOwnership } from "@/lib/authorization";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { transferPointsBetweenParents } from "@/lib/task-points";
@@ -92,9 +92,10 @@ export async function POST(
     );
   }
 
-  const [canManageSourceParent, canManageTarget] = await Promise.all([
+  const [canManageSourceParent, canManageTarget, canCreateUnderTargetParent] = await Promise.all([
     canManageTaskByOwnership(sessionUser.alias, task.parentId),
-    canManageTaskByOwnership(sessionUser.alias, targetParent.id)
+    canManageTaskByOwnership(sessionUser.alias, targetParent.id),
+    canCreateSubtaskByOwnership(sessionUser.alias, targetParent.id)
   ]);
   if (!canManageSourceParent) {
     return NextResponse.json(
@@ -105,6 +106,15 @@ export async function POST(
   if (!canManageTarget) {
     return NextResponse.json(
       { error: "Subtaak kan alleen naar een parent waarop je beheersrechten hebt worden verplaatst" },
+      { status: 403 }
+    );
+  }
+  if (!canCreateUnderTargetParent) {
+    return NextResponse.json(
+      {
+        error:
+          "Je mag hier geen subtaken maken: toewijzing op deze Organiseren-taak geeft niet automatisch subtaakrechten."
+      },
       { status: 403 }
     );
   }

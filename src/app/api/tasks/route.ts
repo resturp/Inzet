@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import {
   canEditTaskCoordinatorsFromMap,
+  canCreateSubtaskByOwnership,
   canManageTaskByOwnership,
   hasTaskPermissionFromMap,
   isRootOwner,
@@ -202,6 +203,20 @@ export async function POST(request: Request) {
     if (!canCreateUnderParent) {
       return NextResponse.json(
         { error: "Alleen de coordinator van de parent-taak mag subtaken maken" },
+        { status: 403 }
+      );
+    }
+
+    const canCreateSubtaskUnderParent = await canCreateSubtaskByOwnership(
+      sessionUser.alias,
+      parentTask.id
+    );
+    if (!canCreateSubtaskUnderParent) {
+      return NextResponse.json(
+        {
+          error:
+            "Je mag hier geen subtaken maken: toewijzing op deze Organiseren-taak geeft niet automatisch subtaakrechten."
+        },
         { status: 403 }
       );
     }
