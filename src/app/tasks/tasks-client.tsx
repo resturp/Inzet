@@ -88,7 +88,7 @@ type DraftSubtask = {
   endTime: string;
 };
 
-type TaskStatusFilter = "BESCHIKBAAR" | "TOEGEWEZEN";
+type TaskStatusFilter = "BESCHIKBAAR" | "TOEGEWEZEN_TODO" | "TOEGEWEZEN_DONE";
 type TaskMenuView = TaskStatusFilter | "OPEN_VOORSTELLEN";
 
 type TaskEditDraft = {
@@ -177,6 +177,7 @@ const ICON_BACK = "↩";
 const ICON_ACCEPT = "✓";
 const ICON_REJECT = "✕";
 const ICON_COMPLETE = "✓✓";
+const ICON_UNCOMPLETE = "✕✕";
 const ICON_CARET_DOWN = "▾";
 const VCZ_LOGO_URL =
   "https://usercontent.one/wp/www.vczwolle.nl/wp-content/uploads/Logo-nieuw-V1-VCZ.png?media=1660898964";
@@ -235,7 +236,8 @@ const NOTIFICATION_CATEGORY_META: Record<
   },
   TASK_CHANGED_AS_COORDINATOR: {
     label: "Wijzigingen op coordinatietaken",
-    description: "Wanneer anderen taken wijzigen waar jij coordinator van bent."
+    description:
+      "Wijzigingen op taken waar jij coordinator van bent, inclusief gereed- en onvoltooidmeldingen."
   },
   TASK_BECAME_AVAILABLE_AS_COORDINATOR: {
     label: "Beschikbaar gesteld voor jou",
@@ -297,8 +299,10 @@ function labelForMenuView(view: TaskMenuView): string {
   switch (view) {
     case "BESCHIKBAAR":
       return "Openstaande taken";
-    case "TOEGEWEZEN":
-      return "Toegewezen taken";
+    case "TOEGEWEZEN_TODO":
+      return "Toegewezen taken (ToDo)";
+    case "TOEGEWEZEN_DONE":
+      return "Afgeronde taken (Done)";
     case "OPEN_VOORSTELLEN":
       return "Openstaande voorstellen";
   }
@@ -309,7 +313,16 @@ function labelForOpenTaskStatus(status: ApiOpenTask["status"]): string {
 }
 
 function isTaskMenuView(value: string | null | undefined): value is TaskMenuView {
-  return value === "BESCHIKBAAR" || value === "TOEGEWEZEN" || value === "OPEN_VOORSTELLEN";
+  return (
+    value === "BESCHIKBAAR" ||
+    value === "TOEGEWEZEN_TODO" ||
+    value === "TOEGEWEZEN_DONE" ||
+    value === "OPEN_VOORSTELLEN"
+  );
+}
+
+function isAssignedTaskMenuView(view: TaskMenuView): boolean {
+  return view === "TOEGEWEZEN_TODO" || view === "TOEGEWEZEN_DONE";
 }
 
 function isAccountSettingsTab(value: string | null | undefined): value is AccountSettingsTab {
@@ -321,7 +334,9 @@ function parseTasksDeepLink(search: string): TasksDeepLink | null {
   const parsed: TasksDeepLink = {};
 
   const rawView = params.get("view");
-  if (isTaskMenuView(rawView)) {
+  if (rawView === "TOEGEWEZEN") {
+    parsed.view = "TOEGEWEZEN_TODO";
+  } else if (isTaskMenuView(rawView)) {
     parsed.view = rawView;
   }
 
@@ -627,6 +642,28 @@ function buildTaskChain(task: ApiTask, tasksById: Map<string, ApiTask>): ApiTask
   return chain;
 }
 
+function hasCompletedAncestor(task: ApiTask, tasksById: Map<string, ApiTask>): boolean {
+  const visited = new Set<string>([task.id]);
+  let parentId = task.parentId;
+
+  while (parentId) {
+    if (visited.has(parentId)) {
+      break;
+    }
+    visited.add(parentId);
+    const parent = tasksById.get(parentId);
+    if (!parent) {
+      break;
+    }
+    if (parent.status === "GEREED") {
+      return true;
+    }
+    parentId = parent.parentId;
+  }
+
+  return false;
+}
+
 function defaultNotificationSettings(): NotificationSettings {
   return {
     NEW_PROPOSAL: "IMMEDIATE",
@@ -848,11 +885,14 @@ export function TasksClient({ alias }: { alias: string }) {
     );
   }, [sortedTasks]);
 
-  const menuViews: TaskMenuView[] = ["BESCHIKBAAR", "TOEGEWEZEN", "OPEN_VOORSTELLEN"];
+  const menuViews: TaskMenuView[] = [
+    "BESCHIKBAAR",
+    "TOEGEWEZEN_TODO",
+    "TOEGEWEZEN_DONE",
+    "OPEN_VOORSTELLEN"
+  ];
 
-  const isTaskListView =
-    taskMenuView === "BESCHIKBAAR" ||
-    taskMenuView === "TOEGEWEZEN";
+  const isTaskListView = taskMenuView === "BESCHIKBAAR" || isAssignedTaskMenuView(taskMenuView);
 
   const visibleTasks = useMemo(
     () => {
@@ -860,12 +900,15 @@ export function TasksClient({ alias }: { alias: string }) {
         return [];
       }
       return sortedTasks.filter((task) => {
-        if (taskMenuView === "TOEGEWEZEN") {
-          return (
+        if (isAssignedTaskMenuView(taskMenuView)) {
+          const isAssignedTask =
             isAssignedStatus(task.status) &&
             myAssignedSubtreeTaskIds.has(task.id) &&
-            taskHasCoordinator(task, assignedAliasFilter)
-          );
+            taskHasCoordinator(task, assignedAliasFilter);
+          if (!isAssignedTask) {
+            return false;
+          }
+          return taskMenuView === "TOEGEWEZEN_TODO" ? endsInFuture(task) : !endsInFuture(task);
         }
         if (task.status !== taskMenuView || !endsInFuture(task)) {
           return false;
@@ -889,12 +932,14 @@ export function TasksClient({ alias }: { alias: string }) {
   );
 
   const menuItemCounts = useMemo<Partial<Record<TaskMenuView, number>>>(() => {
-    const assignedCount = sortedTasks.filter(
+    const assignedTasks = sortedTasks.filter(
       (task) =>
         isAssignedStatus(task.status) &&
         myAssignedSubtreeTaskIds.has(task.id) &&
         taskHasCoordinator(task, assignedAliasFilter)
-    ).length;
+    );
+    const assignedTodoCount = assignedTasks.filter((task) => endsInFuture(task)).length;
+    const assignedDoneCount = assignedTasks.filter((task) => !endsInFuture(task)).length;
 
     const openCount = sortedTasks.filter((task) => {
       if (task.status !== "BESCHIKBAAR" || !endsInFuture(task)) {
@@ -909,7 +954,8 @@ export function TasksClient({ alias }: { alias: string }) {
 
     return {
       BESCHIKBAAR: openCount,
-      TOEGEWEZEN: assignedCount,
+      TOEGEWEZEN_TODO: assignedTodoCount,
+      TOEGEWEZEN_DONE: assignedDoneCount,
       OPEN_VOORSTELLEN: openTasks.length
     };
   }, [assignedAliasFilter, childrenByParentId, myAssignedSubtreeTaskIds, openTasks.length, sortedTasks]);
@@ -1431,7 +1477,7 @@ export function TasksClient({ alias }: { alias: string }) {
 
   useEffect(() => {
     if (
-      taskMenuView === "TOEGEWEZEN" &&
+      isAssignedTaskMenuView(taskMenuView) &&
       isTaskListView &&
       focusedTaskId &&
       !visibleTasks.some((task) => task.id === focusedTaskId)
@@ -1619,6 +1665,28 @@ export function TasksClient({ alias }: { alias: string }) {
       await loadAll();
     } catch {
       setError("Netwerkfout bij gereedmelden van taak.");
+    } finally {
+      setActiveTaskId(null);
+    }
+  }
+
+  async function onUncompleteTask(taskId: string) {
+    setActiveTaskId(taskId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/uncomplete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error ?? "Taak op onvoltooid zetten is mislukt.");
+        return;
+      }
+      await loadAll();
+    } catch {
+      setError("Netwerkfout bij op onvoltooid zetten van taak.");
     } finally {
       setActiveTaskId(null);
     }
@@ -1824,7 +1892,7 @@ export function TasksClient({ alias }: { alias: string }) {
 
   function onOpenTask(taskId: string) {
     setError(null);
-    if (taskMenuView === "TOEGEWEZEN") {
+    if (isAssignedTaskMenuView(taskMenuView)) {
       setTaskMenuView("BESCHIKBAAR");
       setIsTaskMenuOpen(false);
     }
@@ -1841,6 +1909,10 @@ export function TasksClient({ alias }: { alias: string }) {
   }
 
   function onStartSubtask(task: ApiTask, sourceTask?: ApiTask) {
+    if (task.status === "GEREED" || hasCompletedAncestor(task, tasksById)) {
+      setError("Gereed gemelde taken staan vast. Zet de taak eerst op onvoltooid.");
+      return;
+    }
     setError(null);
     setEditingTaskId(null);
     setEditDraft(null);
@@ -1883,6 +1955,10 @@ export function TasksClient({ alias }: { alias: string }) {
   }
 
   function onStartEdit(task: ApiTask) {
+    if (task.status === "GEREED" || hasCompletedAncestor(task, tasksById)) {
+      setError("Gereed gemelde taken staan vast. Zet de taak eerst op onvoltooid.");
+      return;
+    }
     setError(null);
     setCreatingSubtaskForTaskId(null);
     setSubtaskDraft(initialSubtask);
@@ -2500,14 +2576,14 @@ export function TasksClient({ alias }: { alias: string }) {
             <button type="button" onClick={() => setIsTaskMenuOpen((open) => !open)}>
               {isTaskMenuOpen ? "Sluit menu" : "☰ Menu"}
             </button>
-            {taskMenuView === "TOEGEWEZEN" ? (
+            {isAssignedTaskMenuView(taskMenuView) ? (
               <p className="muted">Taken, toegewezen aan:</p>
             ) : taskMenuView === "BESCHIKBAAR" ? (
               <p className="muted">Taken, openstaand</p>
             ) : (
               <p className="muted">Weergave: {labelForMenuView(taskMenuView)}</p>
             )}
-            {taskMenuView === "TOEGEWEZEN" ? (
+            {isAssignedTaskMenuView(taskMenuView) ? (
               <label style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "nowrap" }}>
                 <select
                   value={assignedAliasFilter}
@@ -2739,9 +2815,13 @@ export function TasksClient({ alias }: { alias: string }) {
           ) : null}
           {tasksToRender.map((task) => {
           const canManageTask = manageableTaskIds.has(task.id);
-          const canEditTask = canManageTask || task.canEditCoordinators;
+          const isLockedByCompletion =
+            task.status === "GEREED" || hasCompletedAncestor(task, tasksById);
+          const canEditTask = !isLockedByCompletion && (canManageTask || task.canEditCoordinators);
           const canProposeTask =
-            canManageTask && (task.status === "TOEGEWEZEN" || task.status === "BESCHIKBAAR");
+            !isLockedByCompletion &&
+            canManageTask &&
+            (task.status === "TOEGEWEZEN" || task.status === "BESCHIKBAAR");
           const isEditingTask = editingTaskId === task.id;
           const isMovingTask = movingTaskId === task.id;
           const isCreatingSubtask = creatingSubtaskForTaskId === task.id;
@@ -2787,8 +2867,9 @@ export function TasksClient({ alias }: { alias: string }) {
               ? availableTaskPoints / taskAssigneeAliases.length
               : availableTaskPoints;
           const canManageTaskParent = task.parentId ? manageableTaskIds.has(task.parentId) : false;
-          const canMoveTask = canManageTaskParent;
-          const canDeleteTask = canManageTaskParent || (!task.parentId && canManageTask);
+          const canMoveTask = !isLockedByCompletion && canManageTaskParent;
+          const canDeleteTask =
+            !isLockedByCompletion && (canManageTaskParent || (!task.parentId && canManageTask));
           const isLeafTask = subtasks.length === 0;
           const canRegisterTask =
             task.canOpen &&
@@ -2798,8 +2879,10 @@ export function TasksClient({ alias }: { alias: string }) {
           const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
           const canCompleteTask =
             canManageTask && task.status === "TOEGEWEZEN" && endsInFuture(task);
+          const canUncompleteTask =
+            canManageTask && task.status === "GEREED" && !hasCompletedAncestor(task, tasksById);
           const canSubscribeTask = task.canRead || task.canOpen || canManageTask;
-          const canCreateSubtask = task.canCreateSubtask;
+          const canCreateSubtask = !isLockedByCompletion && task.canCreateSubtask;
           const shouldShowSubtasksSection =
             subtasks.length > 0 || canCreateSubtask || isCreatingSubtask;
           const isOpenTasksListView = taskMenuView === "BESCHIKBAAR" && !focusedTaskId;
@@ -3078,6 +3161,18 @@ export function TasksClient({ alias }: { alias: string }) {
                     {activeTaskId === task.id ? `${ICON_COMPLETE}...` : ICON_COMPLETE}
                   </button>
                 ) : null}
+                {canUncompleteTask ? (
+                  <button
+                    type="button"
+                    onClick={() => void onUncompleteTask(task.id)}
+                    disabled={activeTaskId === task.id}
+                    style={{ whiteSpace: "nowrap" }}
+                    title="Zet op onvoltooid"
+                    aria-label="Zet op onvoltooid"
+                  >
+                    {activeTaskId === task.id ? `${ICON_UNCOMPLETE}...` : ICON_UNCOMPLETE}
+                  </button>
+                ) : null}
                 {canProposeTask ? (
                   <button
                     type="button"
@@ -3189,7 +3284,7 @@ export function TasksClient({ alias }: { alias: string }) {
                           }}
                         >
                           {subtasks.map((subtask) => {
-                            const canManageSubtaskFromParent = canManageTask;
+                            const canManageSubtaskFromParent = canManageTask && !isLockedByCompletion;
                             const canDeleteSubtask =
                               canManageSubtaskFromParent && subtask.parentId !== null;
                             const canCopySubtask = canCreateSubtask;

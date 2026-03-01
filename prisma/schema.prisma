@@ -107,10 +107,24 @@ model Task {
   createdAt       DateTime          @default(now())
   openTasks       OpenTask[]
   subscriptions   TaskSubscription[]
+  completionSnapshots TaskCompletionSnapshot[] @relation("TaskCompletionSnapshots")
 
   @@index([parentId])
   @@index([status, date])
   @@index([completedByAlias, completedAt])
+}
+
+model TaskCompletionSnapshot {
+  id               String   @id @default(cuid())
+  rootTaskId       String
+  snapshotJson     Json
+  completedByAlias String
+  completedAt      DateTime @default(now())
+  restoredByAlias  String?
+  restoredAt       DateTime?
+  rootTask         Task     @relation("TaskCompletionSnapshots", fields: [rootTaskId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([rootTaskId, restoredAt, completedAt])
 }
 
 model TaskCoordinator {

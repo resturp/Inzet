@@ -714,6 +714,8 @@ export async function notifyTaskChangedForEffectiveCoordinators(params: {
   taskTitle: string;
   actorAlias: string;
   summary?: string;
+  subject?: string;
+  notifyActor?: boolean;
 }): Promise<void> {
   const coordinatorAliases = await resolveEffectiveCoordinatorAliases(params.taskId);
   if (coordinatorAliases.length === 0) {
@@ -724,7 +726,7 @@ export async function notifyTaskChangedForEffectiveCoordinators(params: {
     NotificationCategory.TASK_CHANGED_AS_COORDINATOR,
     coordinatorAliases.map((userAlias) => ({
       userAlias,
-      subject: `Taak gewijzigd: ${params.taskTitle}`,
+      subject: params.subject ?? `Taak gewijzigd: ${params.taskTitle}`,
       body: withLinks(
         params.summary
           ? [`${params.actorAlias} heeft taak \"${params.taskTitle}\" gewijzigd.`, params.summary]
@@ -732,7 +734,7 @@ export async function notifyTaskChangedForEffectiveCoordinators(params: {
         [{ label: "Naar taak", url: taskDeepLinkUrl(params.taskId) }]
       )
     })),
-    [params.actorAlias]
+    params.notifyActor ? [] : [params.actorAlias]
   );
 }
 

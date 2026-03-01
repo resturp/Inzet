@@ -20,6 +20,35 @@ function pendingBondsnummerForAlias(alias: string): string {
   return `PENDING-${safeAlias || "ALIAS"}`;
 }
 
+async function hasCompletedAncestor(taskId: string): Promise<boolean> {
+  const visited = new Set<string>([taskId]);
+  let current = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { parentId: true }
+  });
+
+  while (current?.parentId) {
+    const parentId = current.parentId;
+    if (visited.has(parentId)) {
+      break;
+    }
+    visited.add(parentId);
+    const parent = await prisma.task.findUnique({
+      where: { id: parentId },
+      select: { id: true, parentId: true, status: true }
+    });
+    if (!parent) {
+      break;
+    }
+    if (parent.status === TaskStatus.GEREED) {
+      return true;
+    }
+    current = { parentId: parent.parentId };
+  }
+
+  return false;
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -63,6 +92,12 @@ export async function POST(
     return NextResponse.json(
       { error: "Alleen de eigenaar/coordinator van de taak kan een voorstel doen" },
       { status: 403 }
+    );
+  }
+  if (task.status === TaskStatus.GEREED || (await hasCompletedAncestor(task.id))) {
+    return NextResponse.json(
+      { error: "Gereed gemelde taken staan vast. Zet de taak eerst op onvoltooid." },
+      { status: 409 }
     );
   }
   if (task.status !== TaskStatus.TOEGEWEZEN && task.status !== TaskStatus.BESCHIKBAAR) {

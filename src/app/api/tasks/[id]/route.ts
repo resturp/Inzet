@@ -1,3 +1,4 @@
+import { TaskStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
@@ -38,6 +39,35 @@ async function collectSubtreeTaskIds(rootTaskId: string): Promise<string[]> {
   return ids;
 }
 
+async function hasCompletedAncestor(taskId: string): Promise<boolean> {
+  let current = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { parentId: true }
+  });
+  const visited = new Set<string>([taskId]);
+
+  while (current?.parentId) {
+    const parentId = current.parentId;
+    if (visited.has(parentId)) {
+      break;
+    }
+    visited.add(parentId);
+    const parent = await prisma.task.findUnique({
+      where: { id: parentId },
+      select: { id: true, parentId: true, status: true }
+    });
+    if (!parent) {
+      break;
+    }
+    if (parent.status === TaskStatus.GEREED) {
+      return true;
+    }
+    current = { parentId: parent.parentId };
+  }
+
+  return false;
+}
+
 function uniqueSortedAliases(aliases: Iterable<string>): string[] {
   return Array.from(new Set(Array.from(aliases).filter(Boolean))).sort((left, right) =>
     left.localeCompare(right, "nl-NL")
@@ -76,6 +106,18 @@ export async function PATCH(
   const task = await prisma.task.findUnique({ where: { id } });
   if (!task) {
     return NextResponse.json({ error: "Taak niet gevonden" }, { status: 404 });
+  }
+  if (task.status === TaskStatus.GEREED) {
+    return NextResponse.json(
+      { error: "Gereed gemelde taken staan vast. Zet de taak eerst op onvoltooid." },
+      { status: 409 }
+    );
+  }
+  if (await hasCompletedAncestor(task.id)) {
+    return NextResponse.json(
+      { error: "Deze taak staat vast omdat een parent-taak gereed is gemeld." },
+      { status: 409 }
+    );
   }
 
   const canEditTask = await canManageTaskByOwnership(sessionUser.alias, task.id);
@@ -264,11 +306,24 @@ export async function DELETE(
     select: {
       id: true,
       title: true,
-      parentId: true
+      parentId: true,
+      status: true
     }
   });
   if (!task) {
     return NextResponse.json({ error: "Taak niet gevonden" }, { status: 404 });
+  }
+  if (task.status === TaskStatus.GEREED) {
+    return NextResponse.json(
+      { error: "Gereed gemelde taken staan vast. Zet de taak eerst op onvoltooid." },
+      { status: 409 }
+    );
+  }
+  if (await hasCompletedAncestor(task.id)) {
+    return NextResponse.json(
+      { error: "Deze taak staat vast omdat een parent-taak gereed is gemeld." },
+      { status: 409 }
+    );
   }
   if (!task.parentId) {
     const canManageRootTask = await canManageTaskByOwnership(sessionUser.alias, task.id);
@@ -289,6 +344,25 @@ export async function DELETE(
   }
 
   const subtreeTaskIds = await collectSubtreeTaskIds(task.id);
+  const completedTaskInSubtree = await prisma.task.findFirst({
+    where: {
+      id: { in: subtreeTaskIds },
+      status: TaskStatus.GEREED
+    },
+    select: {
+      id: true,
+      title: true
+    }
+  });
+  if (completedTaskInSubtree) {
+    return NextResponse.json(
+      {
+        error:
+          "Verwijderen is geblokkeerd: in deze tak zit een gereed gemelde taak. Zet die eerst op onvoltooid."
+      },
+      { status: 409 }
+    );
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.openTask.deleteMany({

@@ -48,6 +48,35 @@ function uniqueSortedAliases(aliases: Iterable<string>): string[] {
   );
 }
 
+async function hasCompletedAncestor(taskId: string): Promise<boolean> {
+  const visited = new Set<string>([taskId]);
+  let current = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { parentId: true }
+  });
+
+  while (current?.parentId) {
+    const parentId = current.parentId;
+    if (visited.has(parentId)) {
+      break;
+    }
+    visited.add(parentId);
+    const parent = await prisma.task.findUnique({
+      where: { id: parentId },
+      select: { id: true, parentId: true, status: true }
+    });
+    if (!parent) {
+      break;
+    }
+    if (parent.status === TaskStatus.GEREED) {
+      return true;
+    }
+    current = { parentId: parent.parentId };
+  }
+
+  return false;
+}
+
 export async function GET() {
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
@@ -191,11 +220,11 @@ export async function POST(request: Request) {
   const locationSanitized = sanitizeOptionalTrimmedText(parsed.data.location);
   const location = locationSanitized && locationSanitized.length > 0 ? locationSanitized : undefined;
 
-  let parentTask: { id: string; points: number } | null = null;
+  let parentTask: { id: string; points: number; status: TaskStatus } | null = null;
   if (parsed.data.parentId) {
     parentTask = await prisma.task.findUnique({
       where: { id: parsed.data.parentId },
-      select: { id: true, points: true }
+      select: { id: true, points: true, status: true }
     });
 
     if (!parentTask) {
@@ -221,6 +250,13 @@ export async function POST(request: Request) {
             "Je mag hier geen subtaken maken: toewijzing op deze Organiseren-taak geeft niet automatisch subtaakrechten."
         },
         { status: 403 }
+      );
+    }
+
+    if (parentTask.status === TaskStatus.GEREED || (await hasCompletedAncestor(parentTask.id))) {
+      return NextResponse.json(
+        { error: "Je kunt geen subtaken toevoegen onder een gereed gemelde taak." },
+        { status: 409 }
       );
     }
   }

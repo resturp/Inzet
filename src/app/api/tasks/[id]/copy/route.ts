@@ -81,6 +81,39 @@ type DateTimeHandling =
   | { mode: "KEEP" }
   | { mode: "SHIFT"; amount: number; unit: DateShiftUnit };
 
+function normalizeCopiedStatus(status: TaskStatus): TaskStatus {
+  return status === TaskStatus.GEREED ? TaskStatus.TOEGEWEZEN : status;
+}
+
+async function hasCompletedAncestor(taskId: string): Promise<boolean> {
+  const visited = new Set<string>([taskId]);
+  let current = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { parentId: true }
+  });
+
+  while (current?.parentId) {
+    const parentId = current.parentId;
+    if (visited.has(parentId)) {
+      break;
+    }
+    visited.add(parentId);
+    const parent = await prisma.task.findUnique({
+      where: { id: parentId },
+      select: { id: true, parentId: true, status: true }
+    });
+    if (!parent) {
+      break;
+    }
+    if (parent.status === TaskStatus.GEREED) {
+      return true;
+    }
+    current = { parentId: parent.parentId };
+  }
+
+  return false;
+}
+
 function uniqueSortedAliases(aliases: Iterable<string>): string[] {
   return Array.from(new Set(Array.from(aliases).filter(Boolean))).sort((left, right) =>
     left.localeCompare(right, "nl-NL")
@@ -190,7 +223,13 @@ export async function POST(
     where: { id: sourceTaskId },
     select: {
       id: true,
-      parentId: true
+      parentId: true,
+      status: true,
+      parent: {
+        select: {
+          status: true
+        }
+      }
     }
   });
   if (!sourceTaskContext) {
@@ -199,6 +238,15 @@ export async function POST(
   if (!sourceTaskContext.parentId) {
     return NextResponse.json(
       { error: "Alleen subtaken kunnen worden gekopieerd" },
+      { status: 409 }
+    );
+  }
+  if (await hasCompletedAncestor(sourceTaskContext.id)) {
+    return NextResponse.json(
+      {
+        error:
+          "Deze taak staat vast omdat een parent-taak gereed is gemeld."
+      },
       { status: 409 }
     );
   }
@@ -221,6 +269,12 @@ export async function POST(
           "Je mag hier geen subtaken maken: toewijzing op deze Organiseren-taak geeft niet automatisch subtaakrechten."
       },
       { status: 403 }
+    );
+  }
+  if (await hasCompletedAncestor(parsed.data.targetParentId)) {
+    return NextResponse.json(
+      { error: "Je kunt geen subtaken toevoegen onder een gereed gemelde taak." },
+      { status: 409 }
     );
   }
 
@@ -250,7 +304,7 @@ export async function POST(
         }),
         tx.task.findUnique({
           where: { id: parsed.data.targetParentId },
-          select: { id: true, points: true }
+          select: { id: true, points: true, status: true }
         })
       ]);
 
@@ -259,6 +313,9 @@ export async function POST(
       }
       if (!targetParent) {
         throw new Error("TARGET_NOT_FOUND");
+      }
+      if (targetParent.status === TaskStatus.GEREED) {
+        throw new Error("TARGET_COMPLETED");
       }
 
       const sourceTask: TaskNode = {
@@ -384,7 +441,7 @@ export async function POST(
             override?.location === undefined
               ? (sanitizeNullableTrimmedText(sourceTask.location) ?? null)
               : override.location,
-          status: sourceTask.status
+          status: normalizeCopiedStatus(sourceTask.status)
         }
       });
       createdTasks.push({
@@ -417,7 +474,7 @@ export async function POST(
               startTime: childDates.startTime,
               endTime: childDates.endTime,
               location: sanitizeNullableTrimmedText(child.location) ?? null,
-              status: child.status
+              status: normalizeCopiedStatus(child.status)
             }
           });
           createdTasks.push({
@@ -498,6 +555,12 @@ export async function POST(
     }
     if (error instanceof Error && error.message === "TARGET_NOT_FOUND") {
       return NextResponse.json({ error: "Doel-parent niet gevonden" }, { status: 404 });
+    }
+    if (error instanceof Error && error.message === "TARGET_COMPLETED") {
+      return NextResponse.json(
+        { error: "Je kunt geen subtaken toevoegen onder een gereed gemelde taak." },
+        { status: 409 }
+      );
     }
     return NextResponse.json({ error: "Kopieren mislukt" }, { status: 500 });
   }

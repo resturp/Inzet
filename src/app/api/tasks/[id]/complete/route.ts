@@ -16,6 +16,14 @@ type SubtreeTaskRow = {
   status: TaskStatus;
 };
 
+type TaskCompletionSnapshotPayload = {
+  tasks: Array<{
+    id: string;
+    status: TaskStatus;
+    endTime: string;
+  }>;
+};
+
 async function collectTaskSubtree(rootTaskId: string): Promise<SubtreeTaskRow[]> {
   const nodes: SubtreeTaskRow[] = [];
   const visited = new Set<string>();
@@ -64,6 +72,35 @@ async function collectTaskSubtree(rootTaskId: string): Promise<SubtreeTaskRow[]>
   return nodes;
 }
 
+async function hasCompletedAncestor(taskId: string): Promise<boolean> {
+  const visited = new Set<string>([taskId]);
+  let current = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { parentId: true }
+  });
+
+  while (current?.parentId) {
+    const parentId = current.parentId;
+    if (visited.has(parentId)) {
+      break;
+    }
+    visited.add(parentId);
+    const parent = await prisma.task.findUnique({
+      where: { id: parentId },
+      select: { id: true, parentId: true, status: true }
+    });
+    if (!parent) {
+      break;
+    }
+    if (parent.status === TaskStatus.GEREED) {
+      return true;
+    }
+    current = { parentId: parent.parentId };
+  }
+
+  return false;
+}
+
 export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> }
@@ -90,6 +127,12 @@ export async function POST(
   const canManage = await canManageTaskByOwnership(sessionUser.alias, task.id);
   if (!canManage) {
     return NextResponse.json({ error: "Geen rechten om deze taak gereed te melden" }, { status: 403 });
+  }
+  if (await hasCompletedAncestor(task.id)) {
+    return NextResponse.json(
+      { error: "Deze taak staat vast omdat een parent-taak gereed is gemeld." },
+      { status: 409 }
+    );
   }
 
   if (task.status !== TaskStatus.TOEGEWEZEN) {
@@ -133,7 +176,25 @@ export async function POST(
     );
   }
 
-  await prisma.$transaction(async (tx) => {
+  const snapshotPayload: TaskCompletionSnapshotPayload = {
+    tasks: subtree.map((row) => ({
+      id: row.id,
+      status: row.status,
+      endTime: row.endTime.toISOString()
+    }))
+  };
+
+  const snapshot = await prisma.$transaction(async (tx) => {
+    const createdSnapshot = await tx.taskCompletionSnapshot.create({
+      data: {
+        rootTaskId: task.id,
+        snapshotJson: snapshotPayload,
+        completedByAlias: sessionUser.alias,
+        completedAt: now
+      },
+      select: { id: true }
+    });
+
     for (const row of affected) {
       await tx.task.update({
         where: { id: row.id },
@@ -143,6 +204,8 @@ export async function POST(
         }
       });
     }
+
+    return createdSnapshot;
   });
 
   await writeAuditLog({
@@ -153,7 +216,8 @@ export async function POST(
     payload: {
       affectedTaskIds: affected.map((row) => row.id),
       affectedCount: affected.length,
-      completedAt: now.toISOString()
+      completedAt: now.toISOString(),
+      snapshotId: snapshot.id
     }
   });
 
@@ -161,6 +225,8 @@ export async function POST(
     taskId: task.id,
     taskTitle: task.title,
     actorAlias: sessionUser.alias,
+    subject: `Taak gereed gemeld: ${task.title}`,
+    notifyActor: true,
     summary: `Gereed gemeld: ${affected.length} taak/taken op eindtijd begrensd tot ${now.toLocaleString("nl-NL")}.`
   }).catch((error) => {
     console.error("Failed to notify coordinators after task completion", {

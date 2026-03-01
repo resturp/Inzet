@@ -1,3 +1,4 @@
+import { TaskStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/api-session";
@@ -36,6 +37,35 @@ async function wouldCreateCycle(taskId: string, targetParentId: string): Promise
   return false;
 }
 
+async function hasCompletedAncestor(taskId: string): Promise<boolean> {
+  const visited = new Set<string>([taskId]);
+  let current = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { parentId: true }
+  });
+
+  while (current?.parentId) {
+    const parentId = current.parentId;
+    if (visited.has(parentId)) {
+      break;
+    }
+    visited.add(parentId);
+    const parent = await prisma.task.findUnique({
+      where: { id: parentId },
+      select: { id: true, parentId: true, status: true }
+    });
+    if (!parent) {
+      break;
+    }
+    if (parent.status === TaskStatus.GEREED) {
+      return true;
+    }
+    current = { parentId: parent.parentId };
+  }
+
+  return false;
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -59,7 +89,8 @@ export async function POST(
         parentId: true,
         points: true,
         teamName: true,
-        title: true
+        title: true,
+        status: true
       }
     }),
     prisma.task.findUnique({
@@ -68,7 +99,8 @@ export async function POST(
         id: true,
         points: true,
         teamName: true,
-        title: true
+        title: true,
+        status: true
       }
     })
   ]);
@@ -82,6 +114,30 @@ export async function POST(
   if (!task.parentId) {
     return NextResponse.json(
       { error: "Alleen subtaken kunnen worden verplaatst" },
+      { status: 409 }
+    );
+  }
+  if (task.status === TaskStatus.GEREED) {
+    return NextResponse.json(
+      { error: "Een gereed gemelde taak kan niet worden verplaatst." },
+      { status: 409 }
+    );
+  }
+  if (await hasCompletedAncestor(task.id)) {
+    return NextResponse.json(
+      { error: "Deze taak staat vast omdat een parent-taak gereed is gemeld." },
+      { status: 409 }
+    );
+  }
+  if (targetParent.status === TaskStatus.GEREED) {
+    return NextResponse.json(
+      { error: "Je kunt geen subtaken toevoegen onder een gereed gemelde taak." },
+      { status: 409 }
+    );
+  }
+  if (await hasCompletedAncestor(targetParent.id)) {
+    return NextResponse.json(
+      { error: "Je kunt geen subtaken toevoegen onder een gereed gemelde taak." },
       { status: 409 }
     );
   }
