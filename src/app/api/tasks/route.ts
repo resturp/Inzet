@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getSessionUser } from "@/lib/api-session";
 import {
   canEditTaskCoordinatorsFromMap,
+  canCreateSubtaskFromMap,
   canCreateSubtaskByOwnership,
   canManageTaskByOwnership,
   hasTaskPermissionFromMap,
@@ -105,6 +106,7 @@ export async function GET() {
     const canRead = hasTaskPermissionFromMap(sessionUser.alias, task.id, "READ", byId);
     const canOpen = hasTaskPermissionFromMap(sessionUser.alias, task.id, "OPEN", byId);
     const canManage = hasTaskPermissionFromMap(sessionUser.alias, task.id, "MANAGE", byId);
+    const canCreateSubtask = canCreateSubtaskFromMap(sessionUser.alias, task.id, byId);
     const canEditCoordinators = canEditTaskCoordinatorsFromMap(sessionUser.alias, task.id, byId);
 
     return {
@@ -130,6 +132,7 @@ export async function GET() {
       canRead,
       canOpen,
       canManage,
+      canCreateSubtask,
       canEditCoordinators
     };
   });

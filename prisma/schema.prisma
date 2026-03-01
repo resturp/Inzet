@@ -62,6 +62,7 @@ model User {
   proposerOpenTasks       OpenTask[]           @relation("OpenTaskProposer")
   aliasChangeProposals    AliasChangeProposal[]
   magicLinkTokens         MagicLinkToken[]
+  completedTasks          Task[]               @relation("TaskCompletedBy")
   taskSubscriptions       TaskSubscription[]
   notificationPreferences NotificationPreference[]
   notificationEvents      NotificationEvent[]
@@ -99,6 +100,9 @@ model Task {
   templateId      String?
   template        TaskTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   status          TaskStatus        @default(BESCHIKBAAR)
+  completedByAlias String?
+  completedBy     User?             @relation("TaskCompletedBy", fields: [completedByAlias], references: [alias], onDelete: SetNull, onUpdate: Cascade)
+  completedAt     DateTime?
   coordinationType TaskCoordinationType?
   createdAt       DateTime          @default(now())
   openTasks       OpenTask[]
@@ -106,6 +110,7 @@ model Task {
 
   @@index([parentId])
   @@index([status, date])
+  @@index([completedByAlias, completedAt])
 }
 
 model TaskCoordinator {

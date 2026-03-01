@@ -27,6 +27,7 @@ type ApiTask = {
   canRead: boolean;
   canOpen: boolean;
   canManage: boolean;
+  canCreateSubtask: boolean;
   canEditCoordinators: boolean;
   isSubscribed: boolean;
 };
@@ -175,6 +176,7 @@ const ICON_ADD = "+";
 const ICON_BACK = "↩";
 const ICON_ACCEPT = "✓";
 const ICON_REJECT = "✕";
+const ICON_COMPLETE = "✓✓";
 const ICON_CARET_DOWN = "▾";
 const VCZ_LOGO_URL =
   "https://usercontent.one/wp/www.vczwolle.nl/wp-content/uploads/Logo-nieuw-V1-VCZ.png?media=1660898964";
@@ -1600,6 +1602,28 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
+  async function onCompleteTask(taskId: string) {
+    setActiveTaskId(taskId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error ?? "Taak gereedmelden is mislukt.");
+        return;
+      }
+      await loadAll();
+    } catch {
+      setError("Netwerkfout bij gereedmelden van taak.");
+    } finally {
+      setActiveTaskId(null);
+    }
+  }
+
   function onStartPropose(task: ApiTask) {
     setError(null);
     setProposeDialogTask({ id: task.id, title: task.title });
@@ -2772,8 +2796,12 @@ export function TasksClient({ alias }: { alias: string }) {
             !isCreatingSubtask &&
             (task.coordinationType === "DELEGEREN" || isLeafTask);
           const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
+          const canCompleteTask =
+            canManageTask && task.status === "TOEGEWEZEN" && endsInFuture(task);
           const canSubscribeTask = task.canRead || task.canOpen || canManageTask;
-          const showInlineTaskActions = canRegisterTask || canReleaseTask || canProposeTask;
+          const canCreateSubtask = task.canCreateSubtask;
+          const shouldShowSubtasksSection =
+            subtasks.length > 0 || canCreateSubtask || isCreatingSubtask;
           const isOpenTasksListView = taskMenuView === "BESCHIKBAAR" && !focusedTaskId;
           const pointsLines = isOpenTasksListView
             ? [`Aantal punten: ${formatPoints(availableTaskPoints)}`]
@@ -3014,7 +3042,7 @@ export function TasksClient({ alias }: { alias: string }) {
                     {activeTaskId === task.id ? `${ICON_DELETE}...` : ICON_DELETE}
                   </button>
                 ) : null}
-                {isOpenTasksListView && canRegisterTask ? (
+                {canRegisterTask ? (
                   <button
                     type="button"
                     onClick={() => onRegister(task.id)}
@@ -3026,7 +3054,31 @@ export function TasksClient({ alias }: { alias: string }) {
                     {activeTaskId === task.id ? `${ICON_REGISTER}...` : ICON_REGISTER}
                   </button>
                 ) : null}
-                {isOpenTasksListView && canProposeTask ? (
+                {canReleaseTask ? (
+                  <button
+                    type="button"
+                    onClick={() => onRelease(task.id)}
+                    disabled={activeTaskId === task.id}
+                    style={{ whiteSpace: "nowrap" }}
+                    title="Stel beschikbaar"
+                    aria-label="Stel beschikbaar"
+                  >
+                    {renderReleaseIcon(activeTaskId === task.id)}
+                  </button>
+                ) : null}
+                {canCompleteTask ? (
+                  <button
+                    type="button"
+                    onClick={() => void onCompleteTask(task.id)}
+                    disabled={activeTaskId === task.id}
+                    style={{ whiteSpace: "nowrap" }}
+                    title="Gereed melden"
+                    aria-label="Gereed melden"
+                  >
+                    {activeTaskId === task.id ? `${ICON_COMPLETE}...` : ICON_COMPLETE}
+                  </button>
+                ) : null}
+                {canProposeTask ? (
                   <button
                     type="button"
                     onClick={() => onStartPropose(task)}
@@ -3095,7 +3147,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 </div>
               ) : null}
 
-              {isMovingTask || isOpenTasksListView ? null : (
+              {isMovingTask || isOpenTasksListView || !shouldShowSubtasksSection ? null : (
                 <>
                   <div className="grid" style={{ gap: "0.5rem" }}>
                     <div
@@ -3108,7 +3160,7 @@ export function TasksClient({ alias }: { alias: string }) {
                       }}
                     >
                       <p className="muted">Subtaken ({subtasks.length})</p>
-                      {canManageTask ? (
+                      {canCreateSubtask ? (
                         <button
                           type="button"
                           onClick={() =>
@@ -3140,7 +3192,7 @@ export function TasksClient({ alias }: { alias: string }) {
                             const canManageSubtaskFromParent = canManageTask;
                             const canDeleteSubtask =
                               canManageSubtaskFromParent && subtask.parentId !== null;
-                            const canCopySubtask = canManageSubtaskFromParent;
+                            const canCopySubtask = canCreateSubtask;
                             const subtaskCurrentPoints = parseTaskPoints(subtask.points);
                             const subtaskPointsDraft =
                               subtaskPointsDraftById[subtask.id] ??
@@ -3254,61 +3306,6 @@ export function TasksClient({ alias }: { alias: string }) {
                     )}
 
                   </div>
-
-                  {!isOpenTasksListView &&
-                  showInlineTaskActions &&
-                  !(isCreatingSubtask && subtaskFormMode === "copy") ? (
-                    <div
-                      style={{
-                        display: "inline-grid",
-                        gridAutoFlow: "column",
-                        columnGap: "0.5rem",
-                        alignItems: "center",
-                        width: "max-content",
-                        maxWidth: "100%",
-                        overflowX: "auto"
-                      }}
-                    >
-                      {canRegisterTask ? (
-                        <button
-                          type="button"
-                          onClick={() => onRegister(task.id)}
-                          disabled={activeTaskId === task.id}
-                          style={{ whiteSpace: "nowrap" }}
-                          title="Schrijf in"
-                          aria-label="Schrijf in"
-                        >
-                          {activeTaskId === task.id ? `${ICON_REGISTER}...` : ICON_REGISTER}
-                        </button>
-                      ) : null}
-
-                      {canReleaseTask ? (
-                        <button
-                          type="button"
-                          onClick={() => onRelease(task.id)}
-                          disabled={activeTaskId === task.id}
-                          style={{ whiteSpace: "nowrap" }}
-                          title="Stel beschikbaar"
-                          aria-label="Stel beschikbaar"
-                        >
-                          {renderReleaseIcon(activeTaskId === task.id)}
-                        </button>
-                      ) : null}
-
-                      {canProposeTask ? (
-                        <button
-                          type="button"
-                          onClick={() => onStartPropose(task)}
-                          disabled={activeTaskId === task.id}
-                          style={{ whiteSpace: "nowrap" }}
-                          title="Stel voor"
-                          aria-label="Stel voor"
-                        >
-                          {activeTaskId === task.id ? `${ICON_PROPOSE}...` : ICON_PROPOSE}
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
                 </>
               )}
             </article>
