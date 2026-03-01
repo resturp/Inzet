@@ -3746,7 +3746,13 @@ export function TasksClient({ alias }: { alias: string }) {
 
       {isAccountSettingsDialogOpen && accountSettingsDraft ? (
         <div
-          onClick={isAccountSettingsSaving ? undefined : onCloseAccountSettingsDialog}
+          onClick={
+            isAccountSettingsSaving
+              ? undefined
+              : () => {
+                  onCloseAccountSettingsDialog();
+                }
+          }
           style={{
             position: "fixed",
             inset: 0,
@@ -3938,7 +3944,9 @@ export function TasksClient({ alias }: { alias: string }) {
             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button
                 type="button"
-                onClick={onCloseAccountSettingsDialog}
+                onClick={() => {
+                  onCloseAccountSettingsDialog();
+                }}
                 disabled={isAccountSettingsSaving || isAliasChangeSubmitting}
               >
                 Annuleren
