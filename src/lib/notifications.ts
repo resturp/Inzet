@@ -314,8 +314,7 @@ async function dispatchCategoryMessages(
       data: digestRows
     });
     await flushDueNotificationDigests({
-      userAliases: uniqueValues(digestRows.map((row) => row.userAlias)),
-      categories: [category]
+      userAliases: uniqueValues(digestRows.map((row) => row.userAlias))
     });
   }
 }
@@ -430,6 +429,19 @@ export async function flushDueNotificationDigests(params?: {
     }
   });
 
+  type DueDigestChunk = {
+    preference: (typeof preferences)[number];
+    pending: Array<{
+      id: string;
+      category: NotificationCategory;
+      subject: string;
+      body: string;
+      createdAt: Date;
+    }>;
+  };
+
+  const dueChunksByUserAndDelivery = new Map<string, DueDigestChunk[]>();
+
   for (const preference of preferences) {
     if (!preference.user.isActive || !preference.user.email) {
       continue;
@@ -457,26 +469,54 @@ export async function flushDueNotificationDigests(params?: {
       continue;
     }
 
-    const digestSubject = `Inzet digest (${labelForDelivery(preference.delivery)}): ${labelForCategory(
-      preference.category
-    )}`;
-    const digestLines = pending.map(
+    const bucketKey = `${preference.userAlias}::${preference.delivery}`;
+    const bucket = dueChunksByUserAndDelivery.get(bucketKey);
+    const dueChunk: DueDigestChunk = {
+      preference,
+      pending
+    };
+    if (bucket) {
+      bucket.push(dueChunk);
+    } else {
+      dueChunksByUserAndDelivery.set(bucketKey, [dueChunk]);
+    }
+  }
+
+  for (const chunks of dueChunksByUserAndDelivery.values()) {
+    if (chunks.length === 0) {
+      continue;
+    }
+
+    const firstPreference = chunks[0].preference;
+    const flattenedPending = chunks
+      .flatMap((chunk) => chunk.pending)
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+    if (flattenedPending.length === 0) {
+      continue;
+    }
+
+    const totalNotifications = flattenedPending.length;
+    const categoryLabels = uniqueValues(
+      flattenedPending.map((item) => labelForCategory(item.category))
+    );
+    const digestSubject = `Inzet digest (${labelForDelivery(firstPreference.delivery)}): ${totalNotifications} notificatie(s)`;
+    const digestLines = flattenedPending.map(
       (item, index) =>
-        `${index + 1}. ${new Date(item.createdAt).toLocaleString("nl-NL")}\n${item.subject}\n${item.body}`
+        `${index + 1}. ${new Date(item.createdAt).toLocaleString("nl-NL")} | ${labelForCategory(
+          item.category
+        )}\n${item.subject}\n${item.body}`
     );
 
     try {
       await sendMail({
-        to: preference.user.email,
+        to: firstPreference.user.email!,
         subject: digestSubject,
         text: [
-          `Beste ${preference.userAlias},`,
+          `Beste ${firstPreference.userAlias},`,
           "",
           "Dit bericht ontvang je omdat er een relevante update voor jou is in Inzet.",
           "",
-          `Je hebt ${pending.length} nieuwe notificatie(s) in categorie \"${labelForCategory(
-            preference.category
-          )}\".`,
+          `Je hebt ${totalNotifications} nieuwe notificatie(s) (${categoryLabels.join(", ")}).`,
           "",
           ...digestLines,
           "",
@@ -487,32 +527,36 @@ export async function flushDueNotificationDigests(params?: {
         ].join("\n")
       });
 
+      const deliveredIds = uniqueValues(flattenedPending.map((item) => item.id));
+
       await prisma.$transaction([
         prisma.notificationEvent.updateMany({
           where: {
-            id: { in: pending.map((item) => item.id) },
+            id: { in: deliveredIds },
             deliveredAt: null
           },
           data: {
             deliveredAt: now
           }
         }),
-        prisma.notificationPreference.update({
-          where: {
-            userAlias_category: {
-              userAlias: preference.userAlias,
-              category: preference.category
+        ...chunks.map((chunk) =>
+          prisma.notificationPreference.update({
+            where: {
+              userAlias_category: {
+                userAlias: chunk.preference.userAlias,
+                category: chunk.preference.category
+              }
+            },
+            data: {
+              lastDigestSentAt: now
             }
-          },
-          data: {
-            lastDigestSentAt: now
-          }
-        })
+          })
+        )
       ]);
     } catch (error) {
       console.error("Failed to send digest notification", {
-        userAlias: preference.userAlias,
-        category: preference.category,
+        userAlias: firstPreference.userAlias,
+        delivery: firstPreference.delivery,
         error
       });
     }

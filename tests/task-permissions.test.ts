@@ -212,6 +212,25 @@ test("organiseren: toegewezen blad-coordinator krijgt niet automatisch subtaakre
   assert.equal(canCreateSubtaskFromMap("thomas", "leaf", tasks), false);
 });
 
+test("organiseren: geen parent-coordinatierecht betekent geen subtaak-plus op expliciete child", () => {
+  const tasks = taskMap([
+    { id: "besturen", parentId: null, ownCoordinatorAliases: ["edgar"] },
+    { id: "bestuur", parentId: "besturen", ownCoordinatorAliases: ["edgar"] },
+    {
+      id: "technische-zaken",
+      parentId: "bestuur",
+      coordinationType: "ORGANISEREN",
+      ownCoordinatorAliases: ["erik"]
+    },
+    { id: "tc-jongens", parentId: "technische-zaken", ownCoordinatorAliases: ["mark"] },
+    { id: "jongens-b2", parentId: "tc-jongens", ownCoordinatorAliases: ["isaura"] }
+  ]);
+
+  assert.equal(hasTaskPermissionFromMap("isaura", "tc-jongens", "MANAGE", tasks), false);
+  assert.equal(hasTaskPermissionFromMap("isaura", "jongens-b2", "MANAGE", tasks), true);
+  assert.equal(canCreateSubtaskFromMap("isaura", "jongens-b2", tasks), false);
+});
+
 test("organiseren: bestaande effectieve coordinator behoudt subtaakrechten", () => {
   const tasks = taskMap([
     { id: "root", parentId: null, coordinationType: "ORGANISEREN", ownCoordinatorAliases: ["edgar"] },

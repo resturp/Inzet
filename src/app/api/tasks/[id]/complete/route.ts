@@ -139,8 +139,6 @@ export async function POST(
         where: { id: row.id },
         data: {
           endTime: now,
-          completedByAlias: sessionUser.alias,
-          completedAt: now,
           status: row.status === TaskStatus.TOEGEWEZEN ? TaskStatus.GEREED : row.status
         }
       });
