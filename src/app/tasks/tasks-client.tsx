@@ -175,7 +175,6 @@ const ICON_ADD = "+";
 const ICON_BACK = "↩";
 const ICON_ACCEPT = "✓";
 const ICON_REJECT = "✕";
-const ICON_SAVE = "💾";
 const ICON_CARET_DOWN = "▾";
 const VCZ_LOGO_URL =
   "https://usercontent.one/wp/www.vczwolle.nl/wp-content/uploads/Logo-nieuw-V1-VCZ.png?media=1660898964";
@@ -388,6 +387,40 @@ function renderSubscriptionIcon(isSubscribed: boolean, isPending: boolean) {
       {isSubscribed ? (
         <path d="M4 4L20 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       ) : null}
+    </svg>
+  );
+}
+
+function renderDownloadIcon(isPending: boolean) {
+  if (isPending) {
+    return "...";
+  }
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      aria-hidden="true"
+      focusable="false"
+      style={{ display: "block", color: "#bfdbfe" }}
+    >
+      <path
+        d="M12 3V12M12 12L8.5 8.5M12 12L15.5 8.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <path
+        d="M4 14H8L10 17H14L16 14H20V19C20 20.1 19.1 21 18 21H6C4.9 21 4 20.1 4 19V14Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
     </svg>
   );
 }
@@ -1475,6 +1508,40 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
+  async function onDownloadTaskBackupJson(taskId: string, taskTitle: string) {
+    setActiveTaskId(taskId);
+    setDownloadMenuTaskId(null);
+    setDownloadMenuPosition(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/reports/tasks/${taskId}/backup-json`, {
+        cache: "no-store"
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        setError(payload?.error ?? "JSON backup export is mislukt.");
+        return;
+      }
+
+      const blob = await response.blob();
+      const headerFilename = filenameFromContentDisposition(response.headers.get("content-disposition"));
+      const fallbackFilename = `taken_backup_${taskTitle.replace(/\s+/g, "_")}.json`;
+      const downloadFilename = headerFilename ?? fallbackFilename;
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = downloadFilename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setError("Netwerkfout bij JSON backup export.");
+    } finally {
+      setActiveTaskId(null);
+    }
+  }
+
   async function onToggleTaskSubscription(taskId: string, subscribed: boolean) {
     setActiveTaskId(taskId);
     setError(null);
@@ -2162,8 +2229,8 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
-  function onCloseAccountSettingsDialog() {
-    if (isAccountSettingsSaving || isAliasChangeSubmitting) {
+  function onCloseAccountSettingsDialog(force = false) {
+    if (!force && (isAccountSettingsSaving || isAliasChangeSubmitting)) {
       return;
     }
     setIsAccountSettingsDialogOpen(false);
@@ -2266,8 +2333,7 @@ export function TasksClient({ alias }: { alias: string }) {
 
       setAccountIsBestuur(payload.data.isBestuur);
       setAccountBondsnummer(payload.data.bondsnummer);
-      setAccountSettingsDraft(accountSettingsDraftFromAccount(payload.data));
-      setAccountSettingsStatus(payload.message ?? "Account opgeslagen.");
+      onCloseAccountSettingsDialog(true);
     } catch {
       setAccountSettingsError("Netwerkfout bij opslaan van account.");
     } finally {
@@ -2862,10 +2928,10 @@ export function TasksClient({ alias }: { alias: string }) {
                       borderTopRightRadius: 0,
                       borderBottomRightRadius: 0
                     }}
-                    title="Download punten-CSV"
-                    aria-label="Download punten-CSV"
+                    title="Download"
+                    aria-label="Download"
                   >
-                    {activeTaskId === task.id ? "..." : ICON_SAVE}
+                    {renderDownloadIcon(activeTaskId === task.id)}
                   </button>
                   <button
                     type="button"
@@ -2888,8 +2954,8 @@ export function TasksClient({ alias }: { alias: string }) {
                       borderTopLeftRadius: 0,
                       borderBottomLeftRadius: 0
                     }}
-                    title="Kies CSV-weergave"
-                    aria-label="Kies CSV-weergave"
+                    title="Kies downloadtype"
+                    aria-label="Kies downloadtype"
                   >
                     {ICON_CARET_DOWN}
                   </button>
@@ -3608,10 +3674,10 @@ export function TasksClient({ alias }: { alias: string }) {
               void onDownloadTaskPointsCsv(downloadMenuTask.id, downloadMenuTask.title, "SUMMARY")
             }
             disabled={activeTaskId === downloadMenuTask.id}
-            title="Zonder details"
-            aria-label="Zonder details"
+            title="Punten (CSV, zonder details)"
+            aria-label="Punten (CSV, zonder details)"
           >
-            Zonder details
+            Punten (CSV, zonder details)
           </button>
           <button
             type="button"
@@ -3619,10 +3685,19 @@ export function TasksClient({ alias }: { alias: string }) {
               void onDownloadTaskPointsCsv(downloadMenuTask.id, downloadMenuTask.title, "DETAIL")
             }
             disabled={activeTaskId === downloadMenuTask.id}
-            title="Met details"
-            aria-label="Met details"
+            title="Punten (CSV, met details)"
+            aria-label="Punten (CSV, met details)"
           >
-            Met details
+            Punten (CSV, met details)
+          </button>
+          <button
+            type="button"
+            onClick={() => void onDownloadTaskBackupJson(downloadMenuTask.id, downloadMenuTask.title)}
+            disabled={activeTaskId === downloadMenuTask.id}
+            title="Alle taken (backup JSON)"
+            aria-label="Alle taken (backup JSON)"
+          >
+            Alle taken (backup JSON)
           </button>
         </div>
       ) : null}
