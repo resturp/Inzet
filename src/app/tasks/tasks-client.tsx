@@ -735,6 +735,7 @@ export function TasksClient({ alias }: { alias: string }) {
   const [coordinatorAliasToAdd, setCoordinatorAliasToAdd] = useState("");
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
   const [moveTargetParentId, setMoveTargetParentId] = useState("");
+  const [moveTargetSearch, setMoveTargetSearch] = useState("");
   const [proposeDialogTask, setProposeDialogTask] = useState<{ id: string; title: string } | null>(null);
   const [proposeDialogAlias, setProposeDialogAlias] = useState("");
   const [registerSuccessTaskTitle, setRegisterSuccessTaskTitle] = useState<string | null>(null);
@@ -1239,6 +1240,7 @@ export function TasksClient({ alias }: { alias: string }) {
         setEditDraft(null);
         setMovingTaskId(null);
         setMoveTargetParentId("");
+        setMoveTargetSearch("");
         setCreatingSubtaskForTaskId(null);
         setSubtaskDraft(initialSubtask);
         setSubtaskFormMode("new");
@@ -1353,6 +1355,15 @@ export function TasksClient({ alias }: { alias: string }) {
         return;
       }
 
+      if (movingTaskId) {
+        if (activeTaskId !== movingTaskId) {
+          setMovingTaskId(null);
+          setMoveTargetParentId("");
+          setMoveTargetSearch("");
+        }
+        return;
+      }
+
       if (subtaskFormMode === "copy" && creatingSubtaskForTaskId) {
         if (activeTaskId !== creatingSubtaskForTaskId) {
           setCreatingSubtaskForTaskId(null);
@@ -1426,7 +1437,8 @@ export function TasksClient({ alias }: { alias: string }) {
     registerSuccessTaskTitle,
     releaseDialogTask,
     subtaskFormMode,
-    downloadMenuTaskId
+    downloadMenuTaskId,
+    movingTaskId
   ]);
 
   useEffect(() => {
@@ -1449,6 +1461,7 @@ export function TasksClient({ alias }: { alias: string }) {
     if (movingTaskId && !tasksById.has(movingTaskId)) {
       setMovingTaskId(null);
       setMoveTargetParentId("");
+      setMoveTargetSearch("");
     }
     if (downloadMenuTaskId && !tasksById.has(downloadMenuTaskId)) {
       setDownloadMenuTaskId(null);
@@ -1901,6 +1914,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setEditDraft(null);
     setMovingTaskId(null);
     setMoveTargetParentId("");
+    setMoveTargetSearch("");
     setCreatingSubtaskForTaskId(null);
     setSubtaskDraft(initialSubtask);
     setSubtaskFormMode("new");
@@ -1918,6 +1932,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setEditDraft(null);
     setMovingTaskId(null);
     setMoveTargetParentId("");
+    setMoveTargetSearch("");
     setCreatingSubtaskForTaskId(task.id);
     setSubtaskFormMode(sourceTask ? "copy" : "new");
     setCopySourceTaskId(sourceTask?.id ?? null);
@@ -1967,6 +1982,7 @@ export function TasksClient({ alias }: { alias: string }) {
     resetCopyDateDialog();
     setMovingTaskId(null);
     setMoveTargetParentId("");
+    setMoveTargetSearch("");
     setEditingTaskId(task.id);
     setEditDraft({
       title: task.title,
@@ -2140,6 +2156,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setEditingTaskId(null);
     setEditDraft(null);
     setMovingTaskId(task.id);
+    setMoveTargetSearch("");
 
     const descendants = collectDescendantIds(task.id, childrenByParentId);
     const firstCandidate = sortedTasks.find(
@@ -2155,6 +2172,7 @@ export function TasksClient({ alias }: { alias: string }) {
   function onCancelMove() {
     setMovingTaskId(null);
     setMoveTargetParentId("");
+    setMoveTargetSearch("");
   }
 
   async function onMoveTask(taskId: string) {
@@ -2177,12 +2195,23 @@ export function TasksClient({ alias }: { alias: string }) {
       }
       setMovingTaskId(null);
       setMoveTargetParentId("");
+      setMoveTargetSearch("");
       await loadAll({ includeUsers: false });
     } catch {
       setError("Netwerkfout bij verplaatsen van taak.");
     } finally {
       setActiveTaskId(null);
     }
+  }
+
+  function onConfirmMoveAndClose() {
+    if (!movingTaskId || !moveTargetParentId) {
+      return;
+    }
+    const taskId = movingTaskId;
+    setMovingTaskId(null);
+    setMoveTargetSearch("");
+    void onMoveTask(taskId);
   }
 
   function onDeleteTask(task: ApiTask) {
@@ -2232,6 +2261,7 @@ export function TasksClient({ alias }: { alias: string }) {
       if (movingTaskId === taskId) {
         setMovingTaskId(null);
         setMoveTargetParentId("");
+        setMoveTargetSearch("");
       }
       if (creatingSubtaskForTaskId === taskId) {
         setCreatingSubtaskForTaskId(null);
@@ -2527,6 +2557,7 @@ export function TasksClient({ alias }: { alias: string }) {
 
   const focusedTask = focusedTaskId ? tasksById.get(focusedTaskId) ?? null : null;
   const editingTask = editingTaskId ? tasksById.get(editingTaskId) ?? null : null;
+  const movingTask = movingTaskId ? tasksById.get(movingTaskId) ?? null : null;
   const canEditTaskDetails = editingTask?.canManage ?? false;
   const canEditCoordinatorList = Boolean(
     editingTask &&
@@ -2557,6 +2588,62 @@ export function TasksClient({ alias }: { alias: string }) {
       })()
     : [];
   const downloadMenuTask = downloadMenuTaskId ? tasksById.get(downloadMenuTaskId) ?? null : null;
+  const moveCandidates = useMemo(() => {
+    if (!movingTask) {
+      return [] as ApiTask[];
+    }
+    const descendants = collectDescendantIds(movingTask.id, childrenByParentId);
+    return sortedTasks.filter(
+      (candidate) =>
+        candidate.id !== movingTask.id &&
+        !descendants.has(candidate.id) &&
+        manageableTaskIds.has(candidate.id) &&
+        (candidate.teamName === null || candidate.teamName === movingTask.teamName)
+    );
+  }, [childrenByParentId, manageableTaskIds, movingTask, sortedTasks]);
+  const moveCandidateOptions = useMemo(
+    () =>
+      moveCandidates.map((candidate) => ({
+        id: candidate.id,
+        pathLabel: buildTaskPath(candidate, tasksById).join(" > ")
+      })),
+    [moveCandidates, tasksById]
+  );
+  const normalizedMoveTargetSearch = moveTargetSearch.trim().toLocaleLowerCase("nl-NL");
+  const filteredMoveCandidateOptions = useMemo(() => {
+    if (!normalizedMoveTargetSearch) {
+      return moveCandidateOptions;
+    }
+    return moveCandidateOptions.filter((option) =>
+      option.pathLabel.toLocaleLowerCase("nl-NL").includes(normalizedMoveTargetSearch)
+    );
+  }, [moveCandidateOptions, normalizedMoveTargetSearch]);
+  const selectedMoveParent = moveCandidates.find((candidate) => candidate.id === moveTargetParentId) ?? null;
+  const nextMovePath =
+    movingTask && selectedMoveParent
+      ? [...buildTaskPath(selectedMoveParent, tasksById), movingTask.title]
+      : [];
+
+  useEffect(() => {
+    if (!movingTask) {
+      if (moveTargetParentId !== "") {
+        setMoveTargetParentId("");
+      }
+      return;
+    }
+    if (filteredMoveCandidateOptions.length === 0) {
+      if (moveTargetParentId !== "") {
+        setMoveTargetParentId("");
+      }
+      return;
+    }
+    const selectionStillVisible = filteredMoveCandidateOptions.some(
+      (option) => option.id === moveTargetParentId
+    );
+    if (!selectionStillVisible) {
+      setMoveTargetParentId(filteredMoveCandidateOptions[0].id);
+    }
+  }, [filteredMoveCandidateOptions, moveTargetParentId, movingTask]);
 
   return (
     <div className="grid">
@@ -2594,6 +2681,7 @@ export function TasksClient({ alias }: { alias: string }) {
                     setEditDraft(null);
                     setMovingTaskId(null);
                     setMoveTargetParentId("");
+                    setMoveTargetSearch("");
                     setCreatingSubtaskForTaskId(null);
                     setSubtaskDraft(initialSubtask);
                     setSubtaskFormMode("new");
@@ -2682,6 +2770,7 @@ export function TasksClient({ alias }: { alias: string }) {
                   setEditDraft(null);
                   setMovingTaskId(null);
                   setMoveTargetParentId("");
+                  setMoveTargetSearch("");
                   setCreatingSubtaskForTaskId(null);
                   setSubtaskDraft(initialSubtask);
                   setSubtaskFormMode("new");
@@ -2829,27 +2918,8 @@ export function TasksClient({ alias }: { alias: string }) {
           const taskOwnCoordinatorAliases = getTaskOwnCoordinatorAliases(task);
           const taskCoordinatorAliases = getTaskCoordinatorAliases(task);
           const taskAssigneeAliases = getTaskAssigneeAliases(task);
-          const taskPath = buildTaskPath(task, tasksById);
           const taskChain = buildTaskChain(task, tasksById);
           const parentTaskChain = taskChain.slice(0, -1);
-          const descendants = isMovingTask
-            ? collectDescendantIds(task.id, childrenByParentId)
-            : new Set<string>();
-          const moveCandidates = isMovingTask
-            ? sortedTasks.filter(
-                (candidate) =>
-                  candidate.id !== task.id &&
-                  !descendants.has(candidate.id) &&
-                  manageableTaskIds.has(candidate.id) &&
-                  (candidate.teamName === null || candidate.teamName === task.teamName)
-              )
-            : [];
-          const selectedMoveParent = isMovingTask
-            ? moveCandidates.find((candidate) => candidate.id === moveTargetParentId) ?? null
-            : null;
-          const nextPath = selectedMoveParent
-            ? [...buildTaskPath(selectedMoveParent, tasksById), task.title]
-            : [];
           const taskPoints = parseTaskPoints(task.points);
           const totalSubtaskPoints = subtasks.reduce(
             (sum, subtask) => sum + parseTaskPoints(subtask.points),
@@ -3187,62 +3257,7 @@ export function TasksClient({ alias }: { alias: string }) {
                 ) : null}
               </div>
 
-              {isMovingTask ? (
-                <div className="grid">
-                  <h3>Taak verplaatsen</h3>
-                  <p className="muted">
-                    Alleen parents waarop je beheersrechten hebt en met hetzelfde team of zonder team zijn toegestaan.
-                  </p>
-                  <p className="muted">Huidige context: {taskPath.join(" > ")}</p>
-                  {moveCandidates.length === 0 ? (
-                    <p className="muted">
-                      Geen geldige parent beschikbaar voor deze taak binnen dezelfde eigenaar/team.
-                    </p>
-                  ) : (
-                    <>
-                      <label>
-                        Nieuwe parent
-                        <select
-                          value={moveTargetParentId}
-                          onChange={(event) => setMoveTargetParentId(event.target.value)}
-                          required
-                        >
-                          {moveCandidates.map((candidate) => (
-                            <option key={candidate.id} value={candidate.id}>
-                              {buildTaskPath(candidate, tasksById).join(" > ")}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {selectedMoveParent ? (
-                        <p className="muted">Nieuwe context: {nextPath.join(" > ")}</p>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => onMoveTask(task.id)}
-                        disabled={activeTaskId === task.id || !moveTargetParentId}
-                        title="Verplaats"
-                        aria-label="Verplaats"
-                      >
-                        <span style={MOVE_ICON_STYLE}>
-                          {activeTaskId === task.id ? `${ICON_MOVE}\n...` : ICON_MOVE}
-                        </span>
-                      </button>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    onClick={onCancelMove}
-                    disabled={activeTaskId === task.id}
-                    title="Sluit verplaatsen"
-                    aria-label="Sluit verplaatsen"
-                  >
-                    {ICON_CANCEL}
-                  </button>
-                </div>
-              ) : null}
-
-              {isMovingTask || isOpenTasksListView || !shouldShowSubtasksSection ? null : (
+              {isOpenTasksListView || !shouldShowSubtasksSection ? null : (
                 <>
                   <div className="grid" style={{ gap: "0.5rem" }}>
                     <div
@@ -3407,6 +3422,97 @@ export function TasksClient({ alias }: { alias: string }) {
           );
           })}
         </section>
+      ) : null}
+
+      {movingTask ? (
+        <div
+          onClick={activeTaskId === movingTask.id ? undefined : onCancelMove}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Taak verplaatsen"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "42rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3>Taak verplaatsen</h3>
+            <p className="muted">
+              Alleen parents waarop je beheersrechten hebt en met hetzelfde team of zonder team zijn toegestaan.
+            </p>
+            <p className="muted">Huidige context: {buildTaskPath(movingTask, tasksById).join(" > ")}</p>
+            {moveCandidates.length === 0 ? (
+              <p className="muted">
+                Geen geldige doeltaak beschikbaar voor deze taak binnen dezelfde eigenaar/team.
+              </p>
+            ) : (
+              <>
+                <label>
+                  Zoek doeltaak
+                  <input
+                    value={moveTargetSearch}
+                    onChange={(event) => setMoveTargetSearch(event.target.value)}
+                    placeholder="Typ een deel van de taaknaam of het pad"
+                    disabled={activeTaskId === movingTask.id}
+                  />
+                </label>
+                {filteredMoveCandidateOptions.length === 0 ? (
+                  <p className="muted">Geen doeltaak gevonden voor deze zoekopdracht.</p>
+                ) : (
+                  <label>
+                    Nieuwe parent
+                    <select
+                      value={moveTargetParentId}
+                      onChange={(event) => setMoveTargetParentId(event.target.value)}
+                      disabled={activeTaskId === movingTask.id}
+                      required
+                    >
+                      {filteredMoveCandidateOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.pathLabel}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {selectedMoveParent ? (
+                  <p className="muted">Nieuwe context: {nextMovePath.join(" > ")}</p>
+                ) : null}
+              </>
+            )}
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={onCancelMove}
+                disabled={activeTaskId === movingTask.id}
+                title="Annuleren"
+                aria-label="Annuleren"
+              >
+                Annuleren
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmMoveAndClose}
+                disabled={
+                  activeTaskId === movingTask.id ||
+                  !moveTargetParentId ||
+                  filteredMoveCandidateOptions.length === 0
+                }
+                title="Verplaatsen"
+                aria-label="Verplaatsen"
+              >
+                {activeTaskId === movingTask.id ? "Verplaatsen..." : "Verplaatsen"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {editingTask && editDraft ? (

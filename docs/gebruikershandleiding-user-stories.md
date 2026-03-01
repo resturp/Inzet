@@ -1,6 +1,6 @@
 # Gebruikershandleiding op Basis van User Stories - Inzet
 
-Laatste update: 27 februari 2026
+Laatste update: 1 maart 2026
 
 ## 1. Doel
 Deze handleiding beschrijft het gebruik van Inzet via een dekkende set user stories:
@@ -66,6 +66,11 @@ Per story staat:
 - `US-34` Magic link ongeldig of verlopen.
 - `US-35` Dubbele of conflicterende alias-/inlogsituaties.
 - `US-36` Sessieverlies (401 Niet ingelogd).
+
+## 3.6 Rapportage en notificaties
+- `US-37` CSV export van punten per relatiecode.
+- `US-38` CSV export met detailregels (pad, taak, alias, relatiecode, etc.).
+- `US-39` Vanuit notificatie-e-mail direct naar account, taak of voorstel.
 
 ## 4. Uitgewerkte user stories
 
@@ -204,7 +209,7 @@ Stappen:
 Resultaat:
 Je ziet beschikbare taken met kerninformatie en acties.
 
-## US-9 - Taak openen en context begrijpen
+## US-09 - Taak openen en context begrijpen
 Als vrijwilliger wil ik een taak kunnen openen met pad/breadcrumb, zodat ik context van parent/subtaken begrijp.
 
 Uitleg:
@@ -235,7 +240,7 @@ Er wordt een voorstel aangemaakt dat geaccepteerd of afgewezen kan worden.
 Als gebruiker wil ik zien wat er met mijn voorstellen gebeurt, zodat ik weet waar ik aan toe ben.
 
 Uitleg:
-In deze lijst zie je zowel taakvoorstellen als aliaswijzigingsvoorstellen die voor jou relevant zijn.
+In deze lijst zie je zowel taakvoorstellen als aliaswijzigingsvoorstellen die voor jou relevant zijn. Je ontvangt daarnaast notificatiemails met een duidelijke aanhef, context en directe links.
 
 Stappen:
 1. Open menu `☰`.
@@ -270,6 +275,56 @@ Stappen:
 
 Resultaat:
 Abonnement wordt opgeslagen; notificaties volgen je accountinstellingen.
+
+## US-37 - CSV export punten per relatiecode
+Als coordinator wil ik een CSV met puntentotaal per relatiecode kunnen downloaden, zodat ik de stand kan delen of controleren.
+
+Uitleg:
+De export rekent punten tijdsevenredig:
+- taak nog niet gestart: 0 punten;
+- taak afgerond: volledige punten;
+- taak deels verstreken: deel van de punten naar rato van verstreken tijd;
+- uitkomst wordt afgekapt op hele punten.
+
+Stappen:
+1. Open een taak waarop je mag rapporteren.
+2. Klik op de floppy-knop `💾` voor directe download, of open het menu via pijltje `▾`.
+3. Kies `Zonder details`.
+
+Resultaat:
+CSV wordt gedownload met totalen per relatiecode.
+
+## US-38 - CSV export met details
+Als coordinator wil ik een detail-CSV, zodat ik per regel kan zien hoe de punten zijn opgebouwd.
+
+Uitleg:
+De detail-export bevat minimaal: pad, taaknaam, alias, relatiecode, totaalpunten, start, eind en deelpunten.
+
+Stappen:
+1. Open een taak waarop je mag rapporteren.
+2. Klik op pijltje `▾` naast de floppy-knop.
+3. Kies `Met details`.
+
+Resultaat:
+CSV wordt gedownload met detailregels per relevante taak/alias.
+
+## US-39 - Deeplinks vanuit notificatiemail
+Als gebruiker wil ik vanuit een notificatiemail direct naar de juiste plek in de app kunnen gaan, zodat ik snel kan handelen.
+
+Uitleg:
+Notificatiemails bevatten:
+- een aanhef (`Beste {alias}`);
+- context waarom je de e-mail ontvangt;
+- directe link naar accountinstellingen;
+- waar mogelijk deeplinks naar taak of openstaand voorstel.
+
+Stappen:
+1. Open de notificatiemail.
+2. Klik op `Naar voorstel`, `Naar taak` of `Accountpagina`.
+3. Log in als daarom wordt gevraagd.
+
+Resultaat:
+Je landt direct op de relevante pagina/tab in `/tasks`.
 
 ## US-14 - Subtaak aanmaken
 Als coordinator wil ik een subtaak aanmaken, zodat werk opgesplitst kan worden.

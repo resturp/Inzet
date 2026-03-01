@@ -1,6 +1,6 @@
 # Handleiding Hele Systeem - Inzet (VC Zwolle)
 
-Laatste update: 27 februari 2026
+Laatste update: 1 maart 2026
 
 ## 1. Doel van dit document
 Deze handleiding beschrijft het volledige systeem zoals nu in code is geimplementeerd:
@@ -58,6 +58,7 @@ Inzet is een vrijwilligersportaal voor VC Zwolle met:
 - Security: `passwordHash`, `emailVerifiedAt`, `isActive`.
 - Profiel: `aboutMe`, `profilePhotoData`.
 - Relaties: coordinatorrollen, voorstellen, notificatievoorkeuren, subscriptions.
+- Opmerking seedgedrag: precreated aliassen krijgen een placeholder-bondsnummer (`PENDING-...`) tot de gebruiker zelf registreert met geldige relatiecode.
 
 ### Task
 - Taakboom: `parentId` + children.
@@ -116,7 +117,7 @@ Inzet is een vrijwilligersportaal voor VC Zwolle met:
 
 ### Eerste keer gebruiker
 1. Gebruiker voert relatiecode + e-mailadres in.
-2. `POST /api/auth/request-magic-link` controleert relatiecode in `data/relatiecodes.csv`.
+2. `POST /api/auth/request-magic-link` controleert relatiecode in allowlist (`data/relatienummers.csv`, fallback `data/relatiecodes.csv`).
 3. Magic link opent `/login?flow=create-account&token=...`.
 4. `GET /api/auth/registration-options` geeft claimbare (precreated) aliases.
 5. `POST /api/auth/complete-registration`:
@@ -215,6 +216,16 @@ Inzet is een vrijwilligersportaal voor VC Zwolle met:
 - Direct: meteen e-mail.
 - Digest: events in `NotificationEvent`; periodiek verstuurd zodra interval verstreken is.
 - Flush van due digests gebeurt o.a. bij sessieopbouw (`getSessionUser`) en na eventcreatie.
+- Notificaties gebruiken een vaste opbouw met:
+  - aanhef (`Beste {alias}`);
+  - contextzin waarom de ontvanger dit bericht krijgt;
+  - afsluiting met verenigingsboodschap;
+  - verwijzing naar accountinstellingen op `vczwolle.frii.nl`.
+- Waar mogelijk bevatten notificaties deeplinks naar:
+  - accounttab met notificatie-instellingen;
+  - specifieke taak;
+  - specifiek openstaand voorstel.
+- Volledige inhoudstemplate: `docs/notificaties.txt`.
 
 ## 10. API-overzicht
 ### Publiek
@@ -247,6 +258,7 @@ Inzet is een vrijwilligersportaal voor VC Zwolle met:
   - `GET /api/users`
   - `POST /api/admin/members/sync`
   - `GET /api/reports/tasks`
+  - `GET /api/reports/tasks/:id/points-csv?view=SUMMARY|DETAIL&at=...`
   - `GET /api/version`
   - `GET /api/version/watch`
   - `GET /api/auth/registration-options?token=...`
@@ -268,6 +280,10 @@ Inzet is een vrijwilligersportaal voor VC Zwolle met:
 - Focusmodus op taak met breadcrumb.
 - Inline acties: open, bewerk, verplaats, verwijder, inschrijven, voorstellen, vrijgeven.
 - Subtaakbeheer: toevoegen, kopieren, punten aanpassen.
+- CSV rapportage per taak:
+  - split-knop met floppy (`💾`) en pijltje (`▾`);
+  - `Zonder details`: totalen per relatiecode;
+  - `Met details`: pad, taak, alias, relatiecode, totaal, start, eind, deel.
 - Accountdialoog:
   - email/wachtwoord;
   - notificatievoorkeuren;
@@ -310,7 +326,7 @@ Zie `.env.example` voor defaults.
 
 ## 14. Data en beheerbestanden
 ### CSV-bronnen
-- `data/relatiecodes.csv`: toegestane relatiecodes voor registratie.
+- `data/relatienummers.csv` (of fallback `data/relatiecodes.csv`): toegestane relatiecodes voor registratie.
 - `data/alias.csv`: precreated aliases die claimbaar zijn in registratieflow.
 - `data/task.csv`, `data/coord.csv`: gebruikt door seed/importlogica.
 
