@@ -451,6 +451,47 @@ function endsInFuture(task: ApiTask): boolean {
   return Number.isFinite(endMs) && endMs > Date.now();
 }
 
+function startsInFuture(task: ApiTask, nowMs: number): boolean {
+  const startAt = task.startTime ?? task.date;
+  const startMs = new Date(startAt).getTime();
+  return Number.isFinite(startMs) && startMs > nowMs;
+}
+
+function hasFutureStartInSubtree(
+  rootTaskId: string,
+  tasksById: Map<string, ApiTask>,
+  childrenByParentId: Map<string, ApiTask[]>,
+  nowMs: number
+): boolean {
+  const visited = new Set<string>();
+  const stack = [rootTaskId];
+
+  while (stack.length > 0) {
+    const currentId = stack.pop();
+    if (!currentId || visited.has(currentId)) {
+      continue;
+    }
+    visited.add(currentId);
+
+    const currentTask = tasksById.get(currentId);
+    if (!currentTask) {
+      continue;
+    }
+    if (startsInFuture(currentTask, nowMs)) {
+      return true;
+    }
+
+    const children = childrenByParentId.get(currentId) ?? [];
+    for (const child of children) {
+      if (!visited.has(child.id)) {
+        stack.push(child.id);
+      }
+    }
+  }
+
+  return false;
+}
+
 function parseTaskPoints(value: string | number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
@@ -2587,6 +2628,7 @@ export function TasksClient({ alias }: { alias: string }) {
     ? buildTaskPath(newSubtaskTargetTask, tasksById).join(" > ")
     : "onbekende parent";
   const tasksToRender = focusedTask ? [focusedTask] : visibleTasks;
+  const renderNowMs = Date.now();
   const breadcrumbTasks = focusedTask
     ? (() => {
         const chain = buildTaskChain(focusedTask, tasksById);
@@ -2956,7 +2998,11 @@ export function TasksClient({ alias }: { alias: string }) {
             (task.coordinationType === "DELEGEREN" || isLeafTask);
           const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
           const canCompleteTask =
-            canManageTask && task.status === "TOEGEWEZEN" && endsInFuture(task);
+            canManageTask &&
+            task.status === "TOEGEWEZEN" &&
+            endsInFuture(task) &&
+            !hasCompletedAncestor(task, tasksById) &&
+            !hasFutureStartInSubtree(task.id, tasksById, childrenByParentId, renderNowMs);
           const canUncompleteTask =
             canManageTask && task.status === "GEREED" && !hasCompletedAncestor(task, tasksById);
           const canSubscribeTask = task.canRead || task.canOpen || canManageTask;
@@ -3227,11 +3273,11 @@ export function TasksClient({ alias }: { alias: string }) {
                     {renderReleaseIcon(activeTaskId === task.id)}
                   </button>
                 ) : null}
-                {canCompleteTask ? (
+                {canManageTask ? (
                   <button
                     type="button"
                     onClick={() => void onCompleteTask(task.id)}
-                    disabled={activeTaskId === task.id}
+                    disabled={activeTaskId === task.id || !canCompleteTask}
                     style={{ whiteSpace: "nowrap" }}
                     title="Gereed melden"
                     aria-label="Gereed melden"
