@@ -621,6 +621,13 @@ function buildTaskPath(task: ApiTask, tasksById: Map<string, ApiTask>): string[]
   return path;
 }
 
+function compactTaskPathLabel(pathParts: readonly string[], keepSegments = 2): string {
+  if (pathParts.length <= keepSegments) {
+    return pathParts.join(" > ");
+  }
+  return `.. > ${pathParts.slice(-keepSegments).join(" > ")}`;
+}
+
 function buildTaskChain(task: ApiTask, tasksById: Map<string, ApiTask>): ApiTask[] {
   const chain: ApiTask[] = [task];
   const visited = new Set<string>([task.id]);
@@ -2605,7 +2612,8 @@ export function TasksClient({ alias }: { alias: string }) {
     () =>
       moveCandidates.map((candidate) => ({
         id: candidate.id,
-        pathLabel: buildTaskPath(candidate, tasksById).join(" > ")
+        pathLabel: buildTaskPath(candidate, tasksById).join(" > "),
+        compactPathLabel: compactTaskPathLabel(buildTaskPath(candidate, tasksById), 2)
       })),
     [moveCandidates, tasksById]
   );
@@ -3476,7 +3484,7 @@ export function TasksClient({ alias }: { alias: string }) {
                     >
                       {filteredMoveCandidateOptions.map((option) => (
                         <option key={option.id} value={option.id}>
-                          {option.pathLabel}
+                          {option.compactPathLabel}
                         </option>
                       ))}
                     </select>
