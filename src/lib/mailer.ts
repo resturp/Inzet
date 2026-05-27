@@ -5,6 +5,7 @@ type SendMailInput = {
   to: string;
   subject: string;
   text: string;
+  html?: string;
 };
 
 function shouldSendMail(): boolean {
@@ -26,7 +27,7 @@ function extractAddress(value: string): string | null {
   return value.includes("@") ? value.trim() : null;
 }
 
-export async function sendMail({ to, subject, text }: SendMailInput): Promise<void> {
+export async function sendMail({ to, subject, text, html }: SendMailInput): Promise<void> {
   if (!shouldSendMail()) {
     return;
   }
@@ -45,23 +46,46 @@ export async function sendMail({ to, subject, text }: SendMailInput): Promise<vo
     extractAddress(envelopeFrom)?.split("@")[1] ||
     "vczwolle.frii.nl";
   const messageId = `<${crypto.randomUUID()}@${messageIdDomain}>`;
+  const multipartBoundary = `inzet-${crypto.randomUUID()}`;
   const dateHeader = new Date().toUTCString();
 
   if (!recipient) {
     throw new Error("recipient is empty");
   }
 
-  const payload = [
-    `From: ${from}`,
-    `To: ${recipient}`,
-    `Subject: ${safeSubject}`,
-    `Date: ${dateHeader}`,
-    `Message-ID: ${messageId}`,
-    "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=UTF-8",
-    "",
-    text
-  ].join("\r\n");
+  const payload = html
+    ? [
+        `From: ${from}`,
+        `To: ${recipient}`,
+        `Subject: ${safeSubject}`,
+        `Date: ${dateHeader}`,
+        `Message-ID: ${messageId}`,
+        "MIME-Version: 1.0",
+        `Content-Type: multipart/alternative; boundary="${multipartBoundary}"`,
+        "",
+        `--${multipartBoundary}`,
+        "Content-Type: text/plain; charset=UTF-8",
+        "Content-Transfer-Encoding: 8bit",
+        "",
+        text,
+        `--${multipartBoundary}`,
+        "Content-Type: text/html; charset=UTF-8",
+        "Content-Transfer-Encoding: 8bit",
+        "",
+        html,
+        `--${multipartBoundary}--`
+      ].join("\r\n")
+    : [
+        `From: ${from}`,
+        `To: ${recipient}`,
+        `Subject: ${safeSubject}`,
+        `Date: ${dateHeader}`,
+        `Message-ID: ${messageId}`,
+        "MIME-Version: 1.0",
+        "Content-Type: text/plain; charset=UTF-8",
+        "",
+        text
+      ].join("\r\n");
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(sendmailPath, ["-i", "-f", envelopeFrom, "--", recipient], {

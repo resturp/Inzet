@@ -27,7 +27,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/inzet?schema=public
       NEXT_PUBLIC_APP_URL: http://localhost:3000
-    command: sh -c "npm run db:generate && npx prisma db push && npm run db:seed && npm run dev"
+    command: sh -c "npm run db:generate && npx prisma db push --accept-data-loss && npm run db:seed && npm run dev"
     volumes:
       - .:/app
       - /app/node_modules

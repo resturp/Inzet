@@ -1,0 +1,266 @@
+{
+  "meta": {
+    "exportType": "TASK_TREE_BACKUP",
+    "schemaVersion": 1,
+    "exportedAt": "2026-05-27T13:14:39.103Z",
+    "exportedByAlias": "Thomas",
+    "rootTaskId": "cmoppgh1e0001kt1jn4evf8th",
+    "rootTaskTitle": "2026-2027",
+    "taskCount": 9
+  },
+  "rootTask": {
+    "id": "cmoppgh1e0001kt1jn4evf8th",
+    "title": "2026-2027",
+    "description": "Seizoen 2026-2027 vrijwilligerstaken",
+    "longDescription": null,
+    "teamName": null,
+    "parentId": "cmm6tyotj0003kte3tjokl04t",
+    "points": 9980,
+    "status": "TOEGEWEZEN",
+    "date": "2026-06-30T22:00:00.000Z",
+    "startTime": "2026-06-30T22:00:00.000Z",
+    "endTime": "2027-06-30T21:59:00.000Z",
+    "location": null,
+    "createdAt": "2026-05-03T11:46:39.553Z",
+    "coordinators": {
+      "ownAliases": [
+        "Edgar",
+        "Thomas"
+      ],
+      "effectiveAliases": [
+        "Edgar",
+        "Thomas"
+      ]
+    },
+    "settings": {
+      "ownCoordinationType": "ORGANISEREN",
+      "effectiveCoordinationType": "ORGANISEREN"
+    },
+    "children": [
+      {
+        "id": "cmoppl5e90009kt1jze8bewt7",
+        "title": "Bestuur",
+        "description": "Besturen van de vereniging",
+        "longDescription": "Wat houdt het in: \nBesturen van de vereniging ieder op zijn/haar beleidsterrein, beleid maken samen met de commissies, besluiten nemen en clubzaken organiseren.\n\nVoorwaarden: \nBetrokkenheid en verantwoordelijkheidsgevoel\n\nContact: \nVoorzitter\n",
+        "teamName": null,
+        "parentId": "cmoppgh1e0001kt1jn4evf8th",
+        "points": 100,
+        "status": "TOEGEWEZEN",
+        "date": "2026-06-30T22:00:00.000Z",
+        "startTime": "2026-06-30T22:00:00.000Z",
+        "endTime": "2027-06-30T21:59:00.000Z",
+        "location": null,
+        "createdAt": "2026-05-03T11:50:17.745Z",
+        "coordinators": {
+          "ownAliases": [],
+          "effectiveAliases": [
+            "Edgar",
+            "Thomas"
+          ]
+        },
+        "settings": {
+          "ownCoordinationType": "ORGANISEREN",
+          "effectiveCoordinationType": "ORGANISEREN"
+        },
+        "children": [
+          {
+            "id": "cmopppnid000dkt1jd30sl58a",
+            "title": "Voorzitter",
+            "description": "Eerste aanspreekpunt voor externen: pers, gemeenten, sportservice, etc",
+            "longDescription": null,
+            "teamName": null,
+            "parentId": "cmoppl5e90009kt1jze8bewt7",
+            "points": 20,
+            "status": "BESCHIKBAAR",
+            "date": "2026-06-30T22:00:00.000Z",
+            "startTime": "2026-06-30T22:00:00.000Z",
+            "endTime": "2027-06-30T21:59:00.000Z",
+            "location": null,
+            "createdAt": "2026-05-03T11:53:47.846Z",
+            "coordinators": {
+              "ownAliases": [],
+              "effectiveAliases": [
+                "Edgar",
+                "Thomas"
+              ]
+            },
+            "settings": {
+              "ownCoordinationType": null,
+              "effectiveCoordinationType": "ORGANISEREN"
+            },
+            "children": []
+          },
+          {
+            "id": "cmoppqng6000gkt1jmief5u45",
+            "title": "Secretaris",
+            "description": "Eerste aanspreekpunt voor leden",
+            "longDescription": null,
+            "teamName": null,
+            "parentId": "cmoppl5e90009kt1jze8bewt7",
+            "points": 20,
+            "status": "TOEGEWEZEN",
+            "date": "2026-06-30T22:00:00.000Z",
+            "startTime": "2026-06-30T22:00:00.000Z",
+            "endTime": "2027-06-30T21:59:00.000Z",
+            "location": null,
+            "createdAt": "2026-05-03T11:54:34.422Z",
+            "coordinators": {
+              "ownAliases": [
+                "Yaniek"
+              ],
+              "effectiveAliases": [
+                "Edgar",
+                "Thomas",
+                "Yaniek"
+              ]
+            },
+            "settings": {
+              "ownCoordinationType": null,
+              "effectiveCoordinationType": "ORGANISEREN"
+            },
+            "children": []
+          },
+          {
+            "id": "cmopprpm4000jkt1jpnywzztf",
+            "title": "Penningmeester",
+            "description": "Eerste aanspreekpunt voor banken, contributies, facturatie",
+            "longDescription": null,
+            "teamName": null,
+            "parentId": "cmoppl5e90009kt1jze8bewt7",
+            "points": 20,
+            "status": "BESCHIKBAAR",
+            "date": "2026-06-30T22:00:00.000Z",
+            "startTime": "2026-06-30T22:00:00.000Z",
+            "endTime": "2027-06-30T21:59:00.000Z",
+            "location": null,
+            "createdAt": "2026-05-03T11:55:23.884Z",
+            "coordinators": {
+              "ownAliases": [],
+              "effectiveAliases": [
+                "Edgar",
+                "Thomas"
+              ]
+            },
+            "settings": {
+              "ownCoordinationType": null,
+              "effectiveCoordinationType": "ORGANISEREN"
+            },
+            "children": []
+          },
+          {
+            "id": "cmoppsjjt000mkt1jfd6el2u1",
+            "title": "Technische zaken",
+            "description": "Eerste aanspreekpunt voor trainers en spelers",
+            "longDescription": null,
+            "teamName": null,
+            "parentId": "cmoppl5e90009kt1jze8bewt7",
+            "points": 20,
+            "status": "TOEGEWEZEN",
+            "date": "2026-06-30T22:00:00.000Z",
+            "startTime": "2026-06-30T22:00:00.000Z",
+            "endTime": "2027-06-30T21:59:00.000Z",
+            "location": null,
+            "createdAt": "2026-05-03T11:56:02.681Z",
+            "coordinators": {
+              "ownAliases": [
+                "SanneV"
+              ],
+              "effectiveAliases": [
+                "Edgar",
+                "SanneV",
+                "Thomas"
+              ]
+            },
+            "settings": {
+              "ownCoordinationType": null,
+              "effectiveCoordinationType": "ORGANISEREN"
+            },
+            "children": []
+          },
+          {
+            "id": "cmoppt8s5000pkt1j7goiayk4",
+            "title": "Algemeen bestuurslid",
+            "description": "Aanspreekpunt voor projecten en initiatieven",
+            "longDescription": null,
+            "teamName": null,
+            "parentId": "cmoppl5e90009kt1jze8bewt7",
+            "points": 20,
+            "status": "BESCHIKBAAR",
+            "date": "2026-06-30T22:00:00.000Z",
+            "startTime": "2026-06-30T22:00:00.000Z",
+            "endTime": "2027-06-30T21:59:00.000Z",
+            "location": null,
+            "createdAt": "2026-05-03T11:56:35.381Z",
+            "coordinators": {
+              "ownAliases": [],
+              "effectiveAliases": [
+                "Edgar",
+                "Thomas"
+              ]
+            },
+            "settings": {
+              "ownCoordinationType": null,
+              "effectiveCoordinationType": "ORGANISEREN"
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": "cmopshj64000xkt1ju4no9i05",
+        "title": "Voorzitter TC",
+        "description": "Aanspreekpunt Technische zaken",
+        "longDescription": null,
+        "teamName": null,
+        "parentId": "cmoppgh1e0001kt1jn4evf8th",
+        "points": 40,
+        "status": "TOEGEWEZEN",
+        "date": "2026-06-30T22:00:00.000Z",
+        "startTime": "2026-06-30T22:00:00.000Z",
+        "endTime": "2027-06-30T21:59:00.000Z",
+        "location": null,
+        "createdAt": "2026-05-03T13:11:27.821Z",
+        "coordinators": {
+          "ownAliases": [],
+          "effectiveAliases": [
+            "Edgar",
+            "Thomas"
+          ]
+        },
+        "settings": {
+          "ownCoordinationType": null,
+          "effectiveCoordinationType": "ORGANISEREN"
+        },
+        "children": [
+          {
+            "id": "cmopq49y6000skt1jxleycc8u",
+            "title": "Technische commissie dames",
+            "description": "Begeleiden van teams",
+            "longDescription": "Wat houdt het in: \nBegeleiden van teams, maken van teamindelingen en ondersteunen van trainers/coaches.\n\nVoorwaarden: \nBasis volleybalinhoudelijke kennis\n\nContact: \nBestuurslid Technische Commissies\n",
+            "teamName": null,
+            "parentId": "cmopshj64000xkt1ju4no9i05",
+            "points": 20,
+            "status": "BESCHIKBAAR",
+            "date": "2026-06-30T22:00:00.000Z",
+            "startTime": "2026-06-30T22:00:00.000Z",
+            "endTime": "2027-06-30T21:59:00.000Z",
+            "location": null,
+            "createdAt": "2026-05-03T12:05:10.110Z",
+            "coordinators": {
+              "ownAliases": [],
+              "effectiveAliases": [
+                "Edgar",
+                "Thomas"
+              ]
+            },
+            "settings": {
+              "ownCoordinationType": null,
+              "effectiveCoordinationType": "ORGANISEREN"
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

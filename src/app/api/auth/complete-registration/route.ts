@@ -1,35 +1,28 @@
 import crypto from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { findEmailPasswordConflictAlias } from "@/lib/auth-credentials";
+import {
+  findConflictingLoginNameAlias,
+  isValidLoginName,
+  normalizeLoginName
+} from "@/lib/auth-credentials";
 import { ensureGovernanceBootstrap } from "@/lib/bootstrap-governance";
 import { hashPassword } from "@/lib/password";
-import { readPrecreatedAliases } from "@/lib/precreated-aliases";
 import { prisma } from "@/lib/prisma";
+import { normalizeInputRelatiecode as normalizeRelatiecode } from "@/lib/relatiecodes";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
+
+const ALIAS_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}_\- .]{1,39}$/u;
 
 const createAccountSchema = z
   .object({
     token: z.string().trim().min(20),
-    existingAlias: z.string().trim().min(1).optional(),
-    newAlias: z
-      .string()
-      .trim()
-      .regex(/^[a-zA-Z0-9_-]{3,32}$/)
-      .optional(),
+    bondsnummer: z.string().trim().min(2),
+    alias: z.string().trim().min(2).max(40).regex(ALIAS_PATTERN),
+    loginName: z.string().trim().min(3).max(32),
     password: z.string().min(8)
-  })
-  .refine(
-    (data) => {
-      const hasExistingAlias = Boolean(data.existingAlias);
-      const hasNewAlias = Boolean(data.newAlias);
-      return (hasExistingAlias || hasNewAlias) && !(hasExistingAlias && hasNewAlias);
-    },
-    {
-      message: "Kies een bestaande alias of vul een nieuwe alias in.",
-      path: ["existingAlias"]
-    }
-  );
+  });
 
 export async function POST(request: Request) {
   const parsed = createAccountSchema.safeParse(await request.json());
@@ -58,32 +51,30 @@ export async function POST(request: Request) {
   }
 
   const email = tokenRecord.email.trim().toLowerCase();
-  const bondsnummer = tokenRecord.bondsnummer;
-  const existingAlias = parsed.data.existingAlias?.trim();
-  const newAlias = parsed.data.newAlias?.trim();
-
-  let targetAlias = "";
-  if (existingAlias) {
-    targetAlias = existingAlias;
-  } else if (newAlias) {
-    const aliasTaken = await prisma.user.findUnique({ where: { alias: newAlias } });
-    if (aliasTaken) {
-      return NextResponse.json({ error: "Alias is al in gebruik." }, { status: 409 });
-    }
-    targetAlias = newAlias;
+  const bondsnummer = normalizeRelatiecode(parsed.data.bondsnummer);
+  if (bondsnummer !== tokenRecord.bondsnummer) {
+    return NextResponse.json(
+      { error: "Relatiecode komt niet overeen met deze magic link." },
+      { status: 400 }
+    );
   }
 
-  const conflictingAlias = await findEmailPasswordConflictAlias(
-    email,
-    parsed.data.password,
-    existingAlias ?? undefined
-  );
-  if (conflictingAlias) {
+  const targetAlias = parsed.data.alias.trim();
+  const loginName = normalizeLoginName(parsed.data.loginName);
+  if (!isValidLoginName(loginName)) {
     return NextResponse.json(
       {
         error:
-          "De combinatie e-mailadres + wachtwoord is al in gebruik. Kies een ander wachtwoord."
+          "Loginnaam moet 3-32 tekens zijn en mag alleen kleine letters, cijfers, punt, _ en - bevatten."
       },
+      { status: 400 }
+    );
+  }
+
+  const conflictingAlias = await findConflictingLoginNameAlias(loginName, targetAlias);
+  if (conflictingAlias) {
+    return NextResponse.json(
+      { error: "Deze loginnaam is al in gebruik." },
       { status: 409 }
     );
   }
@@ -93,43 +84,17 @@ export async function POST(request: Request) {
 
   try {
     await prisma.$transaction(async (tx) => {
-      if (existingAlias) {
-        const knownAliases = await readPrecreatedAliases();
-        if (!knownAliases.includes(targetAlias)) {
-          throw new Error("ALIAS_UNKNOWN");
+      const existing = await tx.user.findUnique({
+        where: { alias: targetAlias },
+        select: {
+          alias: true,
+          email: true,
+          passwordHash: true,
+          loginName: true
         }
+      });
 
-        const existing = await tx.user.findUnique({
-          where: { alias: targetAlias },
-          select: { alias: true, email: true, passwordHash: true }
-        });
-        if (!existing) {
-          await tx.user.create({
-            data: {
-              alias: targetAlias,
-              bondsnummer,
-              email,
-              emailVerifiedAt: now,
-              passwordHash,
-              isActive: true
-            }
-          });
-        } else {
-          if (existing.email || existing.passwordHash) {
-            throw new Error("ALIAS_ALREADY_CLAIMED");
-          }
-          await tx.user.update({
-            where: { alias: targetAlias },
-            data: {
-              bondsnummer,
-              email,
-              emailVerifiedAt: now,
-              passwordHash,
-              isActive: true
-            }
-          });
-        }
-      } else {
+      if (!existing) {
         await tx.user.create({
           data: {
             alias: targetAlias,
@@ -137,6 +102,22 @@ export async function POST(request: Request) {
             email,
             emailVerifiedAt: now,
             passwordHash,
+            loginName,
+            isActive: true
+          }
+        });
+      } else {
+        if (existing.email || existing.passwordHash || existing.loginName) {
+          throw new Error("ALIAS_ALREADY_CLAIMED");
+        }
+        await tx.user.update({
+          where: { alias: targetAlias },
+          data: {
+            bondsnummer,
+            email,
+            emailVerifiedAt: now,
+            passwordHash,
+            loginName,
             isActive: true
           }
         });
@@ -154,20 +135,17 @@ export async function POST(request: Request) {
       }
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "ALIAS_UNKNOWN") {
-      return NextResponse.json(
-        { error: "Deze alias staat niet in de bestaande aliaslijst." },
-        { status: 404 }
-      );
-    }
     if (error instanceof Error && error.message === "ALIAS_ALREADY_CLAIMED") {
       return NextResponse.json(
-        { error: "Deze bestaande alias is al geclaimd." },
+        { error: "Deze alias is al in gebruik." },
         { status: 409 }
       );
     }
     if (error instanceof Error && error.message === "TOKEN_USED") {
       return NextResponse.json({ error: "Magic link is al gebruikt." }, { status: 409 });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ error: "Deze loginnaam is al in gebruik." }, { status: 409 });
     }
     throw error;
   }

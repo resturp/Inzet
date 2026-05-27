@@ -16,6 +16,7 @@ const ALLOWED_FETCH_SITES = new Set(["same-origin", "same-site", "none"]);
 const PUBLIC_API_PATHS = new Set([
   "/api/csrf",
   "/api/auth/login-password",
+  "/api/auth/complete-login-name",
   "/api/auth/request-magic-link",
   "/api/auth/verify-magic-link",
   "/api/auth/logout",

@@ -23,7 +23,6 @@ export async function POST(request: Request) {
   const record = await prisma.magicLinkToken.findFirst({
     where: {
       tokenHash,
-      usedAt: null,
       expiresAt: { gt: new Date() }
     },
     orderBy: { createdAt: "desc" }
@@ -31,6 +30,12 @@ export async function POST(request: Request) {
 
   if (!record) {
     return NextResponse.json({ error: "Token ongeldig of verlopen" }, { status: 401 });
+  }
+  if (record.usedAt) {
+    const reusedWithinMs = Date.now() - record.usedAt.getTime();
+    if (reusedWithinMs > 15_000) {
+      return NextResponse.json({ error: "Magic link is al gebruikt" }, { status: 409 });
+    }
   }
 
   if (!record.userAlias) {
@@ -65,20 +70,31 @@ export async function POST(request: Request) {
     : undefined;
 
   const now = new Date();
-  await prisma.$transaction([
-    prisma.magicLinkToken.update({
-      where: { id: record.id },
-      data: { usedAt: now }
-    }),
-    prisma.user.update({
+  if (!record.usedAt) {
+    await prisma.$transaction([
+      prisma.magicLinkToken.update({
+        where: { id: record.id },
+        data: { usedAt: now }
+      }),
+      prisma.user.update({
+        where: { alias },
+        data: {
+          email: record.email ?? user.email,
+          passwordHash,
+          emailVerifiedAt: now
+        }
+      })
+    ]);
+  } else {
+    await prisma.user.update({
       where: { alias },
       data: {
         email: record.email ?? user.email,
         passwordHash,
         emailVerifiedAt: now
       }
-    })
-  ]);
+    });
+  }
 
   await ensureGovernanceBootstrap(alias);
 

@@ -318,6 +318,7 @@ async function ensureUserExists(alias: string, indexHint: number): Promise<void>
 
 async function seedTasksFromCsv(): Promise<void> {
   const taskRaw = await readCsvFromFirstExisting([
+    path.join(process.cwd(), "data", "taak.csv"),
     path.join(process.cwd(), "data", "task.csv"),
     path.join(process.cwd(), "data", "tasks.csv")
   ]);
@@ -328,6 +329,10 @@ async function seedTasksFromCsv(): Promise<void> {
 
   const taskRows = parseCsvRows(taskRaw);
   const coordRows = parseCsvRows(coordRaw);
+
+  if (taskRows.length === 0) {
+    console.warn("Geen taak-rijen gevonden in data/taak.csv, data/task.csv of data/tasks.csv");
+  }
 
   const taskNodesByTitle = new Map<string, TaskNode>();
   const ensureNode = (title: string): TaskNode => {

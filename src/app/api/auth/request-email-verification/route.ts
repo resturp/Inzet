@@ -12,6 +12,19 @@ const requestSchema = z.object({
   email: z.string().email()
 });
 
+function htmlEscape(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function createQrCodeUrl(value: string): string {
+  return `https://quickchart.io/qr?size=320&margin=1&text=${encodeURIComponent(value)}`;
+}
+
 export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json());
   if (!parsed.success) {
@@ -47,6 +60,9 @@ export async function POST(request: Request) {
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const magicLinkUrl = `${baseUrl}/login?flow=magic&alias=${encodeURIComponent(alias)}&token=${encodeURIComponent(token)}`;
+  const qrCodeUrl = createQrCodeUrl(magicLinkUrl);
+  const safeLink = htmlEscape(magicLinkUrl);
+  const safeQrCode = htmlEscape(qrCodeUrl);
 
   try {
     await sendMail({
@@ -56,11 +72,19 @@ export async function POST(request: Request) {
         "Je hebt een e-mailadres gekoppeld aan je Inzet-account.",
         "",
         `Bevestig binnen 20 minuten via: ${magicLinkUrl}`,
+        `QR-code: ${qrCodeUrl}`,
         "",
         `Alias: ${alias}`,
         "",
-        "Na bevestiging log je in met e-mailadres + wachtwoord."
-      ].join("\n")
+        "Na bevestiging log je in met loginnaam + wachtwoord."
+      ].join("\n"),
+      html: [
+        "<p>Je hebt een e-mailadres gekoppeld aan je Inzet-account.</p>",
+        `<p><a href=\"${safeLink}\">Bevestig binnen 20 minuten via deze link</a></p>`,
+        `<p><img src=\"${safeQrCode}\" alt=\"QR-code voor verificatie\" width=\"220\" height=\"220\" /></p>`,
+        `<p><strong>Alias:</strong> ${htmlEscape(alias)}</p>`,
+        "<p>Na bevestiging log je in met loginnaam + wachtwoord.</p>"
+      ].join("")
     });
   } catch (error) {
     console.error("Verificatiemail verzenden mislukt", error);

@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { NotificationCategory, NotificationDelivery } from "@prisma/client";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/api-session";
-import {
-  findEmailPasswordConflictAlias,
-  normalizeEmail
-} from "@/lib/auth-credentials";
+import { normalizeEmail } from "@/lib/auth-credentials";
 import { isBestuurAlias } from "@/lib/authorization";
 import {
   getNotificationSettingsForUser,
@@ -82,6 +79,7 @@ export async function GET() {
     {
       data: {
         alias: user.alias,
+        loginName: user.loginName,
         bondsnummer: user.bondsnummer,
         email: user.email,
         isBestuur: bestuur,
@@ -140,26 +138,6 @@ export async function PATCH(request: Request) {
     }
   }
 
-  const resultingEmail =
-    normalizedEmail === undefined ? (sessionUser.email ?? null) : normalizedEmail;
-  const passwordCandidate = payload.newPassword ?? payload.currentPassword;
-  if (wantsSensitiveChange && resultingEmail && passwordCandidate) {
-    const conflictAlias = await findEmailPasswordConflictAlias(
-      resultingEmail,
-      passwordCandidate,
-      sessionUser.alias
-    );
-    if (conflictAlias) {
-      return NextResponse.json(
-        {
-          error:
-            "De combinatie e-mailadres + wachtwoord is al in gebruik. Kies een ander wachtwoord."
-        },
-        { status: 409 }
-      );
-    }
-  }
-
   const normalizedPhotoData = payload.profilePhotoData;
   if (
     normalizedPhotoData !== undefined &&
@@ -205,6 +183,7 @@ export async function PATCH(request: Request) {
         },
         select: {
           alias: true,
+          loginName: true,
           bondsnummer: true,
           email: true,
           aboutMe: true,
@@ -215,6 +194,7 @@ export async function PATCH(request: Request) {
         where: { alias: sessionUser.alias },
         select: {
           alias: true,
+          loginName: true,
           bondsnummer: true,
           email: true,
           aboutMe: true,

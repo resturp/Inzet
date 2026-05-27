@@ -1,11 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CSRF_FIELD_NAME } from "@/lib/csrf";
 import { readCsrfTokenFromCookie } from "@/lib/csrf-client";
 
-type LoginMode = "password" | "request" | "create" | "magic";
+type LoginMode = "password" | "request" | "create" | "magic" | "setupLoginName";
 
 type RegistrationOptions = {
   email: string;
@@ -18,7 +18,6 @@ type ApiPayload = {
   error?: string;
   alias?: string;
   data?: RegistrationOptions;
-  debugAlias?: string;
   debugToken?: string;
   debugMagicLink?: string;
 };
@@ -41,7 +40,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<LoginMode>("password");
 
-  const [loginEmail, setLoginEmail] = useState("");
+  const [loginName, setLoginName] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
   const [requestBondsnummer, setRequestBondsnummer] = useState("");
@@ -49,12 +48,11 @@ export default function LoginPage() {
 
   const [token, setToken] = useState("");
   const [magicAlias, setMagicAlias] = useState("");
-  const [magicSetPassword, setMagicSetPassword] = useState("");
-  const [magicSetPasswordConfirm, setMagicSetPasswordConfirm] = useState("");
-
+  const [setupLoginName, setSetupLoginName] = useState("");
   const [claimableAliases, setClaimableAliases] = useState<string[]>([]);
   const [selectedAlias, setSelectedAlias] = useState("");
   const [newAlias, setNewAlias] = useState("");
+  const [createLoginName, setCreateLoginName] = useState("");
   const [createPassword, setCreatePassword] = useState("");
   const [createPasswordConfirm, setCreatePasswordConfirm] = useState("");
   const [createEmail, setCreateEmail] = useState("");
@@ -69,6 +67,7 @@ export default function LoginPage() {
   const [isLoadingCreateOptions, setIsLoadingCreateOptions] = useState(false);
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [isVerifyingMagic, setIsVerifyingMagic] = useState(false);
+  const hasAttemptedMagicVerify = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -89,9 +88,15 @@ export default function LoginPage() {
       return;
     }
 
+    if (flow === "setup-login-name" && tokenFromQuery && aliasFromQuery) {
+      setMode("setupLoginName");
+      setStatus("Verplichte stap: stel nu je loginnaam in.");
+      return;
+    }
+
     if ((flow === "magic" || (aliasFromQuery && tokenFromQuery)) && tokenFromQuery) {
       setMode("magic");
-      setStatus("Magic link uit URL geladen. Klik op Inloggen.");
+      setStatus("Magic link geladen. Verificatie loopt...");
     }
   }, []);
 
@@ -130,7 +135,8 @@ export default function LoginPage() {
             )
           );
           setSelectedAlias("");
-          setStatus("Kies een bestaande alias of verzin een nieuwe alias.");
+          setNewAlias("");
+          setStatus("Kies een bestaande alias of vul een nieuwe alias in.");
         }
       } catch {
         if (!isCancelled) {
@@ -149,6 +155,54 @@ export default function LoginPage() {
       isCancelled = true;
     };
   }, [mode, token]);
+
+  useEffect(() => {
+    if (mode !== "magic" || !token || !magicAlias || hasAttemptedMagicVerify.current) {
+      return;
+    }
+    hasAttemptedMagicVerify.current = true;
+
+    let isCancelled = false;
+
+    async function verifyMagicLink() {
+      setIsVerifyingMagic(true);
+      try {
+        const response = await fetch("/api/auth/verify-magic-link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            alias: magicAlias,
+            token
+          })
+        });
+        const payload = await readApiPayload(response);
+        if (!response.ok) {
+          if (!isCancelled) {
+            setStatus(payload.error ?? `Magic link verificatie mislukt (${response.status})`);
+          }
+          return;
+        }
+        if (!isCancelled) {
+          setStatus(payload.message ?? "Ingelogd");
+          router.push("/tasks");
+        }
+      } catch {
+        if (!isCancelled) {
+          setStatus("Netwerkfout bij verificatie.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsVerifyingMagic(false);
+        }
+      }
+    }
+
+    void verifyMagicLink();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [magicAlias, mode, router, token]);
 
   async function copyText(value: string, successMessage: string) {
     try {
@@ -180,7 +234,7 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/login-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+        body: JSON.stringify({ loginName, password: loginPassword })
       });
       const payload = await readApiPayload(response);
 
@@ -219,7 +273,10 @@ export default function LoginPage() {
         return;
       }
 
-      setStatus(payload.message ?? "Magic link verstuurd.");
+      setStatus(
+        payload.message ??
+          "Magic link verstuurd. Open de link uit je e-mail om accountaanmaak te starten."
+      );
       setMagicLink(payload.debugMagicLink ?? "");
 
       if (payload.debugToken) {
@@ -237,14 +294,21 @@ export default function LoginPage() {
     event.preventDefault();
     setStatus(null);
 
-    const hasSelectedExistingAlias = selectedAlias.trim().length > 0;
+    const hasSelectedAlias = selectedAlias.trim().length > 0;
     const hasNewAlias = newAlias.trim().length > 0;
-    if (hasSelectedExistingAlias && hasNewAlias) {
+    if (hasSelectedAlias && hasNewAlias) {
       setStatus("Kies een bestaande alias of vul een nieuwe alias in, niet allebei.");
       return;
     }
-    if (!hasSelectedExistingAlias && !hasNewAlias) {
+    if (!hasSelectedAlias && !hasNewAlias) {
       setStatus("Kies een bestaande alias of vul een nieuwe alias in.");
+      return;
+    }
+
+    const alias = hasSelectedAlias ? selectedAlias.trim() : newAlias.trim();
+    const normalizedLoginName = createLoginName.trim().toLowerCase();
+    if (!normalizedLoginName) {
+      setStatus("Loginnaam is verplicht.");
       return;
     }
     if (!validatePasswordPair(createPassword, createPasswordConfirm)) {
@@ -258,8 +322,9 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token,
-          existingAlias: hasSelectedExistingAlias ? selectedAlias.trim() : undefined,
-          newAlias: hasNewAlias ? newAlias.trim() : undefined,
+          bondsnummer: createBondsnummer,
+          alias,
+          loginName: normalizedLoginName,
           password: createPassword
         })
       });
@@ -279,40 +344,40 @@ export default function LoginPage() {
     }
   }
 
-  async function onVerifyMagicLink(event: FormEvent<HTMLFormElement>) {
+  async function onSetupLoginName(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatus(null);
 
-    const hasPasswordUpdate =
-      magicSetPassword.length > 0 || magicSetPasswordConfirm.length > 0;
-    if (hasPasswordUpdate && !validatePasswordPair(magicSetPassword, magicSetPasswordConfirm)) {
+    const normalizedLoginName = setupLoginName.trim().toLowerCase();
+    if (!normalizedLoginName) {
+      setStatus("Loginnaam is verplicht.");
       return;
     }
 
-    setIsVerifyingMagic(true);
+    setIsCreatingAccount(true);
     try {
-      const response = await fetch("/api/auth/verify-magic-link", {
+      const response = await fetch("/api/auth/complete-login-name", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           alias: magicAlias,
           token,
-          setPassword: hasPasswordUpdate ? magicSetPassword : undefined
+          loginName: normalizedLoginName
         })
       });
       const payload = await readApiPayload(response);
 
       if (!response.ok) {
-        setStatus(payload.error ?? `Magic link verificatie mislukt (${response.status})`);
+        setStatus(payload.error ?? `Loginnaam instellen mislukt (${response.status})`);
         return;
       }
 
-      setStatus(payload.message ?? "Ingelogd");
+      setStatus(payload.message ?? "Loginnaam ingesteld.");
       router.push("/tasks");
     } catch {
-      setStatus("Netwerkfout bij verificatie.");
+      setStatus("Netwerkfout bij instellen van loginnaam.");
     } finally {
-      setIsVerifyingMagic(false);
+      setIsCreatingAccount(false);
     }
   }
 
@@ -323,8 +388,13 @@ export default function LoginPage() {
       <section className="card grid">
         <h2>Kies je situatie</h2>
         <p className="muted">
-          Je hebt al een account: log in met e-mailadres + wachtwoord. Eerste keer op de
-          website: vul je Nevobo relatiecode en e-mailadres in en maak daarna je account.
+          Je hebt al een account: log in met loginnaam + wachtwoord. Eerste keer op de
+          website: vul je Nevobo relatiecode en e-mailadres in. Je ontvangt dan een magic
+          link per e-mail om je account aan te maken.
+        </p>
+        <p className="muted">
+          Privacy: verwerk geen persoonsgegevens in alias of loginnaam. Voor herkenbaarheid
+          binnen de club heeft alleen je voornaam in alias de voorkeur.
         </p>
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           <button type="button" onClick={() => setMode("password")}>
@@ -333,23 +403,20 @@ export default function LoginPage() {
           <button type="button" onClick={() => setMode("request")}>
             Eerste keer
           </button>
-          <button type="button" onClick={() => setMode("magic")}>
-            Ik heb een magic link
-          </button>
         </div>
       </section>
 
       {mode === "password" && (
         <form className="card grid" onSubmit={onPasswordLogin}>
           <input type="hidden" name={CSRF_FIELD_NAME} value={csrfToken} readOnly />
-          <h2>Login met e-mailadres + wachtwoord</h2>
+          <h2>Login met loginnaam + wachtwoord</h2>
           <label>
-            E-mailadres
+            Loginnaam
             <input
-              type="email"
-              value={loginEmail}
-              onChange={(e) => setLoginEmail(e.target.value)}
-              placeholder="jouw@email.nl"
+              type="text"
+              value={loginName}
+              onChange={(e) => setLoginName(e.target.value)}
+              placeholder="bijv. jan.vrijwilliger"
               required
             />
           </label>
@@ -393,8 +460,7 @@ export default function LoginPage() {
             />
           </label>
           <p className="muted">
-            Een e-mailadres mag bij meerdere accounts horen. Elke account heeft een eigen
-            alias.
+            Meerdere aliassen mogen aan dezelfde relatiecode hangen.
           </p>
           <button type="submit" disabled={isRequestingMagicLink}>
             {isRequestingMagicLink ? "Versturen..." : "Stuur magic link"}
@@ -407,9 +473,8 @@ export default function LoginPage() {
           <input type="hidden" name={CSRF_FIELD_NAME} value={csrfToken} readOnly />
           <h2>Maak account</h2>
           <p className="muted">
-            Van sommige vrijwilligers hebben we alvast hun voornaam als alias aangemaakt,
-            zodat we bestaande taken konden registreren. Je kunt in deze lijst kijken of dat
-            voor jou van toepassing is.
+            Gebruik geen persoonsgegevens in loginnaam of alias. Voor herkenbaarheid binnen
+            de club heeft alleen je voornaam in alias de voorkeur.
           </p>
 
           <label>
@@ -422,16 +487,18 @@ export default function LoginPage() {
           </label>
 
           <div className="grid" style={{ gap: "0.4rem" }}>
-            <strong>Kies een bestaande alias of verzin een nieuwe.</strong>
+            <strong>Kies bestaande alias of maak nieuwe alias.</strong>
             {isLoadingCreateOptions ? <p className="muted">Beschikbare aliassen laden...</p> : null}
+
             {claimableAliases.length > 0 ? (
               <label>
                 Bestaande alias claimen (optioneel)
                 <select
                   value={selectedAlias}
-                  onChange={(e) => {
-                    setSelectedAlias(e.target.value);
-                    if (e.target.value) {
+                  onChange={(event) => {
+                    const nextAlias = event.target.value;
+                    setSelectedAlias(nextAlias);
+                    if (nextAlias) {
                       setNewAlias("");
                     }
                   }}
@@ -445,7 +512,7 @@ export default function LoginPage() {
                 </select>
               </label>
             ) : (
-              <p className="muted">Er zijn geen ongeclaimde aliassen gevonden voor deze relatiecode.</p>
+              <p className="muted">Geen claimbare bestaande aliassen gevonden.</p>
             )}
 
             <label>
@@ -453,16 +520,31 @@ export default function LoginPage() {
               <input
                 type="text"
                 value={newAlias}
-                onChange={(e) => {
-                  setNewAlias(e.target.value);
-                  if (e.target.value.trim()) {
+                onChange={(event) => {
+                  const nextAlias = event.target.value;
+                  setNewAlias(nextAlias);
+                  if (nextAlias.trim().length > 0) {
                     setSelectedAlias("");
                   }
                 }}
-                placeholder="bijv. JanA2"
+                placeholder="bijv. Jan"
               />
             </label>
           </div>
+
+          <label>
+            Loginnaam (geheim)
+            <input
+              type="text"
+              value={createLoginName}
+              onChange={(e) => setCreateLoginName(e.target.value)}
+              placeholder="bijv. jan.vrijwilliger"
+              required
+            />
+          </label>
+          <p className="muted">
+            Gebruik 3-32 tekens: kleine letters, cijfers, punt, _ of -.
+          </p>
 
           <label>
             Wachtwoord
@@ -489,51 +571,47 @@ export default function LoginPage() {
         </form>
       )}
 
-      {mode === "magic" && (
-        <form className="card grid" onSubmit={onVerifyMagicLink}>
+      {mode === "setupLoginName" && (
+        <form className="card grid" onSubmit={onSetupLoginName}>
           <input type="hidden" name={CSRF_FIELD_NAME} value={csrfToken} readOnly />
-          <h2>Inloggen met bestaande magic link</h2>
+          <h2>Stel je loginnaam in</h2>
+          <p className="muted">
+            Je kwam binnen via e-mailadres + wachtwoord. Voor dit account is nu eerst een
+            loginnaam verplicht.
+          </p>
+          <p className="muted">
+            Gebruik geen persoonsgegevens. Voor herkenbaarheid binnen de club heeft alleen je
+            voornaam in alias de voorkeur.
+          </p>
           <label>
-            Alias
+            Loginnaam (geheim)
             <input
               type="text"
-              value={magicAlias}
-              onChange={(e) => setMagicAlias(e.target.value)}
-              placeholder="bijv. JanA2"
+              value={setupLoginName}
+              onChange={(e) => setSetupLoginName(e.target.value)}
+              placeholder="bijv. jan.vrijwilliger"
               required
             />
           </label>
-          <label>
-            Token
-            <input
-              type="text"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="magic link token"
-              required
-            />
-          </label>
-          <label>
-            Nieuw wachtwoord (optioneel)
-            <input
-              type="password"
-              value={magicSetPassword}
-              onChange={(e) => setMagicSetPassword(e.target.value)}
-            />
-          </label>
-          <label>
-            Herhaal nieuw wachtwoord (optioneel)
-            <input
-              type="password"
-              value={magicSetPasswordConfirm}
-              onChange={(e) => setMagicSetPasswordConfirm(e.target.value)}
-            />
-          </label>
-          <button type="submit" disabled={isVerifyingMagic}>
-            {isVerifyingMagic ? "Verifieren..." : "Inloggen"}
+          <p className="muted">
+            Gebruik 3-32 tekens: kleine letters, cijfers, punt, _ of -.
+          </p>
+          <button type="submit" disabled={isCreatingAccount}>
+            {isCreatingAccount ? "Opslaan..." : "Stel loginnaam in"}
           </button>
         </form>
       )}
+
+      {mode === "magic" ? (
+        <section className="card grid">
+          <h2>Magic link verificatie</h2>
+          <p className="muted">
+            {isVerifyingMagic
+              ? "Bezig met inloggen via magic link..."
+              : "Even geduld, verificatie wordt verwerkt."}
+          </p>
+        </section>
+      ) : null}
 
       {magicLink ? (
         <section className="card grid">

@@ -48,6 +48,7 @@ enum NotificationDelivery {
 
 model User {
   alias                   String               @id
+  loginName               String?              @unique
   bondsnummer             String
   email                   String?
   emailVerifiedAt         DateTime?

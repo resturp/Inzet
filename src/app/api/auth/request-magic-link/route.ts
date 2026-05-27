@@ -11,13 +11,21 @@ import {
 
 const requestSchema = z.object({
   bondsnummer: z.string().trim().min(2),
-  email: z.string().email(),
-  alias: z
-    .string()
-    .trim()
-    .regex(/^[a-zA-Z0-9_-]{3,32}$/)
-    .optional()
+  email: z.string().email()
 });
+
+function htmlEscape(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function createQrCodeUrl(value: string): string {
+  return `https://quickchart.io/qr?size=320&margin=1&text=${encodeURIComponent(value)}`;
+}
 
 export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json());
@@ -27,28 +35,9 @@ export async function POST(request: Request) {
 
   const bondsnummer = normalizeInputRelatiecode(parsed.data.bondsnummer);
   const email = normalizeEmail(parsed.data.email);
-  const requestedAlias = parsed.data.alias?.trim();
 
   if (!(await isRelatiecodeAllowed(bondsnummer))) {
     return NextResponse.json({ error: "Onbekende relatiecode" }, { status: 404 });
-  }
-
-  let aliasUser: { alias: string } | null = null;
-  if (requestedAlias) {
-    aliasUser = await prisma.user.findFirst({
-      where: {
-        alias: requestedAlias,
-        bondsnummer,
-        isActive: true
-      },
-      select: { alias: true }
-    });
-    if (!aliasUser) {
-      return NextResponse.json(
-        { error: "Alias hoort niet bij deze relatiecode of is inactief." },
-        { status: 404 }
-      );
-    }
   }
 
   const token = crypto.randomBytes(32).toString("hex");
@@ -57,7 +46,6 @@ export async function POST(request: Request) {
 
   await prisma.magicLinkToken.create({
     data: {
-      userAlias: aliasUser?.alias,
       email,
       bondsnummer,
       tokenHash,
@@ -66,32 +54,38 @@ export async function POST(request: Request) {
   });
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const magicLinkUrl = aliasUser
-    ? `${baseUrl}/login?flow=magic&alias=${encodeURIComponent(aliasUser.alias)}&token=${encodeURIComponent(token)}`
-    : `${baseUrl}/login?flow=create-account&token=${encodeURIComponent(token)}`;
+  const magicLinkUrl = `${baseUrl}/login?flow=create-account&token=${encodeURIComponent(token)}`;
+  const qrCodeUrl = createQrCodeUrl(magicLinkUrl);
+  const safeLink = htmlEscape(magicLinkUrl);
+  const safeQrCode = htmlEscape(qrCodeUrl);
+  const safeBondsnummer = htmlEscape(bondsnummer);
 
   try {
     await sendMail({
       to: email,
-      subject: aliasUser ? "Je Inzet magic link" : "Maak je Inzet-account aan",
-      text: aliasUser
-        ? [
-            "Je hebt een loginlink aangevraagd voor Inzet.",
-            "",
-            `Open deze link binnen 20 minuten: ${magicLinkUrl}`,
-            "",
-            `Alias: ${aliasUser.alias}`,
-            "",
-            "Heb je dit niet aangevraagd? Dan kun je deze e-mail negeren."
-          ].join("\n")
-        : [
-            "Je hebt een accountaanmaak-link aangevraagd voor Inzet.",
-            "",
-            `Open deze link binnen 20 minuten: ${magicLinkUrl}`,
-            "",
-            "Op de pagina kies je een bestaande alias of verzin je een nieuwe alias.",
-            "Daarna stel je een wachtwoord in en kun je meteen inloggen."
-          ].join("\n")
+      subject: "Maak je Inzet-account aan",
+      text: [
+        "Je hebt een accountaanmaak-link aangevraagd voor Inzet.",
+        "",
+        `Open deze link binnen 20 minuten: ${magicLinkUrl}`,
+        `QR-code: ${qrCodeUrl}`,
+        "",
+        `Relatiecode: ${bondsnummer}`,
+        "",
+        "Daarna maak je account af met relatiecode, alias (zichtbare naam), loginnaam en wachtwoord.",
+        "Let op: gebruik geen persoonsgegevens in loginnaam of alias. Voor herkenbaarheid binnen de club heeft voornaam de voorkeur.",
+        "",
+        "Heb je dit niet aangevraagd? Dan kun je deze e-mail negeren."
+      ].join("\n"),
+      html: [
+        "<p>Je hebt een accountaanmaak-link aangevraagd voor Inzet.</p>",
+        `<p><a href="${safeLink}">Open deze link binnen 20 minuten</a></p>`,
+        `<p><img src="${safeQrCode}" alt="QR-code voor accountaanmaak" width="220" height="220" /></p>`,
+        `<p><strong>Relatiecode:</strong> ${safeBondsnummer}</p>`,
+        "<p>Daarna maak je account af met relatiecode, alias (zichtbare naam), loginnaam en wachtwoord.</p>",
+        "<p><strong>Let op:</strong> gebruik geen persoonsgegevens in loginnaam of alias. Voor herkenbaarheid binnen de club heeft voornaam de voorkeur.</p>",
+        "<p>Heb je dit niet aangevraagd? Dan kun je deze e-mail negeren.</p>"
+      ].join("")
     });
   } catch (error) {
     console.error("Magic link e-mail verzenden mislukt", error);
@@ -105,11 +99,8 @@ export async function POST(request: Request) {
 
   return NextResponse.json(
     {
-      message: aliasUser
-        ? "Magic link om in te loggen is verstuurd."
-        : "Magic link voor accountaanmaak is verstuurd.",
+      message: "Magic link voor accountaanmaak is verstuurd.",
       debugToken: process.env.NODE_ENV === "production" ? undefined : token,
-      debugAlias: process.env.NODE_ENV === "production" ? undefined : aliasUser?.alias,
       debugEmail: process.env.NODE_ENV === "production" ? undefined : email,
       debugBondsnummer: process.env.NODE_ENV === "production" ? undefined : bondsnummer,
       debugMagicLink: process.env.NODE_ENV === "production" ? undefined : magicLinkUrl

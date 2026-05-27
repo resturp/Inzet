@@ -37,13 +37,33 @@ export async function GET(request: Request) {
   }
 
   const precreatedAliases = await readPrecreatedAliases();
+  const precreatedAliasUsers =
+    precreatedAliases.length > 0
+      ? await prisma.user.findMany({
+          where: {
+            alias: { in: precreatedAliases }
+          },
+          select: {
+            alias: true,
+            email: true,
+            passwordHash: true,
+            loginName: true
+          }
+        })
+      : [];
+  const claimedAliases = new Set(
+    precreatedAliasUsers
+      .filter((user) => Boolean(user.email || user.passwordHash || user.loginName))
+      .map((user) => user.alias)
+  );
+  const claimableAliases = precreatedAliases.filter((alias) => !claimedAliases.has(alias));
 
   return NextResponse.json(
     {
       data: {
         email: normalizeEmail(record.email),
         bondsnummer: record.bondsnummer,
-        claimableAliases: precreatedAliases
+        claimableAliases
       }
     },
     { status: 200 }
