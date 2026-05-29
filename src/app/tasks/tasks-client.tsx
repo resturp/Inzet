@@ -94,6 +94,7 @@ type TaskMenuView = TaskStatusFilter | "OPEN_VOORSTELLEN";
 type TaskEditDraft = {
   title: string;
   description: string;
+  status: ApiTask["status"];
   longDescription: string;
   points: string;
   coordinationType: DraftCoordinationChoice;
@@ -178,6 +179,7 @@ const ICON_ACCEPT = "✓";
 const ICON_REJECT = "✕";
 const ICON_COMPLETE = "✓✓";
 const ICON_UNCOMPLETE = "✕✕";
+const ICON_ASSIGN = "✓";
 const ICON_CARET_DOWN = "▾";
 const VCZ_LOGO_URL =
   "https://usercontent.one/wp/www.vczwolle.nl/wp-content/uploads/Logo-nieuw-V1-VCZ.png?media=1660898964";
@@ -765,6 +767,7 @@ export function TasksClient({ alias }: { alias: string }) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [downloadMenuTaskId, setDownloadMenuTaskId] = useState<string | null>(null);
   const [downloadMenuPosition, setDownloadMenuPosition] = useState<{ left: number; top: number } | null>(null);
+  const [importTargetTaskId, setImportTargetTaskId] = useState<string | null>(null);
   const [subtaskDraft, setSubtaskDraft] = useState<DraftSubtask>(initialSubtask);
   const [isTaskMenuOpen, setIsTaskMenuOpen] = useState(false);
   const [taskMenuView, setTaskMenuView] = useState<TaskMenuView>("BESCHIKBAAR");
@@ -812,6 +815,7 @@ export function TasksClient({ alias }: { alias: string }) {
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [subtaskPointsDraftById, setSubtaskPointsDraftById] = useState<Record<string, string>>({});
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const deepLinkRef = useRef<TasksDeepLink | null>(null);
   const deepLinkTaskOrProposalHandledRef = useRef(false);
   const deepLinkDialogHandledRef = useRef(false);
@@ -1651,6 +1655,68 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
+  function onPickImportTaskBackup(taskId: string, taskTitle: string) {
+    const confirmImport = window.confirm(
+      `Importeer backup als child onder '${taskTitle}'? Dit voegt een hele taakboom toe.`
+    );
+    if (!confirmImport) {
+      return;
+    }
+
+    setImportTargetTaskId(taskId);
+    setDownloadMenuTaskId(null);
+    setDownloadMenuPosition(null);
+    setError(null);
+
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = "";
+      importFileInputRef.current.click();
+    }
+  }
+
+  async function onImportTaskBackupFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    const targetTaskId = importTargetTaskId;
+    event.target.value = "";
+    if (!file || !targetTaskId) {
+      return;
+    }
+
+    setActiveTaskId(targetTaskId);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(`/api/reports/tasks/${targetTaskId}/import-backup`, {
+        method: "POST",
+        body: formData
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            data?: { importedRootTitle?: string; createdTaskCount?: number };
+          }
+        | null;
+      if (!response.ok) {
+        setError(payload?.error ?? "Importeren van backup is mislukt.");
+        return;
+      }
+
+      const importedRootTitle = payload?.data?.importedRootTitle ?? "onbekende root";
+      const createdTaskCount = Number(payload?.data?.createdTaskCount ?? 0);
+      setRegisterSuccessTaskTitle(
+        `Import klaar: ${importedRootTitle} (${Number.isFinite(createdTaskCount) ? createdTaskCount : 0} taken)`
+      );
+      await loadAll({ includeUsers: false });
+    } catch {
+      setError("Netwerkfout bij importeren van backup.");
+    } finally {
+      setImportTargetTaskId(null);
+      setActiveTaskId(null);
+    }
+  }
+
   async function onToggleTaskSubscription(taskId: string, subscribed: boolean) {
     setActiveTaskId(taskId);
     setError(null);
@@ -1676,6 +1742,28 @@ export function TasksClient({ alias }: { alias: string }) {
   function onRelease(taskId: string) {
     const taskTitle = tasksById.get(taskId)?.title ?? taskId;
     setReleaseDialogTask({ id: taskId, title: taskTitle });
+  }
+
+  async function onAssign(taskId: string) {
+    setActiveTaskId(taskId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error ?? "Taak op toegewezen zetten is mislukt.");
+        return;
+      }
+      await loadAll({ includeUsers: false });
+    } catch {
+      setError("Netwerkfout bij op toegewezen zetten van taak.");
+    } finally {
+      setActiveTaskId(null);
+    }
   }
 
   function onCancelReleaseDialog() {
@@ -2035,6 +2123,7 @@ export function TasksClient({ alias }: { alias: string }) {
     setEditDraft({
       title: task.title,
       description: task.description,
+      status: task.status,
       longDescription: task.longDescription ?? "",
       points: parseTaskPoints(task.points).toString(),
       coordinationType: draftCoordinationChoiceFromOwn(task.ownCoordinationType),
@@ -2112,6 +2201,7 @@ export function TasksClient({ alias }: { alias: string }) {
       patchPayload.longDescription = editDraft.longDescription.trim()
         ? editDraft.longDescription
         : null;
+      patchPayload.status = editDraft.status;
       patchPayload.coordinationType = toApiCoordinationTypeFromDraft(editDraft.coordinationType);
       patchPayload.points = points;
       patchPayload.date = startAt;
@@ -2996,6 +3086,7 @@ export function TasksClient({ alias }: { alias: string }) {
             task.status === "BESCHIKBAAR" &&
             !isCreatingSubtask &&
             (task.coordinationType === "DELEGEREN" || isLeafTask);
+          const canAssignTask = canManageTask && task.status === "BESCHIKBAAR";
           const canReleaseTask = canManageTask && task.status === "TOEGEWEZEN";
           const canCompleteTask =
             canManageTask &&
@@ -3259,6 +3350,18 @@ export function TasksClient({ alias }: { alias: string }) {
                     aria-label="Schrijf in"
                   >
                     {activeTaskId === task.id ? `${ICON_REGISTER}...` : ICON_REGISTER}
+                  </button>
+                ) : null}
+                {canAssignTask ? (
+                  <button
+                    type="button"
+                    onClick={() => void onAssign(task.id)}
+                    disabled={activeTaskId === task.id}
+                    style={{ whiteSpace: "nowrap" }}
+                    title="Zet op toegewezen"
+                    aria-label="Zet op toegewezen"
+                  >
+                    {activeTaskId === task.id ? `${ICON_ASSIGN}...` : ICON_ASSIGN}
                   </button>
                 ) : null}
                 {canReleaseTask ? (
@@ -3635,6 +3738,21 @@ export function TasksClient({ alias }: { alias: string }) {
                 <option value="DELEGEREN">Delegeren</option>
               </select>
             </label>
+            <label>
+              Status
+              <select
+                value={editDraft.status}
+                onChange={(event) =>
+                  setEditDraft((current) =>
+                    current ? { ...current, status: event.target.value as ApiTask["status"] } : current
+                  )
+                }
+                disabled={!canEditTaskDetails || activeTaskId === editingTask.id}
+              >
+                <option value="BESCHIKBAAR">Beschikbaar</option>
+                <option value="TOEGEWEZEN">Toegewezen</option>
+              </select>
+            </label>
             <div
               role="tablist"
               aria-label="Taak bewerken tabs"
@@ -3951,8 +4069,24 @@ export function TasksClient({ alias }: { alias: string }) {
           >
             Alle taken (backup JSON)
           </button>
+          <button
+            type="button"
+            onClick={() => onPickImportTaskBackup(downloadMenuTask.id, downloadMenuTask.title)}
+            disabled={activeTaskId === downloadMenuTask.id}
+            title="Importeer takenbackup (JSON)"
+            aria-label="Importeer takenbackup (JSON)"
+          >
+            Importeer takenbackup (JSON)
+          </button>
         </div>
       ) : null}
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={onImportTaskBackupFile}
+        style={{ display: "none" }}
+      />
 
       {longDescriptionDialogTask ? (
         <div

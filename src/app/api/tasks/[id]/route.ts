@@ -12,6 +12,7 @@ import { pointsToStorage } from "@/lib/task-points";
 const patchTaskSchema = z.object({
   title: z.string().trim().min(2).optional(),
   description: z.string().trim().min(2).optional(),
+  status: z.nativeEnum(TaskStatus).optional(),
   longDescription: z.string().max(20000).nullable().optional(),
   teamName: z.string().trim().max(100).nullable().optional(),
   coordinationType: z.enum(["DELEGEREN", "ORGANISEREN"]).nullable().optional(),
@@ -130,6 +131,7 @@ export async function PATCH(
   const hasBaseUpdates =
     parsed.data.title !== undefined ||
     parsed.data.description !== undefined ||
+    parsed.data.status !== undefined ||
     parsed.data.longDescription !== undefined ||
     parsed.data.teamName !== undefined ||
     parsed.data.coordinationType !== undefined ||
@@ -165,6 +167,13 @@ export async function PATCH(
     );
   }
 
+  if (parsed.data.status === TaskStatus.GEREED) {
+    return NextResponse.json(
+      { error: "Gebruik de knop 'Gereed melden' om een taak op gereed te zetten." },
+      { status: 409 }
+    );
+  }
+
   let coordinatorAliases: string[] | undefined = undefined;
   if (hasCoordinatorUpdate) {
     coordinatorAliases = uniqueSortedAliases(
@@ -188,6 +197,7 @@ export async function PATCH(
   const baseUpdateData = {
     title: sanitizedTitle,
     description: sanitizedDescription,
+    status: parsed.data.status,
     longDescription: sanitizedLongDescription,
     teamName: sanitizedTeamName,
     coordinationType: parsed.data.coordinationType,
@@ -253,6 +263,9 @@ export async function PATCH(
   }
   if (parsed.data.teamName !== undefined) {
     changedParts.push("team");
+  }
+  if (parsed.data.status !== undefined) {
+    changedParts.push("status");
   }
   if (parsed.data.coordinationType !== undefined || parsed.data.coordinatorAliases !== undefined) {
     changedParts.push("coordinatoren/werkwijze");
