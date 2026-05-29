@@ -101,9 +101,8 @@ function parseBackupNode(
       ? null
       : ensureString(node.parentId, `${fieldPath}.parentId`);
 
-  if (expectedParentId === null && sourceParentId !== null) {
-    throw new Error(`Node ${fieldPath} heeft een ongeldige parentId-relatie.`);
-  }
+  // Root node mag uit een bestaande boom geëxporteerd zijn en dan een parentId hebben.
+  // Die root parentId negeren we bij import-als-child.
   if (expectedParentId !== null && sourceParentId !== expectedParentId) {
     throw new Error(`Node ${fieldPath} heeft een ongeldige parentId-relatie.`);
   }
@@ -227,13 +226,19 @@ export async function POST(
 
   const formData = await request.formData();
   const file = formData.get("file");
-  if (!(file instanceof File)) {
+  const isUploadLike =
+    !!file &&
+    typeof file === "object" &&
+    "text" in file &&
+    typeof (file as { text?: unknown }).text === "function";
+  if (!isUploadLike) {
     return NextResponse.json({ error: "Upload een JSON-bestand." }, { status: 400 });
   }
+  const uploadedFile = file as File;
 
   let backupPayload: unknown;
   try {
-    backupPayload = JSON.parse(await file.text());
+    backupPayload = JSON.parse(await uploadedFile.text());
   } catch {
     return NextResponse.json({ error: "Bestand bevat geen geldige JSON." }, { status: 400 });
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatPoints, snapNearInteger } from "@/lib/points";
 
@@ -132,6 +132,17 @@ type LongDescriptionDialogTask = {
   id: string;
   title: string;
   longDescription: string;
+};
+
+type ImportBackupDialogState = {
+  taskId: string;
+  taskTitle: string;
+  file: File | null;
+  fileName: string | null;
+  importedRootTitle: string | null;
+  importedTaskCount: number | null;
+  parseError: string | null;
+  submitError: string | null;
 };
 
 type CopyDateShiftUnit = "hours" | "days" | "weeks" | "months" | "years";
@@ -510,6 +521,49 @@ function parseNonNegativeIntegerInput(value: string): number | null {
   return parsed;
 }
 
+function parseTaskBackupSummary(rawJson: string): { rootTitle: string; taskCount: number } {
+  const parsed = JSON.parse(rawJson) as unknown;
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Bestand heeft geen geldige backupstructuur.");
+  }
+
+  const asRecord = parsed as Record<string, unknown>;
+  const rootTaskRaw = asRecord.rootTask;
+  if (!rootTaskRaw || typeof rootTaskRaw !== "object") {
+    throw new Error("Backup mist rootTask.");
+  }
+  const rootTask = rootTaskRaw as Record<string, unknown>;
+  const rootTitleRaw = rootTask.title;
+  if (typeof rootTitleRaw !== "string" || rootTitleRaw.trim().length === 0) {
+    throw new Error("Backup rootTask.title ontbreekt.");
+  }
+
+  function countNodes(nodeRaw: unknown): number {
+    if (!nodeRaw || typeof nodeRaw !== "object") {
+      return 0;
+    }
+    const node = nodeRaw as Record<string, unknown>;
+    const childrenRaw = node.children;
+    const children = Array.isArray(childrenRaw) ? childrenRaw : [];
+    return 1 + children.reduce((sum, child) => sum + countNodes(child), 0);
+  }
+
+  const countedTaskCount = countNodes(rootTask);
+  const metaTaskCountRaw =
+    typeof asRecord.meta === "object" && asRecord.meta
+      ? (asRecord.meta as Record<string, unknown>).taskCount
+      : null;
+  const metaTaskCount =
+    typeof metaTaskCountRaw === "number" && Number.isFinite(metaTaskCountRaw) && metaTaskCountRaw > 0
+      ? Math.floor(metaTaskCountRaw)
+      : null;
+
+  return {
+    rootTitle: rootTitleRaw.trim(),
+    taskCount: metaTaskCount ?? countedTaskCount
+  };
+}
+
 function uniqueSortedAliases(aliases: readonly string[]): string[] {
   return Array.from(new Set(aliases.filter(Boolean))).sort((left, right) =>
     left.localeCompare(right, "nl-NL")
@@ -767,7 +821,8 @@ export function TasksClient({ alias }: { alias: string }) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [downloadMenuTaskId, setDownloadMenuTaskId] = useState<string | null>(null);
   const [downloadMenuPosition, setDownloadMenuPosition] = useState<{ left: number; top: number } | null>(null);
-  const [importTargetTaskId, setImportTargetTaskId] = useState<string | null>(null);
+  const [importBackupDialog, setImportBackupDialog] = useState<ImportBackupDialogState | null>(null);
+  const [isImportBackupDragActive, setIsImportBackupDragActive] = useState(false);
   const [subtaskDraft, setSubtaskDraft] = useState<DraftSubtask>(initialSubtask);
   const [isTaskMenuOpen, setIsTaskMenuOpen] = useState(false);
   const [taskMenuView, setTaskMenuView] = useState<TaskMenuView>("BESCHIKBAAR");
@@ -1655,40 +1710,101 @@ export function TasksClient({ alias }: { alias: string }) {
     }
   }
 
-  function onPickImportTaskBackup(taskId: string, taskTitle: string) {
-    const confirmImport = window.confirm(
-      `Importeer backup als child onder '${taskTitle}'? Dit voegt een hele taakboom toe.`
-    );
-    if (!confirmImport) {
-      return;
-    }
-
-    setImportTargetTaskId(taskId);
+  function onOpenImportTaskBackupDialog(taskId: string, taskTitle: string) {
     setDownloadMenuTaskId(null);
     setDownloadMenuPosition(null);
     setError(null);
+    setImportBackupDialog({
+      taskId,
+      taskTitle,
+      file: null,
+      fileName: null,
+      importedRootTitle: null,
+      importedTaskCount: null,
+      parseError: null,
+      submitError: null
+    });
+    setIsImportBackupDragActive(false);
+  }
 
+  function onCancelImportTaskBackupDialog() {
+    if (importBackupDialog && activeTaskId === importBackupDialog.taskId) {
+      return;
+    }
+    setImportBackupDialog(null);
+    setIsImportBackupDragActive(false);
     if (importFileInputRef.current) {
       importFileInputRef.current.value = "";
-      importFileInputRef.current.click();
     }
   }
 
-  async function onImportTaskBackupFile(event: ChangeEvent<HTMLInputElement>) {
+  async function onSetImportBackupFile(file: File) {
+    try {
+      const summary = parseTaskBackupSummary(await file.text());
+      setImportBackupDialog((current) =>
+        current
+          ? {
+              ...current,
+              file,
+              fileName: file.name,
+              importedRootTitle: summary.rootTitle,
+              importedTaskCount: summary.taskCount,
+              parseError: null,
+              submitError: null
+            }
+          : current
+      );
+    } catch (parseError) {
+      const message = parseError instanceof Error ? parseError.message : "Ongeldige backup JSON.";
+      setImportBackupDialog((current) =>
+        current
+          ? {
+              ...current,
+              file: null,
+              fileName: file.name,
+              importedRootTitle: null,
+              importedTaskCount: null,
+              parseError: message,
+              submitError: null
+            }
+          : current
+      );
+    }
+  }
+
+  async function onImportTaskBackupInputChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    const targetTaskId = importTargetTaskId;
     event.target.value = "";
-    if (!file || !targetTaskId) {
+    if (!file) {
+      return;
+    }
+    await onSetImportBackupFile(file);
+  }
+
+  function onImportBackupDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsImportBackupDragActive(false);
+    const file = event.dataTransfer.files?.[0];
+    if (!file) {
+      return;
+    }
+    void onSetImportBackupFile(file);
+  }
+
+  async function onConfirmImportTaskBackupDialog() {
+    if (!importBackupDialog?.taskId || !importBackupDialog.file || importBackupDialog.parseError) {
       return;
     }
 
-    setActiveTaskId(targetTaskId);
+    setImportBackupDialog((current) => (current ? { ...current, submitError: null } : current));
+    setActiveTaskId(importBackupDialog.taskId);
     setError(null);
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", importBackupDialog.file);
 
-      const response = await fetch(`/api/reports/tasks/${targetTaskId}/import-backup`, {
+      const response = await fetch(`/api/reports/tasks/${importBackupDialog.taskId}/import-backup`, {
         method: "POST",
         body: formData
       });
@@ -1699,20 +1815,22 @@ export function TasksClient({ alias }: { alias: string }) {
           }
         | null;
       if (!response.ok) {
-        setError(payload?.error ?? "Importeren van backup is mislukt.");
+        const message = payload?.error ?? "Importeren van backup is mislukt.";
+        setImportBackupDialog((current) => (current ? { ...current, submitError: message } : current));
+        setError(message);
         return;
       }
 
-      const importedRootTitle = payload?.data?.importedRootTitle ?? "onbekende root";
-      const createdTaskCount = Number(payload?.data?.createdTaskCount ?? 0);
+      const importedRootTitle = payload?.data?.importedRootTitle ?? importBackupDialog.importedRootTitle ?? "onbekende root";
+      const createdTaskCount = Number(payload?.data?.createdTaskCount ?? importBackupDialog.importedTaskCount ?? 0);
       setRegisterSuccessTaskTitle(
         `Import klaar: ${importedRootTitle} (${Number.isFinite(createdTaskCount) ? createdTaskCount : 0} taken)`
       );
+      setImportBackupDialog(null);
       await loadAll({ includeUsers: false });
     } catch {
       setError("Netwerkfout bij importeren van backup.");
     } finally {
-      setImportTargetTaskId(null);
       setActiveTaskId(null);
     }
   }
@@ -4071,7 +4189,7 @@ export function TasksClient({ alias }: { alias: string }) {
           </button>
           <button
             type="button"
-            onClick={() => onPickImportTaskBackup(downloadMenuTask.id, downloadMenuTask.title)}
+            onClick={() => onOpenImportTaskBackupDialog(downloadMenuTask.id, downloadMenuTask.title)}
             disabled={activeTaskId === downloadMenuTask.id}
             title="Importeer takenbackup (JSON)"
             aria-label="Importeer takenbackup (JSON)"
@@ -4084,9 +4202,120 @@ export function TasksClient({ alias }: { alias: string }) {
         ref={importFileInputRef}
         type="file"
         accept=".json,application/json"
-        onChange={onImportTaskBackupFile}
+        onChange={onImportTaskBackupInputChange}
         style={{ display: "none" }}
       />
+
+      {importBackupDialog ? (
+        <div
+          onClick={onCancelImportTaskBackupDialog}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.35)",
+            zIndex: 50,
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="card grid"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Takenbackup importeren"
+            onClick={(event) => event.stopPropagation()}
+            style={{ maxWidth: "44rem", margin: "8vh auto 0 auto" }}
+          >
+            <h3 style={{ marginBottom: 0 }}>Takenbackup importeren</h3>
+            <p className="muted" style={{ margin: 0 }}>
+              Doeltaak: <strong>{importBackupDialog.taskTitle}</strong>
+            </p>
+            <div
+              onDragEnter={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setIsImportBackupDragActive(true);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setIsImportBackupDragActive(true);
+              }}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setIsImportBackupDragActive(false);
+              }}
+              onDrop={onImportBackupDrop}
+              style={{
+                border: isImportBackupDragActive ? "2px solid #1d4ed8" : "2px dashed #60a5fa",
+                background: isImportBackupDragActive ? "#dbeafe" : "#f8fbff",
+                borderRadius: "10px",
+                padding: "1rem",
+                display: "grid",
+                gap: "0.75rem"
+              }}
+            >
+              <p className="muted" style={{ margin: 0 }}>
+                Sleep je backup JSON hierheen of kies een bestand.
+              </p>
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <button
+                  type="button"
+                  onClick={() => importFileInputRef.current?.click()}
+                  disabled={activeTaskId === importBackupDialog.taskId}
+                >
+                  Bestand kiezen
+                </button>
+              </div>
+            </div>
+            {importBackupDialog.fileName ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Geselecteerd bestand: <strong>{importBackupDialog.fileName}</strong>
+              </p>
+            ) : null}
+            {importBackupDialog.importedRootTitle && importBackupDialog.importedTaskCount !== null ? (
+              <div className="card" style={{ padding: "0.75rem" }}>
+                <p className="muted" style={{ margin: 0 }}>
+                  Root in backup: <strong>{importBackupDialog.importedRootTitle}</strong>
+                </p>
+                <p className="muted" style={{ margin: 0 }}>
+                  Aantal taken in backup: <strong>{importBackupDialog.importedTaskCount}</strong>
+                </p>
+                <p className="muted" style={{ margin: 0 }}>
+                  Deze volledige boom wordt als child onder <strong>{importBackupDialog.taskTitle}</strong> geplaatst.
+                </p>
+              </div>
+            ) : null}
+            {importBackupDialog.parseError ? (
+              <p style={{ color: "#991b1b", margin: 0 }}>{importBackupDialog.parseError}</p>
+            ) : null}
+            {importBackupDialog.submitError ? (
+              <p style={{ color: "#991b1b", margin: 0 }}>{importBackupDialog.submitError}</p>
+            ) : null}
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={onCancelImportTaskBackupDialog}
+                disabled={activeTaskId === importBackupDialog.taskId}
+              >
+                Annuleren
+              </button>
+              <button
+                type="button"
+                onClick={() => void onConfirmImportTaskBackupDialog()}
+                disabled={
+                  activeTaskId === importBackupDialog.taskId ||
+                  !importBackupDialog.file ||
+                  Boolean(importBackupDialog.parseError) ||
+                  importBackupDialog.importedTaskCount === null
+                }
+              >
+                {activeTaskId === importBackupDialog.taskId ? "Importeren..." : "OK"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {longDescriptionDialogTask ? (
         <div

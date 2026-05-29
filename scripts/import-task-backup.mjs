@@ -138,9 +138,8 @@ function parseBackup(payload) {
         ? null
         : ensureString(node.parentId, `${fieldPath}.parentId`);
 
-    if (expectedParentId === null && sourceParentId !== null) {
-      throw new Error(`Node ${fieldPath} heeft een ongeldige parentId-relatie.`);
-    }
+    // Root node mag uit een bestaande boom geëxporteerd zijn en dan een parentId hebben.
+    // Die root parentId negeren we bij import-als-child.
     if (expectedParentId !== null && sourceParentId !== expectedParentId) {
       throw new Error(`Node ${fieldPath} heeft een ongeldige parentId-relatie.`);
     }
