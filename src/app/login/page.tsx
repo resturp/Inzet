@@ -72,6 +72,7 @@ export default function LoginPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const flow = params.get("flow");
+    const modeFromQuery = params.get("mode");
     const tokenFromQuery = params.get("token");
     const aliasFromQuery = params.get("alias");
 
@@ -97,6 +98,15 @@ export default function LoginPage() {
     if ((flow === "magic" || (aliasFromQuery && tokenFromQuery)) && tokenFromQuery) {
       setMode("magic");
       setStatus("Magic link geladen. Verificatie loopt...");
+      return;
+    }
+
+    if (
+      modeFromQuery === "password" ||
+      modeFromQuery === "request" ||
+      modeFromQuery === "magic"
+    ) {
+      setMode(modeFromQuery);
     }
   }, []);
 
@@ -606,7 +616,9 @@ export default function LoginPage() {
         <section className="card grid">
           <h2>Magic link verificatie</h2>
           <p className="muted">
-            {isVerifyingMagic
+            {!token || !magicAlias
+              ? "Open de magic link uit je e-mail. Daarin staan token en alias."
+              : isVerifyingMagic
               ? "Bezig met inloggen via magic link..."
               : "Even geduld, verificatie wordt verwerkt."}
           </p>
