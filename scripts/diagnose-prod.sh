@@ -23,6 +23,10 @@ docker compose config -q
 echo "config: ok"
 echo
 
+echo "== Host listening ports =="
+ss -ltnp 2>/dev/null | grep -E ':(80|443|3000)\b' || true
+echo
+
 echo "== Containers =="
 docker compose ps
 echo
@@ -32,6 +36,8 @@ docker compose exec -T web sh -lc 'getent hosts db; getent hosts mail; nc -vz db
 echo
 
 echo "== App health =="
+curl -i --max-time 10 http://127.0.0.1:3000/api/health || true
+echo
 docker compose exec -T web node -e "fetch('http://localhost:3000/api/health').then(async (response) => { console.log(response.status, await response.text()); }).catch((error) => { console.error(error); process.exit(1); });"
 echo
 
