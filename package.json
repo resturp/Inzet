@@ -15,7 +15,8 @@
     "dev:reset": "bash scripts/reset-dev.sh",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:add-aliases": "tsx scripts/add-aliases.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
