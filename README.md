@@ -62,6 +62,7 @@ Fase 1 bootstrap van de MVP op basis van:
   - `./scripts/diagnose-prod.sh`
   - controleer of `web` draait en of `/api/health` HTTP 200 geeft
   - bij Prisma `P1000`: zet `POSTGRES_PASSWORD` en `DOCKER_DATABASE_URL` in `.env` gelijk aan het bestaande databasewachtwoord
+  - als dat wachtwoord onbekend is: `./scripts/repair-postgres-login.sh`
   - controleer of je reverse proxy naar `127.0.0.1:3000` wijst
   - controleer proxylogs, bijvoorbeeld `sudo journalctl -u nginx -n 100 --no-pager` of `sudo journalctl -u apache2 -n 100 --no-pager`
 

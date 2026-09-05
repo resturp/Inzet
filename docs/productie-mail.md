@@ -32,7 +32,13 @@ POSTGRES_PASSWORD="BESTAAND_DATABASE_WACHTWOORD"
 DOCKER_DATABASE_URL="postgresql://postgres:BESTAAND_DATABASE_WACHTWOORD@db:5432/inzet?schema=public"
 ```
 
-Gooi het volume niet weg om dit op te lossen; dan verlies je productiegegevens.
+Als het wachtwoord onbekend is, herstel alleen de loginrol:
+
+```sh
+./scripts/repair-postgres-login.sh
+```
+
+Het script stopt `web` en `db`, zet de bestaande PostgreSQL-rol opnieuw op `LOGIN` met een nieuw wachtwoord, en print de `.env` regels die je moet overnemen. Het verwijdert geen volumes en wist geen productiegegevens.
 
 ## Postfix in Docker
 
