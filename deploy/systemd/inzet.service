@@ -8,9 +8,9 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=__INZET_ROOT__
 ExecStartPre=/usr/bin/docker compose -f __INZET_ROOT__/docker-compose.yml -f __INZET_ROOT__/docker-compose.prod.yml config -q
-ExecStart=/usr/bin/docker compose -f __INZET_ROOT__/docker-compose.yml -f __INZET_ROOT__/docker-compose.prod.yml up -d --build
-ExecReload=/usr/bin/docker compose -f __INZET_ROOT__/docker-compose.yml -f __INZET_ROOT__/docker-compose.prod.yml up -d --build
-ExecStop=/usr/bin/docker compose -f __INZET_ROOT__/docker-compose.yml -f __INZET_ROOT__/docker-compose.prod.yml down
+ExecStart=/bin/bash __INZET_ROOT__/scripts/compose-prod-up.sh
+ExecReload=/bin/bash __INZET_ROOT__/scripts/compose-prod-up.sh
+ExecStop=/usr/bin/docker compose -f __INZET_ROOT__/docker-compose.yml -f __INZET_ROOT__/docker-compose.prod.yml stop
 RemainAfterExit=yes
 TimeoutStartSec=0
 

@@ -30,14 +30,14 @@ Fase 1 bootstrap van de MVP op basis van:
    - `npm run dev`
 
 ## Productie mail (Docker Postfix)
-- De endpoint `POST /api/auth/request-magic-link` verzendt e-mail via lokale `sendmail`.
+- De endpoint `POST /api/auth/request-magic-link` verzendt e-mail in Docker via SMTP naar de interne `mail` service.
 - Vereiste env vars:
   - `MAIL_FROM` (bijv. `Inzet <info@frii.nl>`)
   - `MAIL_ENVELOPE_FROM` (bijv. `info@frii.nl`)
   - `MAIL_MESSAGE_ID_DOMAIN` (bijv. `frii.nl`)
-  - `SENDMAIL_PATH` (standaard `/usr/sbin/sendmail`)
-  - `SENDMAIL_IN_DEV` (`true` om in development toch echt e-mail te versturen; standaard `false`)
   - `SMTPHOST` (`mail:25` wanneer Docker Compose wordt gebruikt)
+  - `SENDMAIL_PATH` (fallback als `SMTPHOST` leeg is; standaard `/usr/sbin/sendmail`)
+  - `SENDMAIL_IN_DEV` (`true` om in development toch echt e-mail te versturen; standaard `false`)
 - Docker Compose start een interne Postfix-service zonder gepubliceerde poort 25. De `web` container verstuurt via `mail:25`.
 - Zie `docs/productie-mail.md` voor de outbound-only Docker/Postfixconfiguratie en DNS-checklist voor `info@frii.nl`.
 

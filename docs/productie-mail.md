@@ -1,6 +1,6 @@
 # Productie-mail
 
-De applicatie verstuurt magic links via de `sendmail`-interface binnen de `web` container. In productie levert een aparte Postfix-container de mail naar buiten af, zonder mail van internet te accepteren en zonder open relay te zijn.
+De applicatie verstuurt magic links in Docker via SMTP naar de interne `mail` container. Die aparte Postfix-container levert de mail naar buiten af, zonder mail van internet te accepteren en zonder open relay te zijn.
 
 ## Applicatieconfiguratie
 
@@ -10,9 +10,10 @@ Gebruik deze waarden op de server:
 MAIL_FROM="Inzet <info@frii.nl>"
 MAIL_ENVELOPE_FROM="info@frii.nl"
 MAIL_MESSAGE_ID_DOMAIN="frii.nl"
-SENDMAIL_PATH="/usr/sbin/sendmail"
 SENDMAIL_IN_DEV="false"
 SMTPHOST="mail:25"
+# Fallback buiten Docker, alleen gebruikt als SMTPHOST leeg is:
+SENDMAIL_PATH="/usr/sbin/sendmail"
 ```
 
 Zet `NEXT_PUBLIC_APP_URL` op de publieke HTTPS-url van de applicatie, anders bevat de magic link een lokale of verkeerde host.
@@ -112,16 +113,12 @@ Laat Postfix alle applicatiemail ondertekenen met `d=frii.nl` en `s=inzet`. Met 
 
 ## Test
 
-Stuur op de productieserver een testmail via dezelfde interface als de app:
+Stuur op de productieserver een test via dezelfde API-route als de app:
 
 ```sh
-docker compose exec -T web /usr/sbin/sendmail -i -f info@frii.nl -- jouw-adres@example.com <<'MAIL'
-From: Inzet <info@frii.nl>
-To: jouw-adres@example.com
-Subject: Inzet mailtest
-
-Test vanaf de Inzet server.
-MAIL
+curl -i -X POST http://127.0.0.1:3000/api/auth/request-magic-link \
+  -H 'content-type: application/json' \
+  --data '{"bondsnummer":"JOUW_RELATIECODE","email":"jouw-adres@example.com"}'
 ```
 
 Bekijk logs bij fouten:
