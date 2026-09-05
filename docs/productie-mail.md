@@ -19,6 +19,21 @@ Zet `NEXT_PUBLIC_APP_URL` op de publieke HTTPS-url van de applicatie, anders bev
 
 Op je MacBook hoef je geen lokale MTA te installeren. In development verstuurt de app standaard geen e-mail zolang `SENDMAIL_IN_DEV=false`; de loginpagina toont dan een dev magic link.
 
+## Bestaande database
+
+Bij een bestaand Postgres-volume verandert `POSTGRES_PASSWORD` de database niet meer. Als `web` crasht met Prisma `P1000`, gebruikt de applicatie een ander wachtwoord dan de bestaande database.
+
+Zet op de server in `.env` dezelfde credentials voor Docker:
+
+```dotenv
+POSTGRES_DB="inzet"
+POSTGRES_USER="postgres"
+POSTGRES_PASSWORD="BESTAAND_DATABASE_WACHTWOORD"
+DOCKER_DATABASE_URL="postgresql://postgres:BESTAAND_DATABASE_WACHTWOORD@db:5432/inzet?schema=public"
+```
+
+Gooi het volume niet weg om dit op te lossen; dan verlies je productiegegevens.
+
 ## Postfix in Docker
 
 Docker Compose start een aparte `mail` service met Postfix. Deze service heeft geen `ports:` mapping, dus TCP/25 wordt niet gepubliceerd naar internet. Alleen containers op het interne Compose-netwerk kunnen de SMTP-poort bereiken.

@@ -42,10 +42,13 @@ Fase 1 bootstrap van de MVP op basis van:
 - Zie `docs/productie-mail.md` voor de outbound-only Docker/Postfixconfiguratie en DNS-checklist voor `info@frii.nl`.
 
 ## Docker Compose
-- `docker compose up --build`
+- Lokaal: `docker compose up --build`
+- Productie: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
 
 ## Productie service (systemd)
 - De systemd-unit staat in `deploy/systemd/inzet.service`.
+- Productie gebruikt `docker-compose.yml` plus `docker-compose.prod.yml`, zodat de server `next build` en `next start` draait in plaats van `next dev`.
+- Controleer op de server eerst `.env`: `DOCKER_DATABASE_URL` moet naar `db:5432` wijzen en hetzelfde wachtwoord gebruiken als het bestaande Postgres-volume.
 - Installeer en start op Debian:
   - `./scripts/install-systemd-service.sh`
 - Deploy daarna nieuwe versies met:
@@ -58,6 +61,7 @@ Fase 1 bootstrap van de MVP op basis van:
 - Bij `Service Unavailable`:
   - `./scripts/diagnose-prod.sh`
   - controleer of `web` draait en of `/api/health` HTTP 200 geeft
+  - bij Prisma `P1000`: zet `POSTGRES_PASSWORD` en `DOCKER_DATABASE_URL` in `.env` gelijk aan het bestaande databasewachtwoord
   - controleer of je reverse proxy naar `127.0.0.1:3000` wijst
   - controleer proxylogs, bijvoorbeeld `sudo journalctl -u nginx -n 100 --no-pager` of `sudo journalctl -u apache2 -n 100 --no-pager`
 

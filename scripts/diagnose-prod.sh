@@ -3,6 +3,7 @@ set -u
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR" || exit 1
+COMPOSE=(docker compose -f "$ROOT_DIR/docker-compose.yml" -f "$ROOT_DIR/docker-compose.prod.yml")
 
 echo "== Inzet production diagnostics =="
 echo "Directory: $ROOT_DIR"
@@ -19,7 +20,7 @@ systemctl status inzet --no-pager -l 2>/dev/null || true
 echo
 
 echo "== Docker Compose config =="
-docker compose config -q
+"${COMPOSE[@]}" config -q
 echo "config: ok"
 echo
 
@@ -28,22 +29,22 @@ ss -ltnp 2>/dev/null | grep -E ':(80|443|3000)\b' || true
 echo
 
 echo "== Containers =="
-docker compose ps
+"${COMPOSE[@]}" ps
 echo
 
 echo "== Internal DNS and ports =="
-docker compose exec -T web sh -lc 'getent hosts db; getent hosts mail; nc -vz db 5432; nc -vz mail 25'
+"${COMPOSE[@]}" exec -T web sh -lc 'getent hosts db; getent hosts mail; nc -vz db 5432; nc -vz mail 25'
 echo
 
 echo "== App health =="
 curl -i --max-time 10 http://127.0.0.1:3000/api/health || true
 echo
-docker compose exec -T web node -e "fetch('http://localhost:3000/api/health').then(async (response) => { console.log(response.status, await response.text()); }).catch((error) => { console.error(error); process.exit(1); });"
+"${COMPOSE[@]}" exec -T web node -e "fetch('http://localhost:3000/api/health').then(async (response) => { console.log(response.status, await response.text()); }).catch((error) => { console.error(error); process.exit(1); });"
 echo
 
 echo "== Recent web logs =="
-docker compose logs --tail=80 web
+"${COMPOSE[@]}" logs --tail=80 web
 echo
 
 echo "== Recent mail logs =="
-docker compose logs --tail=80 mail
+"${COMPOSE[@]}" logs --tail=80 mail

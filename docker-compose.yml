@@ -3,9 +3,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: inzet
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-inzet}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
@@ -36,7 +36,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/inzet?schema=public
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-inzet}?schema=public}
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       MAIL_FROM: ${MAIL_FROM:-Inzet <info@frii.nl>}
       MAIL_ENVELOPE_FROM: ${MAIL_ENVELOPE_FROM:-info@frii.nl}
