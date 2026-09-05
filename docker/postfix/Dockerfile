@@ -3,7 +3,7 @@ FROM debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates postfix bind9-dnsutils \
+  && apt-get install -y --no-install-recommends ca-certificates postfix libsasl2-modules bind9-dnsutils \
   && rm -rf /var/lib/apt/lists/*
 
 COPY main.cf /etc/postfix/main.cf
