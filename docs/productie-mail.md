@@ -111,6 +111,25 @@ inzet._domainkey.frii.nl.  TXT  "v=DKIM1; k=rsa; p=PUBLIC_KEY_ZONDER_SPATIES"
 
 Laat Postfix alle applicatiemail ondertekenen met `d=frii.nl` en `s=inzet`. Met DMARC op `p=reject` moet SPF of DKIM aligned slagen, anders kunnen ontvangende servers de magic-link mails weigeren.
 
+## Extern relay (aanbevolen, omzeilt DMARC-vertraging)
+
+Direct vanaf de VPS versturen vereist dat ontvangende servers (Gmail, etc.) het verse SPF-record voor `frii.nl` al vertrouwen; dat kan door DNS/anti-spoof-caching bij grote providers langer duren dan de TTL doet vermoeden. Sneller en betrouwbaarder: laat de `mail`-container relayen via het bestaande, al vertrouwde SMTP-account van `info@frii.nl` bij de hostingpartij (zelfde server als in Gmail's "verzenden als"-instelling):
+
+```dotenv
+MAIL_RELAY_HOST="linux2210.webawere.nl"
+MAIL_RELAY_PORT="465"
+MAIL_RELAY_USERNAME="info@frii.nl"
+MAIL_RELAY_PASSWORD="HET_WACHTWOORD_VAN_INFO_AT_FRII_NL"
+```
+
+Zet deze in `.env` op de server (niet in git). `start-postfix.sh` configureert dan automatisch `relayhost`, implicte TLS (poort 465) en SASL-auth, en genereert `/etc/postfix/sasl_passwd` bij het opstarten van de container. Laat je `MAIL_RELAY_HOST` leeg, dan valt de container terug op rechtstreeks verzenden (het oude gedrag).
+
+Herstart na het zetten van deze variabelen:
+
+```sh
+docker compose up -d --build mail
+```
+
 ## Test
 
 Stuur op de productieserver een test via dezelfde API-route als de app:
