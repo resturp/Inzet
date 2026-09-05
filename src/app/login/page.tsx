@@ -395,29 +395,6 @@ export default function LoginPage() {
     <div className="grid">
       <h1>Inloggen</h1>
 
-      {(mode === "password" || mode === "request") && (
-        <section className="card grid">
-          <h2>Kies je situatie</h2>
-          <p className="muted">
-            Je hebt al een account: log in met loginnaam + wachtwoord. Eerste keer op de
-            website: vul je Nevobo relatiecode en e-mailadres in. Je ontvangt dan een magic
-            link per e-mail om je account aan te maken.
-          </p>
-          <p className="muted">
-            Privacy: verwerk geen persoonsgegevens in alias of loginnaam. Voor herkenbaarheid
-            binnen de club heeft alleen je voornaam in alias de voorkeur.
-          </p>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button type="button" onClick={() => setMode("password")}>
-              Ik heb al een account
-            </button>
-            <button type="button" onClick={() => setMode("request")}>
-              Eerste keer
-            </button>
-          </div>
-        </section>
-      )}
-
       {mode === "password" && (
         <form className="card grid" onSubmit={onPasswordLogin}>
           <input type="hidden" name={CSRF_FIELD_NAME} value={csrfToken} readOnly />
@@ -445,6 +422,23 @@ export default function LoginPage() {
             {isPasswordLogin ? "Inloggen..." : "Log in"}
           </button>
         </form>
+      )}
+
+      {mode === "password" && (
+        <section className="card grid">
+          <h2>Account aanmaken</h2>
+          <p className="muted">
+            Eerste keer op de website: vul je Nevobo relatiecode en e-mailadres in. Je
+            ontvangt dan een magic link per e-mail om je account aan te maken.
+          </p>
+          <p className="muted">
+            Privacy: verwerk geen persoonsgegevens in alias of loginnaam. Voor herkenbaarheid
+            binnen de club heeft alleen je voornaam in alias de voorkeur.
+          </p>
+          <button type="button" onClick={() => setMode("request")}>
+            Eerste keer
+          </button>
+        </section>
       )}
 
       {mode === "request" && (
@@ -480,13 +474,22 @@ export default function LoginPage() {
         </form>
       )}
 
+      {mode === "request" && (
+        <section className="card grid">
+          <h2>Inloggen</h2>
+          <button type="button" onClick={() => setMode("password")}>
+            Ik heb al een account
+          </button>
+        </section>
+      )}
+
       {mode === "create" && (
         <form className="card grid" onSubmit={onCreateAccount}>
           <input type="hidden" name={CSRF_FIELD_NAME} value={csrfToken} readOnly />
           <h2>Maak account</h2>
           <p className="muted">
-            Gebruik geen persoonsgegevens in loginnaam of alias. Voor herkenbaarheid binnen
-            de club heeft alleen je voornaam in alias de voorkeur.
+            Kies een alias voor je zichtbare naam binnen de vereniging. Gebruik geen
+            persoonsgegevens in je alias of loginnaam.
           </p>
 
           <label>
@@ -498,64 +501,79 @@ export default function LoginPage() {
             <input type="text" value={createBondsnummer} readOnly />
           </label>
 
-          <div className="grid" style={{ gap: "0.4rem" }}>
-            <strong>Kies bestaande alias of maak nieuwe alias.</strong>
+          <div className="grid">
+            <strong>Kies een bestaande alias of maak een nieuwe alias.</strong>
+            <p className="muted">
+              Kies een bestaande alias als je al rollen binnen de vereniging hebt. Maak een
+              nieuwe alias als je nieuw bent bij het Inzet-systeem.
+            </p>
             {isLoadingCreateOptions ? <p className="muted">Beschikbare aliassen laden...</p> : null}
 
-            {claimableAliases.length > 0 ? (
-              <label>
-                Bestaande alias claimen (optioneel)
-                <select
-                  value={selectedAlias}
-                  onChange={(event) => {
-                    const nextAlias = event.target.value;
-                    setSelectedAlias(nextAlias);
-                    if (nextAlias) {
-                      setNewAlias("");
-                    }
-                  }}
-                >
-                  <option value="">Geen bestaande alias kiezen</option>
-                  {claimableAliases.map((aliasOption) => (
-                    <option key={aliasOption} value={aliasOption}>
-                      {aliasOption}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <p className="muted">Geen claimbare bestaande aliassen gevonden.</p>
-            )}
+            <div className="grid grid-2">
+              <div className="grid" style={{ gap: "0.4rem" }}>
+                {claimableAliases.length > 0 ? (
+                  <label>
+                    Bestaande alias
+                    <select
+                      value={selectedAlias}
+                      onChange={(event) => {
+                        const nextAlias = event.target.value;
+                        setSelectedAlias(nextAlias);
+                        if (nextAlias) {
+                          setNewAlias("");
+                        }
+                      }}
+                      disabled={newAlias.trim().length > 0}
+                    >
+                      <option value="">Kies bestaande alias</option>
+                      {claimableAliases.map((aliasOption) => (
+                        <option key={aliasOption} value={aliasOption}>
+                          {aliasOption}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <p className="muted">Geen claimbare bestaande aliassen gevonden.</p>
+                )}
+                <p className="muted">Voor als je al rollen binnen de vereniging hebt.</p>
+              </div>
 
-            <label>
-              Nieuwe alias (optioneel)
-              <input
-                type="text"
-                value={newAlias}
-                onChange={(event) => {
-                  const nextAlias = event.target.value;
-                  setNewAlias(nextAlias);
-                  if (nextAlias.trim().length > 0) {
-                    setSelectedAlias("");
-                  }
-                }}
-                placeholder="bijv. Jan"
-              />
-            </label>
+              <div className="grid" style={{ gap: "0.4rem" }}>
+                <label>
+                  Nieuwe alias
+                  <input
+                    type="text"
+                    value={newAlias}
+                    onChange={(event) => {
+                      const nextAlias = event.target.value;
+                      setNewAlias(nextAlias);
+                      if (nextAlias.trim().length > 0) {
+                        setSelectedAlias("");
+                      }
+                    }}
+                    placeholder="bijv. Jan"
+                    disabled={selectedAlias.trim().length > 0}
+                  />
+                </label>
+                <p className="muted">Voor als je nieuw bent bij het Inzet-systeem.</p>
+              </div>
+            </div>
           </div>
 
           <label>
-            Loginnaam (geheim)
+            Loginnaam
             <input
               type="text"
               value={createLoginName}
               onChange={(e) => setCreateLoginName(e.target.value)}
-              placeholder="bijv. jan.vrijwilliger"
+              placeholder="bijv. inzet-7q4"
               required
             />
           </label>
           <p className="muted">
-            Gebruik 3-32 tekens: kleine letters, cijfers, punt, _ of -.
+            Verzin altijd een loginnaam die anderen niet kunnen raden en waarin geen
+            persoonsgegevens staan. Gebruik 3-32 tekens: kleine letters, cijfers, punt, _ of -.
           </p>
 
           <label>
