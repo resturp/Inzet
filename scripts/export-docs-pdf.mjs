@@ -227,6 +227,18 @@ const BASE_CSS = `
     background: #f8fbff;
   }
 
+  .markdown-body img {
+    display: block;
+    max-width: 100%;
+    max-height: 122mm;
+    object-fit: contain;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin: 5mm auto 7mm auto;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
   @page {
     size: A4;
     margin: 16mm 12mm 16mm 12mm;
@@ -629,11 +641,13 @@ async function main() {
   const requirementsMd = path.join(docsDir, "requirements-vrijwilligersportaal-vczwolle.md");
   const phaseMd = path.join(docsDir, "fase1-mvp-uitwerking.md");
   const volunteerGuideMd = path.join(docsDir, "gebruikershandleiding-vrijwilligers.md");
+  const simpleVolunteerGuideMd = path.join(docsDir, "eenvoudige-handleiding-vrijwilligers.md");
   const functionalGuideMd = path.join(docsDir, "gebruikershandleiding-functioneel-beheerders.md");
   const bundleMd = path.join(docsDir, "vczwolle-documentatiebundel.md");
 
   const userGuidePdf = path.join(docsDir, "gebruikershandleiding-user-stories.pdf");
   const volunteerGuidePdf = path.join(docsDir, "gebruikershandleiding-vrijwilligers.pdf");
+  const simpleVolunteerGuidePdf = path.join(docsDir, "eenvoudige-handleiding-vrijwilligers.pdf");
   const functionalGuidePdf = path.join(docsDir, "gebruikershandleiding-functioneel-beheerders.pdf");
   const systemGuidePdf = path.join(docsDir, "handleiding-hele-systeem.pdf");
   const notificationsPdf = path.join(docsDir, "notificaties.pdf");
@@ -643,6 +657,7 @@ async function main() {
 
   const userGuideHtml = path.join(docsDir, ".user-guide-export.html");
   const volunteerGuideHtml = path.join(docsDir, ".volunteer-guide-export.html");
+  const simpleVolunteerGuideHtml = path.join(docsDir, ".simple-volunteer-guide-export.html");
   const functionalGuideHtml = path.join(docsDir, ".functional-guide-export.html");
   const systemGuideHtml = path.join(docsDir, ".system-guide-export.html");
   const notificationsHtml = path.join(docsDir, ".notifications-export.html");
@@ -652,6 +667,7 @@ async function main() {
   tempHtmlFiles.push(
     userGuideHtml,
     volunteerGuideHtml,
+    simpleVolunteerGuideHtml,
     functionalGuideHtml,
     systemGuideHtml,
     notificationsHtml,
@@ -672,6 +688,13 @@ async function main() {
     htmlPath: volunteerGuideHtml,
     title: "Gebruikershandleiding Vrijwilligers",
     subtitle: "Praktisch gebruik door vrijwilligers"
+  });
+
+  await writeSingleDocHtml({
+    markdownPath: simpleVolunteerGuideMd,
+    htmlPath: simpleVolunteerGuideHtml,
+    title: "Eenvoudige handleiding Vrijwilligers",
+    subtitle: "Account maken, alias kiezen en inschrijven"
   });
 
   await writeSingleDocHtml({
@@ -732,6 +755,12 @@ async function main() {
   );
   await printHtmlToPdfWithFallback(
     chromeBinary,
+    simpleVolunteerGuideHtml,
+    simpleVolunteerGuidePdf,
+    "Eenvoudige handleiding Vrijwilligers"
+  );
+  await printHtmlToPdfWithFallback(
+    chromeBinary,
     functionalGuideHtml,
     functionalGuidePdf,
     "Gebruikershandleiding Functioneel Beheerders"
@@ -757,6 +786,7 @@ async function main() {
   console.log("PDF export klaar:");
   console.log(userGuidePdf);
   console.log(volunteerGuidePdf);
+  console.log(simpleVolunteerGuidePdf);
   console.log(functionalGuidePdf);
   console.log(systemGuidePdf);
   console.log(notificationsPdf);

@@ -12,10 +12,18 @@ Deze handleiding gaat alleen over:
 
 1. Ga naar `/login`.
 2. Klik bij `Account aanmaken` op `Eerste keer`.
+
+![Loginpagina met Account aanmaken](assets/handleiding-login.png)
+
 3. Vul je Nevobo relatiecode en e-mailadres in.
 4. Klik op `Stuur magic link`.
 5. Open de link in je e-mail.
+
+![Voorbeeld van de magic-link e-mail](assets/handleiding-email.png)
+
 6. Je komt op de pagina `Maak account`.
+
+![Pagina Maak account](assets/handleiding-account-maken.png)
 
 ## Checken of er al een alias voor jou is
 
@@ -56,6 +64,8 @@ Daarna:
 2. Open `Openstaande taken`.
 3. Zoek een taak die je wilt doen.
 4. Klik op `Schrijf in`.
+
+![Openstaande taken met knop Schrijf in](assets/handleiding-taak-inschrijven.png)
 
 Daarmee steek je je vinger op voor die taak.
 
