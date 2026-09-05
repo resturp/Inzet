@@ -4,6 +4,8 @@ set -u
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR" || exit 1
 COMPOSE=(docker compose -f "$ROOT_DIR/docker-compose.yml" -f "$ROOT_DIR/docker-compose.prod.yml")
+MAIL_DNS_TEST_DOMAINS="${MAIL_DNS_TEST_DOMAINS:-gmail.com outlook.com hotmail.com icloud.com yahoo.com proton.me ziggo.nl kpnmail.nl}"
+read -r -a MAIL_DNS_DOMAINS <<< "$MAIL_DNS_TEST_DOMAINS"
 
 echo "== Inzet production diagnostics =="
 echo "Directory: $ROOT_DIR"
@@ -55,4 +57,13 @@ echo "== Mail queue =="
 echo
 
 echo "== Mail DNS from container =="
-"${COMPOSE[@]}" exec -T mail sh -lc 'getent hosts gmail-smtp-in.l.google.com; getent hosts mail.frii.nl' || true
+"${COMPOSE[@]}" exec -T mail sh -lc '
+  getent hosts gmail-smtp-in.l.google.com
+  getent hosts mail.frii.nl
+  postconf -M smtp/unix
+  postconf -M relay/unix
+  for domain in "$@"; do
+    echo "--- $domain"
+    host -t MX "$domain"
+  done
+' sh "${MAIL_DNS_DOMAINS[@]}" || true

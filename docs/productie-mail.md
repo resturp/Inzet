@@ -65,6 +65,8 @@ local_transport = error:local delivery disabled
 smtp_tls_security_level = may
 ```
 
+De uitgaande Postfix-services `smtp/unix` en `relay/unix` draaien bewust niet in chroot. Docker zet DNS in `/etc/resolv.conf` op `127.0.0.11`; een gechroote Postfix SMTP-client ziet die resolver niet betrouwbaar en kan dan geldige MX-records missen.
+
 Controleer dat de mailservice niet naar de host wordt gepubliceerd:
 
 ```sh
@@ -126,6 +128,8 @@ Bekijk logs bij fouten:
 
 ```sh
 docker compose logs --tail=100 mail
+docker compose exec -T mail postqueue -p
+docker compose exec -T mail sh -lc 'for domain in gmail.com outlook.com icloud.com proton.me; do echo "--- $domain"; host -t MX "$domain"; done'
 ```
 
 Als de app in Docker draait, gebruik dan `SMTPHOST=mail:25` en controleer dat de interne `mail` service bereikbaar is vanaf de container.
