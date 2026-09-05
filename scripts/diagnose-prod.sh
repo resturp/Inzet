@@ -48,3 +48,11 @@ echo
 
 echo "== Recent mail logs =="
 "${COMPOSE[@]}" logs --tail=80 mail
+echo
+
+echo "== Mail queue =="
+"${COMPOSE[@]}" exec -T mail postqueue -p || true
+echo
+
+echo "== Mail DNS from container =="
+"${COMPOSE[@]}" exec -T mail sh -lc 'getent hosts gmail-smtp-in.l.google.com; getent hosts mail.frii.nl' || true

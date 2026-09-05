@@ -54,6 +54,7 @@ Fase 1 bootstrap van de MVP op basis van:
 - Deploy daarna nieuwe versies met:
   - `./scripts/deploy-prod.sh`
   - of `sudo systemctl reload inzet`
+- Wacht na deploy tot `web` `healthy` is; tijdens `next build` kan poort 3000 nog resetten.
 - Controleer status en logs:
   - `sudo systemctl status inzet --no-pager`
   - `docker compose ps`

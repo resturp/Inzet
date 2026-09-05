@@ -5,3 +5,13 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL must be set}
     command: sh -c "npm run db:generate && npx prisma db push --accept-data-loss && npm run db:seed && npm run build && npm run start"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://localhost:3000/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
