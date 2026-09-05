@@ -12,6 +12,10 @@
 *.tsbuildinfo
 next-env.d.ts
 
+# Generated documents / local exports
+/docs/*.pdf
+Inzet@vczwolle.frii.nl
+
 # Environment files
 .env
 .env.local
