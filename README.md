@@ -44,6 +44,23 @@ Fase 1 bootstrap van de MVP op basis van:
 ## Docker Compose
 - `docker compose up --build`
 
+## Productie service (systemd)
+- De systemd-unit staat in `deploy/systemd/inzet.service`.
+- Installeer en start op Debian:
+  - `./scripts/install-systemd-service.sh`
+- Deploy daarna nieuwe versies met:
+  - `./scripts/deploy-prod.sh`
+  - of `sudo systemctl reload inzet`
+- Controleer status en logs:
+  - `sudo systemctl status inzet --no-pager`
+  - `docker compose ps`
+  - `docker compose logs --tail=100 web mail`
+- Bij `Service Unavailable`:
+  - `./scripts/diagnose-prod.sh`
+  - controleer of `web` draait en of `/api/health` HTTP 200 geeft
+  - controleer of je reverse proxy naar `127.0.0.1:3000` wijst
+  - controleer proxylogs, bijvoorbeeld `sudo journalctl -u nginx -n 100 --no-pager` of `sudo journalctl -u apache2 -n 100 --no-pager`
+
 ## Schone testinstallatie (aanrader)
 - Volledige reset van containers/volumes + herstart:
   - `npm run dev:reset`

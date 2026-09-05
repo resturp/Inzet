@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -u
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR" || exit 1
+
+echo "== Inzet production diagnostics =="
+echo "Directory: $ROOT_DIR"
+echo
+
+echo "== Git =="
+git rev-parse --show-toplevel 2>/dev/null || true
+git status --short 2>/dev/null || true
+echo
+
+echo "== Systemd =="
+systemctl is-active inzet 2>/dev/null || true
+systemctl status inzet --no-pager -l 2>/dev/null || true
+echo
+
+echo "== Docker Compose config =="
+docker compose config -q
+echo "config: ok"
+echo
+
+echo "== Containers =="
+docker compose ps
+echo
+
+echo "== Internal DNS and ports =="
+docker compose exec -T web sh -lc 'getent hosts db; getent hosts mail; nc -vz db 5432; nc -vz mail 25'
+echo
+
+echo "== App health =="
+docker compose exec -T web node -e "fetch('http://localhost:3000/api/health').then(async (response) => { console.log(response.status, await response.text()); }).catch((error) => { console.error(error); process.exit(1); });"
+echo
+
+echo "== Recent web logs =="
+docker compose logs --tail=80 web
+echo
+
+echo "== Recent mail logs =="
+docker compose logs --tail=80 mail
