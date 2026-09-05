@@ -416,6 +416,12 @@ Per story staat:
 - wat het verwachte resultaat is;
 - welke uitzonderingen je kunt tegenkomen.
 
+Snelle route voor alleen vrijwilligers:
+- zie ook `docs/gebruikershandleiding-vrijwilligers.md`.
+
+Snelle route voor functioneel beheerders/coordinatoren:
+- zie ook `docs/gebruikershandleiding-functioneel-beheerders.md`.
+
 ## 2. Rollen
 - `Vrijwilliger`: bekijkt en claimt taken, beheert account/profiel.
 - `Coordinator`: beheert taken en voorstellen binnen eigen verantwoordelijkheden.
@@ -1014,6 +1020,285 @@ Gebruik voortaan per nieuwe story:
 5. `Uitzondering/Aanpak` (optioneel).
 
 Zo blijft de handleiding consistent, uitbreidbaar en direct bruikbaar voor gebruikers.
+
+---
+
+# Gebruikershandleiding Vrijwilligers
+
+Laatste update: 30 mei 2026
+
+## 1. Voor wie is deze handleiding?
+Deze handleiding is voor gewone vrijwilligers van VC Zwolle die:
+
+- een account willen maken;
+- taken willen oppakken;
+- hun account en notificaties willen beheren.
+
+## 2. Belangrijk privacy-advies
+- Kies als alias bij voorkeur je voornaam (herkenbaar binnen de club).
+- Gebruik geen persoonsgegevens in alias of loginnaam die je niet wilt delen.
+- Gebruik geen adres, telefoonnummer of geboortedatum in je alias of loginnaam.
+
+## 3. Account aanmaken (eerste keer)
+1. Ga naar `/login`.
+2. Kies `Eerste keer`.
+3. Vul je relatiecode en e-mailadres in.
+4. Open de magic link uit de e-mail.
+5. Kies een bestaande alias of verzin een nieuwe alias.
+6. Stel je loginnaam en wachtwoord in.
+
+Resultaat:
+- Je account is actief en je kunt inloggen.
+
+## 4. Inloggen en uitloggen
+### Inloggen
+1. Ga naar `/login`.
+2. Vul loginnaam en wachtwoord in.
+3. Klik `Log in`.
+
+### Uitloggen
+1. Open rechtsboven je gebruikersmenu (alias).
+2. Klik `Log uit`.
+
+## 5. Notificaties en abonneren op subtaken
+### Meldfrequentie instellen
+1. Open je gebruikersmenu.
+2. Klik `Account`.
+3. Ga naar tab `Notificaties`.
+4. Kies per categorie hoe je meldingen wilt ontvangen:
+   - `Uit`
+   - `Direct`
+   - `Digest per uur/dag/week/maand`
+5. Klik `Opslaan`.
+
+### Abonneren op nieuwe subtaken van een taak/map
+1. Open de taak (map) waarop je updates wilt krijgen.
+2. Klik op het abonnement/notificatie-icoon bij die taak.
+3. Controleer dat het icoon de geabonneerde status laat zien.
+
+Resultaat:
+- Je krijgt meldingen zodra onder die taak nieuwe subtaken worden aangemaakt.
+
+## 6. Inschrijven op een taak
+1. Open `Openstaande taken`.
+2. Open de taak (optioneel) om details te lezen.
+3. Klik `Schrijf in`.
+
+Resultaat:
+- Er wordt een voorstel gemaakt.
+- Een bevoegde coordinator accepteert of wijst af.
+
+## 7. Iemand anders voorstellen op een taak
+Let op:
+- Deze knop is alleen zichtbaar als jij die taak mag beheren.
+
+Stappen:
+1. Open de taak.
+2. Klik `Stel voor`.
+3. Kies de persoon/alias.
+4. Verstuur het voorstel.
+
+## 8. Taak opzeggen (taak weer beschikbaar maken)
+Let op:
+- Dit kan alleen als jij die taak beheert.
+
+Stappen:
+1. Open de toegewezen taak.
+2. Klik `Stel beschikbaar`.
+
+Resultaat:
+- De taak wordt weer opengezet als `Beschikbaar`.
+
+Geen knop zichtbaar?
+- Dan heb je geen beheerrechten op die taak.
+- Vraag de coordinator om de taak vrij te geven.
+
+## 9. Alias veranderen
+1. Open gebruikersmenu > `Account`.
+2. Ga naar tab `Alias`.
+3. Vul je gewenste nieuwe alias in.
+4. Klik `Voorleggen aan bestuur`.
+
+Resultaat:
+- Je aanvraag komt in de lijst met openstaande voorstellen.
+
+## 10. Profiel en account instellen
+### Profiel
+1. Open gebruikersmenu > `Profiel`.
+2. Voeg eventueel foto toe (max 2 MB).
+3. Vul `Wie ben ik` in.
+4. Klik `Opslaan`.
+
+### Account
+1. Open gebruikersmenu > `Account`.
+2. Tab `Wachtwoord`: wijzig e-mail en/of wachtwoord.
+3. Tab `Notificaties`: stel je meldingen in.
+4. Tab `Alias`: vraag aliaswijziging aan.
+
+## 11. Veelvoorkomende vragen
+### Ik zie geen knop voor bepaalde acties
+Dat betekent meestal dat je voor die taak geen beheerrechten hebt.
+
+### Ik krijg geen mailmeldingen
+Controleer:
+- tab `Notificaties` in je account;
+- spam-map;
+- of je categorie op `Direct` of een digest-stand staat;
+- of je geabonneerd bent op de taak/map waarvan je nieuwe subtaken wilt volgen.
+
+### Ik wil alleen vrijwilligersacties zien
+Gebruik vooral:
+- `Openstaande taken`
+- `Openstaande voorstellen`
+- je eigen `Account` en `Profiel`.
+
+---
+
+# Gebruikershandleiding Functioneel Beheerders
+
+Laatste update: 30 mei 2026
+
+## 1. Doel
+Deze handleiding is voor functioneel beheerders/coordinatoren die taken structureren en beheren binnen Inzet.
+
+Onderwerpen:
+- taken aanmaken;
+- taken kopieren en in tijd verschuiven;
+- delegeren vs organiseren;
+- toewijzen en beschikbaarstellen;
+- taken verplaatsen;
+- punten toekennen en verdelen.
+
+## 2. Kernbegrippen
+### Beheerrechten
+Je kunt alleen taken beheren waarvoor je coordinator/beheerder bent in de betreffende taakketen.
+
+### Taakstatus
+- `Beschikbaar`: open voor inschrijven of voorstellen.
+- `Toegewezen`: actief in beheer/uitvoering.
+- `Gereed`: afgerond en vergrendeld (eerst onvoltooid zetten om te wijzigen).
+
+### Werkwijze: Delegeren of Organiseren
+- `Delegeren`: expliciete coordinatoren op een subtaak nemen beheer daar over.
+- `Organiseren`: coordinatoren kunnen stapelen in de keten; parentcoordinatoren blijven effectief zichtbaar.
+
+## 3. Taken aanmaken
+### Root-taak aanmaken
+1. Open de takenlijst op rootniveau.
+2. Klik op `+` (nieuwe taak).
+3. Vul minimaal in: titel, beschrijving, planning, punten.
+4. Kies indien nodig werkwijze en coordinatorinstellingen.
+5. Sla op.
+
+### Subtaak aanmaken
+1. Open de parent-taak.
+2. Klik bij subtaken op `+`.
+3. Vul gegevens in.
+4. Controleer punten en planning.
+5. Sla op.
+
+Let op:
+- Onder een gereed gemelde taak kun je geen nieuwe subtaken maken.
+
+## 4. Taken kopieren en x weken verplaatsen
+1. Open de taak die je wilt kopieren.
+2. Kies `Kopieer`.
+3. Kies datumgedrag:
+   - `Behouden` (datums blijven gelijk),
+   - `Verschuiven` (bijvoorbeeld `x` weken vooruit of achteruit).
+4. Vul bij verschuiven het aantal en de eenheid in (`weken`).
+5. Bevestig.
+
+Resultaat:
+- De geselecteerde taakboom wordt gekopieerd inclusief subtaken.
+- Bij `Verschuiven` gaan alle datums/tijden in de kopie mee met de gekozen offset.
+
+## 5. Delegeren of organiseren instellen
+1. Open taak > `Bewerk`.
+2. Kies bij `Werkwijze`:
+   - `Delegeren`,
+   - `Organiseren`,
+   - of `Overerven`.
+3. Sla op.
+
+Praktische richtlijn:
+- Kies `Delegeren` als je verantwoordelijkheden echt wilt overdragen naar subtaakcoordinatoren.
+- Kies `Organiseren` als parentcoordinatoren structureel willen meekijken en mee kunnen sturen.
+
+## 6. Taken toewijzen en beschikbaarstellen
+### Taak op toegewezen zetten
+Mogelijkheden:
+- direct via de takenactie `Zet op toegewezen`;
+- of via `Bewerk` en status op `Toegewezen`.
+
+### Taak beschikbaar stellen (opzeggen)
+1. Open de taak.
+2. Klik `Stel beschikbaar`.
+
+Resultaat:
+- Status gaat terug naar `Beschikbaar`.
+- In de coordinatorlogica wordt de vrijgave verwerkt.
+
+## 7. Taken verplaatsen
+1. Open de taak.
+2. Klik `Verplaats`.
+3. Kies nieuwe parent.
+4. Bevestig.
+
+Regels:
+- je kunt alleen subtaken verplaatsen;
+- geen cycli (niet naar jezelf of eigen subtree);
+- doelparent moet binnen je beheerdomein passen;
+- teamcontext moet compatibel zijn.
+
+## 8. Punten toekennen en verdelen
+### Punten instellen
+- Root- en hoofdtaken: via `Bewerk` punten invullen.
+- Subtaken: punten aanpassen vanuit de parentcontext waar dat is toegestaan.
+
+### Hoe punten zichtbaar worden
+- Beschikbare punten op een taak = eigen punten minus uitgegeven directe subtaakpunten.
+- Bij meerdere toegewezen coordinatoren wordt de beschikbare waarde verdeeld per coordinator.
+
+Tip:
+- Houd punten op parentniveau bewust ruim genoeg voordat je veel subtaken uitgeeft.
+
+## 9. Coordinatoren beheren
+1. Open taak > `Bewerk`.
+2. Ga naar tab `Coordinatoren`.
+3. Voeg aliassen toe of verwijder ze.
+4. Sla op.
+
+Let op:
+- Dit is rechten- en contextafhankelijk (met name bij organiseren/delegeren).
+
+## 10. Handige beheerflow per seizoen
+1. Maak seizoenstaak aan (bijv. `2026-2027`).
+2. Kopieer basisstructuur van vorig seizoen.
+3. Verschuif planning met `x` weken/maanden waar nodig.
+4. Controleer werkwijze (`Delegeren/Organiseren`) per cluster.
+5. Controleer en verdeel punten.
+6. Zet relevante taken op `Toegewezen` of `Beschikbaar`.
+7. Controleer openstaande voorstellen en werk ze af.
+
+## 11. Veelvoorkomende problemen
+### Ik kan een taak niet bewerken
+- Controleer of taak of parent op `Gereed` staat.
+- Controleer of je beheerrechten hebt op die taak.
+
+### Verplaatsen lukt niet
+- Mogelijk door cycle-regel, teamcontext of onvoldoende rechten op doelparent.
+
+### Puntentotaal voelt niet logisch
+- Controleer of er directe subtaken zijn die al punten hebben geconsumeerd.
+
+### Geen knop voor toewijzen/beschikbaarstellen
+- Dan heb je op die taak geen beheerdersrechten.
+
+## 12. Wijzigingen veilig doorvoeren
+- Werk bij grote wijzigingen eerst op taakniveau (een deelboom), niet direct op volledige seizoensroot.
+- Maak vooraf een backup JSON van de betreffende taak.
+- Test na bulkacties of notificaties en voorstellen nog logisch lopen.
 
 ---
 

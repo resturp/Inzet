@@ -2845,6 +2845,9 @@ export function TasksClient({ alias }: { alias: string }) {
       })()
     : [];
   const downloadMenuTask = downloadMenuTaskId ? tasksById.get(downloadMenuTaskId) ?? null : null;
+  const canManageDownloadMenuTask = Boolean(
+    downloadMenuTask && manageableTaskIds.has(downloadMenuTask.id)
+  );
   const moveCandidates = useMemo(() => {
     if (!movingTask) {
       return [] as ApiTask[];
@@ -3358,52 +3361,54 @@ export function TasksClient({ alias }: { alias: string }) {
                 >
                   {ICON_OPEN}
                 </button>
-                <div
-                  data-download-menu-root="true"
-                  style={{ display: "inline-flex", alignItems: "center" }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => void onDownloadTaskPointsCsv(task.id, task.title)}
-                    disabled={activeTaskId === task.id}
-                    style={{
-                      whiteSpace: "nowrap",
-                      minWidth: "2.2rem",
-                      borderTopRightRadius: 0,
-                      borderBottomRightRadius: 0
-                    }}
-                    title="Download"
-                    aria-label="Download"
+                {canManageTask ? (
+                  <div
+                    data-download-menu-root="true"
+                    style={{ display: "inline-flex", alignItems: "center" }}
                   >
-                    {renderDownloadIcon(activeTaskId === task.id)}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      if (downloadMenuTaskId === task.id) {
-                        setDownloadMenuTaskId(null);
-                        setDownloadMenuPosition(null);
-                        return;
-                      }
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      setDownloadMenuTaskId(task.id);
-                      setDownloadMenuPosition({ left: rect.left, top: rect.bottom + 6 });
-                    }}
-                    disabled={activeTaskId === task.id}
-                    style={{
-                      whiteSpace: "nowrap",
-                      minWidth: "1.8rem",
-                      paddingInline: "0.35rem",
-                      marginLeft: "-1px",
-                      borderTopLeftRadius: 0,
-                      borderBottomLeftRadius: 0
-                    }}
-                    title="Kies downloadtype"
-                    aria-label="Kies downloadtype"
-                  >
-                    {ICON_CARET_DOWN}
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => void onDownloadTaskPointsCsv(task.id, task.title)}
+                      disabled={activeTaskId === task.id}
+                      style={{
+                        whiteSpace: "nowrap",
+                        minWidth: "2.2rem",
+                        borderTopRightRadius: 0,
+                        borderBottomRightRadius: 0
+                      }}
+                      title="Download"
+                      aria-label="Download"
+                    >
+                      {renderDownloadIcon(activeTaskId === task.id)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        if (downloadMenuTaskId === task.id) {
+                          setDownloadMenuTaskId(null);
+                          setDownloadMenuPosition(null);
+                          return;
+                        }
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        setDownloadMenuTaskId(task.id);
+                        setDownloadMenuPosition({ left: rect.left, top: rect.bottom + 6 });
+                      }}
+                      disabled={activeTaskId === task.id}
+                      style={{
+                        whiteSpace: "nowrap",
+                        minWidth: "1.8rem",
+                        paddingInline: "0.35rem",
+                        marginLeft: "-1px",
+                        borderTopLeftRadius: 0,
+                        borderBottomLeftRadius: 0
+                      }}
+                      title="Kies downloadtype"
+                      aria-label="Kies downloadtype"
+                    >
+                      {ICON_CARET_DOWN}
+                    </button>
+                  </div>
+                ) : null}
                 {canSubscribeTask ? (
                   <button
                     type="button"
@@ -4142,7 +4147,7 @@ export function TasksClient({ alias }: { alias: string }) {
         </div>
       ) : null}
 
-      {downloadMenuTask && downloadMenuPosition ? (
+      {downloadMenuTask && downloadMenuPosition && canManageDownloadMenuTask ? (
         <div
           className="card"
           data-download-menu-root="true"

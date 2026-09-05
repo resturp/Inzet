@@ -395,26 +395,28 @@ export default function LoginPage() {
     <div className="grid">
       <h1>Inloggen</h1>
 
-      <section className="card grid">
-        <h2>Kies je situatie</h2>
-        <p className="muted">
-          Je hebt al een account: log in met loginnaam + wachtwoord. Eerste keer op de
-          website: vul je Nevobo relatiecode en e-mailadres in. Je ontvangt dan een magic
-          link per e-mail om je account aan te maken.
-        </p>
-        <p className="muted">
-          Privacy: verwerk geen persoonsgegevens in alias of loginnaam. Voor herkenbaarheid
-          binnen de club heeft alleen je voornaam in alias de voorkeur.
-        </p>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <button type="button" onClick={() => setMode("password")}>
-            Ik heb al een account
-          </button>
-          <button type="button" onClick={() => setMode("request")}>
-            Eerste keer
-          </button>
-        </div>
-      </section>
+      {(mode === "password" || mode === "request") && (
+        <section className="card grid">
+          <h2>Kies je situatie</h2>
+          <p className="muted">
+            Je hebt al een account: log in met loginnaam + wachtwoord. Eerste keer op de
+            website: vul je Nevobo relatiecode en e-mailadres in. Je ontvangt dan een magic
+            link per e-mail om je account aan te maken.
+          </p>
+          <p className="muted">
+            Privacy: verwerk geen persoonsgegevens in alias of loginnaam. Voor herkenbaarheid
+            binnen de club heeft alleen je voornaam in alias de voorkeur.
+          </p>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button type="button" onClick={() => setMode("password")}>
+              Ik heb al een account
+            </button>
+            <button type="button" onClick={() => setMode("request")}>
+              Eerste keer
+            </button>
+          </div>
+        </section>
+      )}
 
       {mode === "password" && (
         <form className="card grid" onSubmit={onPasswordLogin}>

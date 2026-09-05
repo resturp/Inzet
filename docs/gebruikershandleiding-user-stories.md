@@ -16,6 +16,12 @@ Per story staat:
 - wat het verwachte resultaat is;
 - welke uitzonderingen je kunt tegenkomen.
 
+Snelle route voor alleen vrijwilligers:
+- zie ook `docs/gebruikershandleiding-vrijwilligers.md`.
+
+Snelle route voor functioneel beheerders/coordinatoren:
+- zie ook `docs/gebruikershandleiding-functioneel-beheerders.md`.
+
 ## 2. Rollen
 - `Vrijwilliger`: bekijkt en claimt taken, beheert account/profiel.
 - `Coordinator`: beheert taken en voorstellen binnen eigen verantwoordelijkheden.

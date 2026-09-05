@@ -451,13 +451,14 @@ function createCdpClient(wsUrl) {
   });
 }
 
-async function printHtmlToPdfWithCdp(chromeBinary, htmlPath, pdfPath, title) {
+async function printHtmlToPdfWithCdp(chromeBinary, htmlPath, pdfPath, title, headlessFlag) {
   const profileDir = await mkdtemp(path.join(os.tmpdir(), "inzet-docs-chrome-"));
   const chrome = spawn(
     chromeBinary,
     [
-      "--headless=new",
+      headlessFlag,
       "--disable-gpu",
+      "--disable-dev-shm-usage",
       "--no-first-run",
       "--no-default-browser-check",
       "--remote-debugging-port=0",
@@ -544,6 +545,27 @@ async function printHtmlToPdfWithCdp(chromeBinary, htmlPath, pdfPath, title) {
   }
 }
 
+async function printHtmlToPdfWithFallback(chromeBinary, htmlPath, pdfPath, title) {
+  const headlessFlags = ["--headless=new", "--headless"];
+  let lastError = null;
+
+  for (const headlessFlag of headlessFlags) {
+    try {
+      await printHtmlToPdfWithCdp(chromeBinary, htmlPath, pdfPath, title, headlessFlag);
+      return;
+    } catch (error) {
+      lastError = error;
+      console.warn(
+        `PDF-export poging mislukt met ${headlessFlag} voor ${path.basename(pdfPath)}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  throw lastError ?? new Error(`PDF export mislukt voor ${path.basename(pdfPath)}`);
+}
+
 async function writeSingleDocHtml(params) {
   const { markdownPath, htmlPath, title, subtitle } = params;
   const markdown = await readFile(markdownPath, "utf-8");
@@ -606,9 +628,13 @@ async function main() {
   const notificationsMd = path.join(docsDir, "notificaties.txt");
   const requirementsMd = path.join(docsDir, "requirements-vrijwilligersportaal-vczwolle.md");
   const phaseMd = path.join(docsDir, "fase1-mvp-uitwerking.md");
+  const volunteerGuideMd = path.join(docsDir, "gebruikershandleiding-vrijwilligers.md");
+  const functionalGuideMd = path.join(docsDir, "gebruikershandleiding-functioneel-beheerders.md");
   const bundleMd = path.join(docsDir, "vczwolle-documentatiebundel.md");
 
   const userGuidePdf = path.join(docsDir, "gebruikershandleiding-user-stories.pdf");
+  const volunteerGuidePdf = path.join(docsDir, "gebruikershandleiding-vrijwilligers.pdf");
+  const functionalGuidePdf = path.join(docsDir, "gebruikershandleiding-functioneel-beheerders.pdf");
   const systemGuidePdf = path.join(docsDir, "handleiding-hele-systeem.pdf");
   const notificationsPdf = path.join(docsDir, "notificaties.pdf");
   const requirementsPdf = path.join(docsDir, "requirements-vrijwilligersportaal-vczwolle.pdf");
@@ -616,6 +642,8 @@ async function main() {
   const bundlePdf = path.join(docsDir, "vczwolle-documentatiebundel.pdf");
 
   const userGuideHtml = path.join(docsDir, ".user-guide-export.html");
+  const volunteerGuideHtml = path.join(docsDir, ".volunteer-guide-export.html");
+  const functionalGuideHtml = path.join(docsDir, ".functional-guide-export.html");
   const systemGuideHtml = path.join(docsDir, ".system-guide-export.html");
   const notificationsHtml = path.join(docsDir, ".notifications-export.html");
   const requirementsHtml = path.join(docsDir, ".requirements-export.html");
@@ -623,6 +651,8 @@ async function main() {
   const bundleHtml = path.join(docsDir, ".bundle-export.html");
   tempHtmlFiles.push(
     userGuideHtml,
+    volunteerGuideHtml,
+    functionalGuideHtml,
     systemGuideHtml,
     notificationsHtml,
     requirementsHtml,
@@ -635,6 +665,20 @@ async function main() {
     htmlPath: userGuideHtml,
     title: "Gebruikershandleiding Inzet",
     subtitle: "Op basis van user stories"
+  });
+
+  await writeSingleDocHtml({
+    markdownPath: volunteerGuideMd,
+    htmlPath: volunteerGuideHtml,
+    title: "Gebruikershandleiding Vrijwilligers",
+    subtitle: "Praktisch gebruik door vrijwilligers"
+  });
+
+  await writeSingleDocHtml({
+    markdownPath: functionalGuideMd,
+    htmlPath: functionalGuideHtml,
+    title: "Gebruikershandleiding Functioneel Beheerders",
+    subtitle: "Takenbeheer en coordinatie"
   });
 
   await writeSingleDocHtml({
@@ -669,6 +713,8 @@ async function main() {
     sections: [
       { title: "Handleiding Hele Systeem", path: systemGuideMd },
       { title: "Gebruikershandleiding (User Stories)", path: userGuideMd },
+      { title: "Gebruikershandleiding Vrijwilligers", path: volunteerGuideMd },
+      { title: "Gebruikershandleiding Functioneel Beheerders", path: functionalGuideMd },
       { title: "Notificatie-overzicht", path: notificationsMd }
     ],
     bundleMdPath: bundleMd,
@@ -677,17 +723,41 @@ async function main() {
     subtitle: "Actuele systeem- en gebruikersdocumentatie"
   });
 
-  await printHtmlToPdfWithCdp(chromeBinary, userGuideHtml, userGuidePdf, "Gebruikershandleiding Inzet");
-  await printHtmlToPdfWithCdp(chromeBinary, systemGuideHtml, systemGuidePdf, "Handleiding Hele Systeem");
-  await printHtmlToPdfWithCdp(chromeBinary, notificationsHtml, notificationsPdf, "Notificatie-overzicht");
-  await printHtmlToPdfWithCdp(chromeBinary, requirementsHtml, requirementsPdf, "Requirementsdocument");
-  await printHtmlToPdfWithCdp(chromeBinary, phaseHtml, phasePdf, "Fase 1 Uitwerking");
-  await printHtmlToPdfWithCdp(chromeBinary, bundleHtml, bundlePdf, "VC Zwolle Documentatiebundel");
+  await printHtmlToPdfWithFallback(chromeBinary, userGuideHtml, userGuidePdf, "Gebruikershandleiding Inzet");
+  await printHtmlToPdfWithFallback(
+    chromeBinary,
+    volunteerGuideHtml,
+    volunteerGuidePdf,
+    "Gebruikershandleiding Vrijwilligers"
+  );
+  await printHtmlToPdfWithFallback(
+    chromeBinary,
+    functionalGuideHtml,
+    functionalGuidePdf,
+    "Gebruikershandleiding Functioneel Beheerders"
+  );
+  await printHtmlToPdfWithFallback(chromeBinary, systemGuideHtml, systemGuidePdf, "Handleiding Hele Systeem");
+  await printHtmlToPdfWithFallback(
+    chromeBinary,
+    notificationsHtml,
+    notificationsPdf,
+    "Notificatie-overzicht"
+  );
+  await printHtmlToPdfWithFallback(
+    chromeBinary,
+    requirementsHtml,
+    requirementsPdf,
+    "Requirementsdocument"
+  );
+  await printHtmlToPdfWithFallback(chromeBinary, phaseHtml, phasePdf, "Fase 1 Uitwerking");
+  await printHtmlToPdfWithFallback(chromeBinary, bundleHtml, bundlePdf, "VC Zwolle Documentatiebundel");
 
   await Promise.all(tempHtmlFiles.map((filePath) => rm(filePath, { force: true })));
 
   console.log("PDF export klaar:");
   console.log(userGuidePdf);
+  console.log(volunteerGuidePdf);
+  console.log(functionalGuidePdf);
   console.log(systemGuidePdf);
   console.log(notificationsPdf);
   console.log(requirementsPdf);

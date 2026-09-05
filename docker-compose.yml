@@ -16,17 +16,34 @@ services:
       timeout: 5s
       retries: 20
 
+  mail:
+    build:
+      context: ./docker/postfix
+    restart: unless-stopped
+    environment:
+      MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.frii.nl}
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-frii.nl}
+      MAIL_ALLOWED_NETWORKS: ${MAIL_ALLOWED_NETWORKS:-127.0.0.0/8 [::1]/128 172.16.0.0/12}
+
   web:
     build: .
     depends_on:
       db:
         condition: service_healthy
+      mail:
+        condition: service_started
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/inzet?schema=public
       NEXT_PUBLIC_APP_URL: http://localhost:3000
+      MAIL_FROM: ${MAIL_FROM:-Inzet <info@frii.nl>}
+      MAIL_ENVELOPE_FROM: ${MAIL_ENVELOPE_FROM:-info@frii.nl}
+      MAIL_MESSAGE_ID_DOMAIN: ${MAIL_MESSAGE_ID_DOMAIN:-frii.nl}
+      SENDMAIL_PATH: ${SENDMAIL_PATH:-/usr/sbin/sendmail}
+      SENDMAIL_IN_DEV: ${SENDMAIL_IN_DEV:-false}
+      SMTPHOST: ${SMTPHOST:-mail:25}
     command: sh -c "npm run db:generate && npx prisma db push --accept-data-loss && npm run db:seed && npm run dev"
     volumes:
       - .:/app

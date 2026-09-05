@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import {
   hasTaskPermissionFromMap,
-  isBestuurAlias,
   resolveEffectiveCoordinationTypeFromMap,
   resolveEffectiveCoordinatorAliasesFromMap
 } from "@/lib/authorization";
@@ -127,9 +126,6 @@ export async function GET(
     ])
   );
 
-  const sessionIsBestuur = await isBestuurAlias(sessionUser.alias);
-  const canRead = hasTaskPermissionFromMap(sessionUser.alias, rootTaskId, "READ", tasksById);
-  const canOpen = hasTaskPermissionFromMap(sessionUser.alias, rootTaskId, "OPEN", tasksById);
   const canManage = hasTaskPermissionFromMap(sessionUser.alias, rootTaskId, "MANAGE", tasksById);
 
   const ownedTaskIds = new Set(
@@ -157,9 +153,12 @@ export async function GET(
     return false;
   }
 
-  const canExport = sessionIsBestuur || canRead || canOpen || canManage || isOwnedBranchTask(rootTaskId);
+  const canExport = canManage || isOwnedBranchTask(rootTaskId);
   if (!canExport) {
-    return NextResponse.json({ error: "Geen rechten voor deze export" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Alleen beheerders/coordinatoren kunnen deze backup exporteren." },
+      { status: 403 }
+    );
   }
 
   const fullTaskById = new Map(tasks.map((task) => [task.id, task]));

@@ -27,24 +27,31 @@ function extractAddress(value: string): string | null {
   return value.includes("@") ? value.trim() : null;
 }
 
+function describeSendmailSpawnError(error: NodeJS.ErrnoException, sendmailPath: string): Error {
+  if (error.code === "ENOENT") {
+    return new Error(
+      `sendmail ontbreekt op ${sendmailPath}. Installeer een lokale outbound MTA of zet SENDMAIL_PATH naar de sendmail-compatible binary.`
+    );
+  }
+
+  return error;
+}
+
 export async function sendMail({ to, subject, text, html }: SendMailInput): Promise<void> {
   if (!shouldSendMail()) {
     return;
   }
 
-  const from = sanitizeHeaderValue(
-    process.env.MAIL_FROM?.trim() || "Inzet VC Zwolle <noreply@vczwolle.frii.nl>"
-  );
+  const from = sanitizeHeaderValue(process.env.MAIL_FROM?.trim() || "Inzet <info@frii.nl>");
   const recipient = sanitizeHeaderValue(to);
   const safeSubject = sanitizeHeaderValue(subject);
   const sendmailPath = process.env.SENDMAIL_PATH?.trim() || "/usr/sbin/sendmail";
   const configuredEnvelopeFrom = process.env.MAIL_ENVELOPE_FROM?.trim();
-  const envelopeFrom =
-    configuredEnvelopeFrom || extractAddress(from) || "noreply@vczwolle.frii.nl";
+  const envelopeFrom = configuredEnvelopeFrom || extractAddress(from) || "info@frii.nl";
   const messageIdDomain =
     process.env.MAIL_MESSAGE_ID_DOMAIN?.trim() ||
     extractAddress(envelopeFrom)?.split("@")[1] ||
-    "vczwolle.frii.nl";
+    "frii.nl";
   const messageId = `<${crypto.randomUUID()}@${messageIdDomain}>`;
   const multipartBoundary = `inzet-${crypto.randomUUID()}`;
   const dateHeader = new Date().toUTCString();
@@ -92,18 +99,38 @@ export async function sendMail({ to, subject, text, html }: SendMailInput): Prom
       stdio: ["pipe", "pipe", "pipe"]
     });
     let stderr = "";
+    let stdinError: NodeJS.ErrnoException | null = null;
+    let settled = false;
 
-    child.on("error", reject);
+    function settle(error?: Error) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    }
+
+    child.on("error", (error: NodeJS.ErrnoException) => {
+      settle(describeSendmailSpawnError(error, sendmailPath));
+    });
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
+    });
+    child.stdin.on("error", (error: NodeJS.ErrnoException) => {
+      stdinError = error;
     });
 
     child.on("close", (code) => {
       if (code === 0) {
-        resolve();
+        settle();
         return;
       }
-      reject(new Error(`sendmail exit code ${code}: ${stderr || "unknown error"}`));
+      const detail = stderr.trim() || stdinError?.message || "unknown error";
+      settle(new Error(`sendmail exit code ${code}: ${detail}`));
     });
 
     child.stdin.write(payload);
