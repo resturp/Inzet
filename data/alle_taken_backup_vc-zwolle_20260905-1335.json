@@ -1,0 +1,1800 @@
+{
+  "meta": {
+    "exportType": "TASK_TREE_BACKUP",
+    "schemaVersion": 1,
+    "exportedAt": "2026-09-05T13:35:30.158Z",
+    "exportedByAlias": "Thomas",
+    "rootTaskId": "cmtoc0cpt000bqs3oi9jc9cqv",
+    "rootTaskTitle": "VC Zwolle",
+    "taskCount": 59
+  },
+  "rootTask": {
+    "id": "cmtoc0cpt000bqs3oi9jc9cqv",
+    "title": "VC Zwolle",
+    "description": "Hoofdtaak voor aansturing en organisatie van de vereniging.",
+    "longDescription": null,
+    "teamName": null,
+    "parentId": null,
+    "points": 25000,
+    "status": "TOEGEWEZEN",
+    "date": "2026-05-24T22:00:00.000Z",
+    "startTime": "2026-05-24T22:00:00.000Z",
+    "endTime": "2027-06-29T22:00:00.000Z",
+    "location": null,
+    "createdAt": "2026-09-05T12:00:57.953Z",
+    "coordinators": {
+      "ownAliases": [
+        "Thomas",
+        "Yaniek"
+      ],
+      "effectiveAliases": [
+        "Thomas",
+        "Yaniek"
+      ]
+    },
+    "settings": {
+      "ownCoordinationType": null,
+      "effectiveCoordinationType": "DELEGEREN"
+    },
+    "children": [
+      {
+        "id": "cmtoelfz90002paervju44k70",
+        "title": "2026-2027",
+        "description": "Besturen van de vereniging in seizoen 2026-2027",
+        "longDescription": null,
+        "teamName": null,
+        "parentId": "cmtoc0cpt000bqs3oi9jc9cqv",
+        "points": 7040,
+        "status": "TOEGEWEZEN",
+        "date": "2026-05-24T22:00:00.000Z",
+        "startTime": "2026-05-24T22:00:00.000Z",
+        "endTime": "2027-06-29T22:00:00.000Z",
+        "location": null,
+        "createdAt": "2026-09-05T13:13:21.189Z",
+        "coordinators": {
+          "ownAliases": [
+            "Edgar",
+            "Thomas",
+            "Yaniek"
+          ],
+          "effectiveAliases": [
+            "Edgar",
+            "Thomas",
+            "Yaniek"
+          ]
+        },
+        "settings": {
+          "ownCoordinationType": null,
+          "effectiveCoordinationType": "DELEGEREN"
+        },
+        "children": [
+          {
+            "id": "cmtoelfzg0004paerivd36eh2",
+            "title": "Bestuur",
+            "description": "Algemeen bestuur en eindverantwoordelijkheid voor de vereniging.",
+            "longDescription": null,
+            "teamName": null,
+            "parentId": "cmtoelfz90002paervju44k70",
+            "points": 7040,
+            "status": "TOEGEWEZEN",
+            "date": "2026-05-24T22:00:00.000Z",
+            "startTime": "2026-05-24T22:00:00.000Z",
+            "endTime": "2027-06-29T22:00:00.000Z",
+            "location": null,
+            "createdAt": "2026-09-05T13:13:21.196Z",
+            "coordinators": {
+              "ownAliases": [
+                "Edgar",
+                "Peter",
+                "Yaniek"
+              ],
+              "effectiveAliases": [
+                "Edgar",
+                "Peter",
+                "Thomas",
+                "Yaniek"
+              ]
+            },
+            "settings": {
+              "ownCoordinationType": "ORGANISEREN",
+              "effectiveCoordinationType": "ORGANISEREN"
+            },
+            "children": [
+              {
+                "id": "cmtoelfzk0006paerku8xqjm1",
+                "title": "Bestuurslid communicatie",
+                "description": "Verantwoordelijk voor communicatie vanuit de vereniging",
+                "longDescription": "Tijdsbesteding: 1–4 uur per week (vergaderingen, voorbereiding en handen uit de mouwen)\nWat houdt het in: Besturen van de vereniging met een focus op communicatie, sponsoring, redactie en externe relaties. Beleid maken samen met andere vrijwillegers, besluiten nemen en clubzaken organiseren.\nVoorwaarden: Betrokkenheid en verantwoordelijkheidsgevoel\nContact: Voorzitter vereniging",
+                "teamName": null,
+                "parentId": "cmtoelfzg0004paerivd36eh2",
+                "points": 160,
+                "status": "BESCHIKBAAR",
+                "date": "2025-06-30T22:00:00.000Z",
+                "startTime": "2025-06-30T22:00:00.000Z",
+                "endTime": "2026-06-30T21:59:00.000Z",
+                "location": null,
+                "createdAt": "2026-09-05T13:13:21.200Z",
+                "coordinators": {
+                  "ownAliases": [],
+                  "effectiveAliases": [
+                    "Edgar",
+                    "Peter",
+                    "Thomas",
+                    "Yaniek"
+                  ]
+                },
+                "settings": {
+                  "ownCoordinationType": null,
+                  "effectiveCoordinationType": "ORGANISEREN"
+                },
+                "children": [
+                  {
+                    "id": "cmtof50wh003mpaervf0b7e4f",
+                    "title": "Organiseren recreantentournooien",
+                    "description": "Organiseren recreantentournooien",
+                    "longDescription": null,
+                    "teamName": null,
+                    "parentId": "cmtoelfzk0006paerku8xqjm1",
+                    "points": 10,
+                    "status": "TOEGEWEZEN",
+                    "date": "2025-06-30T22:00:00.000Z",
+                    "startTime": "2025-06-30T22:00:00.000Z",
+                    "endTime": "2026-06-30T21:59:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:28:34.769Z",
+                    "coordinators": {
+                      "ownAliases": [
+                        "Emma"
+                      ],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Emma",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  },
+                  {
+                    "id": "cmtoelfzm0008paere3siuv1o",
+                    "title": "Redactie Nieuwsbrieven en website",
+                    "description": "Redactie Nieuwsbrieven en website",
+                    "longDescription": "Tijdsbesteding: 1 uur per week\nWat houdt het in: Plaatsen van nieuws, onderhoud website, samenstellen nieuwsbrief.\nContact: Bestuurslid communicatie",
+                    "teamName": null,
+                    "parentId": "cmtoelfzk0006paerku8xqjm1",
+                    "points": 15,
+                    "status": "TOEGEWEZEN",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.202Z",
+                    "coordinators": {
+                      "ownAliases": [
+                        "Angela",
+                        "Margreet"
+                      ],
+                      "effectiveAliases": [
+                        "Angela",
+                        "Edgar",
+                        "Margreet",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  },
+                  {
+                    "id": "cmtoelfzn000apaerru39jy06",
+                    "title": "Redactie Social media",
+                    "description": "Redactie Social media",
+                    "longDescription": "Tijdsbesteding: 1 uur per week\nWat houdt het in: Berichten posten op social media, sfeerimpressies delen, promotie.\nContact: Bestuurslid communicatie",
+                    "teamName": null,
+                    "parentId": "cmtoelfzk0006paerku8xqjm1",
+                    "points": 12,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.203Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  },
+                  {
+                    "id": "cmtoelfzp000cpaerou5zc1d8",
+                    "title": "Voorzitter Sponsorcommissie",
+                    "description": "Voorzitter Sponsorcommissie",
+                    "longDescription": "Tijdsbesteding: 1–2 uur per week\nWat houdt het in: Contact met sponsors, nieuwe partners werven, sponsoruitingen beheren.\nContact: Bestuurslid communicatie",
+                    "teamName": null,
+                    "parentId": "cmtoelfzk0006paerku8xqjm1",
+                    "points": 15,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.205Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelfzr000epaer0l8okwlt",
+                        "title": "Lid Sponsorcommissie",
+                        "description": "Lid Sponsorcommissie",
+                        "longDescription": "Tijdsbesteding: 1–2 uur per week\nWat houdt het in: Contact met sponsors, nieuwe partners werven, sponsoruitingen beheren.\nContact: Bestuur",
+                        "teamName": null,
+                        "parentId": "cmtoelfzp000cpaerou5zc1d8",
+                        "points": 15,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.207Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cmtoelfzs000gpaera0ghpg98",
+                    "title": "Voorzitter Activiteitencommissie",
+                    "description": "Voorzitter Activiteitencommissie",
+                    "longDescription": "Tijdsbesteding: Afhankelijk per activiteit (1–3 uur per week in aanloop)\nWat houdt het in: Organiseren van clubactiviteiten zoals toernooien en feestjes.\nContact: Bestuurslid communicatie",
+                    "teamName": null,
+                    "parentId": "cmtoelfzk0006paerku8xqjm1",
+                    "points": 15,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-30T21:59:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.208Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelfzt000ipaeri7nr7rx3",
+                        "title": "Lid Activiteitencommissie",
+                        "description": "Lid Activiteitencommissie",
+                        "longDescription": "Tijdsbesteding: Afhankelijk per activiteit (1–3 uur per week in aanloop)\nWat houdt het in: Organiseren van clubactiviteiten zoals toernooien en feestjes.\nContact: Bestuurslid communicatie",
+                        "teamName": null,
+                        "parentId": "cmtoelfzs000gpaera0ghpg98",
+                        "points": 10,
+                        "status": "TOEGEWEZEN",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-30T21:59:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.210Z",
+                        "coordinators": {
+                          "ownAliases": [
+                            "Meike"
+                          ],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Meike",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "cmtoelfzu000kpaerfmyqmtdc",
+                "title": "Bestuurslid facilitair",
+                "description": "Verantwoordelijk voor facilitaire zaken binnen het bestuur",
+                "longDescription": null,
+                "teamName": null,
+                "parentId": "cmtoelfzg0004paerivd36eh2",
+                "points": 2990,
+                "status": "TOEGEWEZEN",
+                "date": "2026-05-24T22:00:00.000Z",
+                "startTime": "2026-05-24T22:00:00.000Z",
+                "endTime": "2027-06-29T22:00:00.000Z",
+                "location": null,
+                "createdAt": "2026-09-05T13:13:21.211Z",
+                "coordinators": {
+                  "ownAliases": [
+                    "Peter"
+                  ],
+                  "effectiveAliases": [
+                    "Edgar",
+                    "Peter",
+                    "Thomas",
+                    "Yaniek"
+                  ]
+                },
+                "settings": {
+                  "ownCoordinationType": null,
+                  "effectiveCoordinationType": "ORGANISEREN"
+                },
+                "children": [
+                  {
+                    "id": "cmtoelfzx000mpaerws3g84b8",
+                    "title": "Materiaalbeheerder",
+                    "description": "Materiaalbeheerder",
+                    "longDescription": "Tijdsbesteding: 1 uur per week, extra bij start seizoen\nWat houdt het in: Controle ballen/netten, bijhouden voorraad, reparatie/aanvulling regelen.\nContact: Technische commissie dames en jeugd",
+                    "teamName": null,
+                    "parentId": "cmtoelfzu000kpaerfmyqmtdc",
+                    "points": 10,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.213Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  },
+                  {
+                    "id": "cmtoelfzz000opaertmet5vqq",
+                    "title": "Voorzitter Kledingcommissie",
+                    "description": "Voorzitter Kledingcommissie",
+                    "longDescription": "Tijdsbesteding: 1–2 uur per week in piekperioden\nWat houdt het in: Uitreiken, innemen en registreren van clubkleding.\nContact: Bestuurslid facilitair",
+                    "teamName": null,
+                    "parentId": "cmtoelfzu000kpaerfmyqmtdc",
+                    "points": 10,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.215Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelg00000qpaer8h337d5g",
+                        "title": "Lid Kledingcommissie",
+                        "description": "Lid Kledingcommissie",
+                        "longDescription": "Tijdsbesteding: 1–2 uur per week in piekperioden\nWat houdt het in: Uitreiken, innemen en registreren van clubkleding.\nContact: Technische commissie dames en jeugd",
+                        "teamName": null,
+                        "parentId": "cmtoelfzz000opaertmet5vqq",
+                        "points": 10,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.217Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cmtoelg02000spaerc1eiobzg",
+                    "title": "Wedstrijdsecretaris",
+                    "description": "Wedstrijdsecretaris",
+                    "longDescription": "Tijdsbesteding: 1–2 uur per week\nWat houdt het in: Indelen wedstrijdroosters, verplaatsen van wedstrijden, communicatie met teams.\nVoorwaarden: Basis Nevobo-systeem\nContact: Bestuurslid facilitair",
+                    "teamName": null,
+                    "parentId": "cmtoelfzu000kpaerfmyqmtdc",
+                    "points": 20,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.218Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  },
+                  {
+                    "id": "cmtoetygt0039paer5q15qpbi",
+                    "title": "Bardienst",
+                    "description": "geen",
+                    "longDescription": null,
+                    "teamName": null,
+                    "parentId": "cmtoelfzu000kpaerfmyqmtdc",
+                    "points": 10,
+                    "status": "TOEGEWEZEN",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:19:58.398Z",
+                    "coordinators": {
+                      "ownAliases": [
+                        "Manou"
+                      ],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Manou",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "id": "cmtoelg04000upaer5y5bzi3j",
+                "title": "Penningmeester",
+                "description": "Financieel beheer, begroting en verantwoording van de vereniging.",
+                "longDescription": "Tijdsbesteding: 1–4 uur per week (vergaderingen, voorbereiding en handen uit de mouwen)\nWat houdt het in: Besturen van de vereniging gericht op financien, beleid maken samen met de commissies, besluiten nemen en clubzaken organiseren.\nVoorwaarden: Betrokkenheid en verantwoordelijkheidsgevoel\nContact: Voorzitter vereniging",
+                "teamName": null,
+                "parentId": "cmtoelfzg0004paerivd36eh2",
+                "points": 100,
+                "status": "BESCHIKBAAR",
+                "date": "2026-05-24T22:00:00.000Z",
+                "startTime": "2026-05-24T22:00:00.000Z",
+                "endTime": "2027-06-29T22:00:00.000Z",
+                "location": null,
+                "createdAt": "2026-09-05T13:13:21.220Z",
+                "coordinators": {
+                  "ownAliases": [],
+                  "effectiveAliases": [
+                    "Edgar",
+                    "Peter",
+                    "Thomas",
+                    "Yaniek"
+                  ]
+                },
+                "settings": {
+                  "ownCoordinationType": null,
+                  "effectiveCoordinationType": "ORGANISEREN"
+                },
+                "children": [
+                  {
+                    "id": "cmtoelg05000wpaerqxejgeiw",
+                    "title": "Voorzitter Kascommissie",
+                    "description": "Voorzitter Kascommissie",
+                    "longDescription": null,
+                    "teamName": null,
+                    "parentId": "cmtoelg04000upaer5y5bzi3j",
+                    "points": 20,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.221Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelg06000ypaerkhgooa9d",
+                        "title": "Lid kascommissie",
+                        "description": "Lid kascommissie",
+                        "longDescription": null,
+                        "teamName": null,
+                        "parentId": "cmtoelg05000wpaerqxejgeiw",
+                        "points": 20,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.223Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cmtoelg080010paer8ri2b6ge",
+                    "title": "Ondersteunen penningmeester",
+                    "description": "Ondersteunen penningmeester",
+                    "longDescription": null,
+                    "teamName": null,
+                    "parentId": "cmtoelg04000upaer5y5bzi3j",
+                    "points": 20,
+                    "status": "TOEGEWEZEN",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.225Z",
+                    "coordinators": {
+                      "ownAliases": [
+                        "Frederieke"
+                      ],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Frederieke",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "id": "cmtoelg0c0012paerb35b7iyo",
+                "title": "Secretaris",
+                "description": "Secretariële organisatie en administratie van de vereniging.",
+                "longDescription": null,
+                "teamName": null,
+                "parentId": "cmtoelfzg0004paerivd36eh2",
+                "points": 10,
+                "status": "TOEGEWEZEN",
+                "date": "2026-05-24T22:00:00.000Z",
+                "startTime": "2026-05-24T22:00:00.000Z",
+                "endTime": "2027-06-29T22:00:00.000Z",
+                "location": null,
+                "createdAt": "2026-09-05T13:13:21.228Z",
+                "coordinators": {
+                  "ownAliases": [
+                    "Yaniek"
+                  ],
+                  "effectiveAliases": [
+                    "Edgar",
+                    "Peter",
+                    "Thomas",
+                    "Yaniek"
+                  ]
+                },
+                "settings": {
+                  "ownCoordinationType": null,
+                  "effectiveCoordinationType": "ORGANISEREN"
+                },
+                "children": [
+                  {
+                    "id": "cmtoelg0e0014paerx8k0p95b",
+                    "title": "Voorzitter Ledenadministratie",
+                    "description": "Voorzitter Ledenadministratie",
+                    "longDescription": "Tijdsbesteding: 1–2 uur per week, piek aan het einde en begin van een seizoen.\nWat houdt het in: Verwerken van aan- en afmeldingen, gegevensbeheer en koppeling naar Nevobo.\nVoorwaarden: Nauwkeurigheid\nContact: Secretaris",
+                    "teamName": null,
+                    "parentId": "cmtoelg0c0012paerb35b7iyo",
+                    "points": 20,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.231Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelg0g0016paeruee03u1h",
+                        "title": "Lid ledenadministratie",
+                        "description": "Lid ledenadministratie",
+                        "longDescription": "Tijdsbesteding: 1–2 uur per week, piek aan het einde en begin van een seizoen.\nWat houdt het in: Verwerken van aan- en afmeldingen, gegevensbeheer en koppeling naar Nevobo.\nVoorwaarden: Nauwkeurigheid\nContact: Secretaris",
+                        "teamName": null,
+                        "parentId": "cmtoelg0e0014paerx8k0p95b",
+                        "points": 10,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.232Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cmtoelg0h0018paerrutupe3d",
+                    "title": "Functioneel beheer inzetadministratie",
+                    "description": "functioneel beheer ledenadministratie",
+                    "longDescription": "Tijdsbesteding: 1–2 uur per week\nWat houdt het in: Samenstellen en beheren van bardienst-, zaalwacht- en scheidsrechterrooster in de inzetapplicatie\nContact: Secretaris",
+                    "teamName": null,
+                    "parentId": "cmtoelg0c0012paerb35b7iyo",
+                    "points": 40,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.234Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelg0i001apaerrgwb50cf",
+                        "title": "Template thuisspeeldag",
+                        "description": "Template thuisspeeldag",
+                        "longDescription": null,
+                        "teamName": null,
+                        "parentId": "cmtoelg0h0018paerrutupe3d",
+                        "points": 20,
+                        "status": "TOEGEWEZEN",
+                        "date": "2026-07-31T22:00:00.000Z",
+                        "startTime": "2026-07-31T22:00:00.000Z",
+                        "endTime": "2026-07-31T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.235Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": [
+                          {
+                            "id": "cmtoelg0k001cpaerzgv71487",
+                            "title": "Scheidsrechter jeugd",
+                            "description": "Scheidsrechter jeugd",
+                            "longDescription": "Tijdsbesteding: 1–2 uur per wedstrijd/dagdeel\nPunten: 4 per wedstrijd\nWat houdt het in: Leiden van wedstrijden op passend niveau.\nVoorwaarden: Basiskennis regels\nContact: coördinatie inzetrooster",
+                            "teamName": null,
+                            "parentId": "cmtoelg0i001apaerrgwb50cf",
+                            "points": 4,
+                            "status": "BESCHIKBAAR",
+                            "date": "2026-07-31T22:00:00.000Z",
+                            "startTime": "2026-07-31T22:00:00.000Z",
+                            "endTime": "2026-07-31T22:00:00.000Z",
+                            "location": null,
+                            "createdAt": "2026-09-05T13:13:21.236Z",
+                            "coordinators": {
+                              "ownAliases": [],
+                              "effectiveAliases": [
+                                "Edgar",
+                                "Peter",
+                                "Thomas",
+                                "Yaniek"
+                              ]
+                            },
+                            "settings": {
+                              "ownCoordinationType": null,
+                              "effectiveCoordinationType": "ORGANISEREN"
+                            },
+                            "children": []
+                          },
+                          {
+                            "id": "cmtoelg0l001epaerb86g2lzd",
+                            "title": "Scheidsrechter Senioren",
+                            "description": "Scheidsrechter Senioren",
+                            "longDescription": "Tijdsbesteding: 1–2 uur per wedstrijd/dagdeel\nPunten: 4 per wedstrijd\nWat houdt het in: Leiden van wedstrijden op passend niveau.\nVoorwaarden: Basiskennis regels\nContact: coördinatie inzetrooster",
+                            "teamName": null,
+                            "parentId": "cmtoelg0i001apaerrgwb50cf",
+                            "points": 4,
+                            "status": "BESCHIKBAAR",
+                            "date": "2026-07-31T22:00:00.000Z",
+                            "startTime": "2026-07-31T22:00:00.000Z",
+                            "endTime": "2026-07-31T22:00:00.000Z",
+                            "location": null,
+                            "createdAt": "2026-09-05T13:13:21.237Z",
+                            "coordinators": {
+                              "ownAliases": [],
+                              "effectiveAliases": [
+                                "Edgar",
+                                "Peter",
+                                "Thomas",
+                                "Yaniek"
+                              ]
+                            },
+                            "settings": {
+                              "ownCoordinationType": null,
+                              "effectiveCoordinationType": "ORGANISEREN"
+                            },
+                            "children": []
+                          },
+                          {
+                            "id": "cmtoelg0m001gpaerngbb12by",
+                            "title": "Zaalwacht",
+                            "description": "Zaalwacht",
+                            "longDescription": "Tijdsbesteding: 1 dagdeel\nWat houdt het in: Gastheer/-vrouw voor teams, toezicht in de zaal, materiaalbeheer.\nContact: Wedstrijdsecretariaat",
+                            "teamName": null,
+                            "parentId": "cmtoelg0i001apaerrgwb50cf",
+                            "points": 4,
+                            "status": "BESCHIKBAAR",
+                            "date": "2026-07-31T22:00:00.000Z",
+                            "startTime": "2026-07-31T22:00:00.000Z",
+                            "endTime": "2026-07-31T22:00:00.000Z",
+                            "location": null,
+                            "createdAt": "2026-09-05T13:13:21.238Z",
+                            "coordinators": {
+                              "ownAliases": [],
+                              "effectiveAliases": [
+                                "Edgar",
+                                "Peter",
+                                "Thomas",
+                                "Yaniek"
+                              ]
+                            },
+                            "settings": {
+                              "ownCoordinationType": null,
+                              "effectiveCoordinationType": "ORGANISEREN"
+                            },
+                            "children": []
+                          },
+                          {
+                            "id": "cmtoelg0n001ipaerimli0jts",
+                            "title": "Bardienst",
+                            "description": "Bardienst",
+                            "longDescription": "Tijdsbesteding: 3 uur per shift\nWat houdt het in: Verkoop in de kantine, verzorgen van koffie/thee en barwerkzaamheden onder leiding van een professional van Sportcentrum Landstede.\nContact: Coördinator inzetrooster",
+                            "teamName": null,
+                            "parentId": "cmtoelg0i001apaerrgwb50cf",
+                            "points": 4,
+                            "status": "BESCHIKBAAR",
+                            "date": "2026-07-31T22:00:00.000Z",
+                            "startTime": "2026-07-31T22:00:00.000Z",
+                            "endTime": "2026-07-31T22:00:00.000Z",
+                            "location": null,
+                            "createdAt": "2026-09-05T13:13:21.239Z",
+                            "coordinators": {
+                              "ownAliases": [],
+                              "effectiveAliases": [
+                                "Edgar",
+                                "Peter",
+                                "Thomas",
+                                "Yaniek"
+                              ]
+                            },
+                            "settings": {
+                              "ownCoordinationType": null,
+                              "effectiveCoordinationType": "ORGANISEREN"
+                            },
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "cmtoelg0o001kpaergv59d1kz",
+                "title": "Technische zaken",
+                "description": "Verantwoordelijkheid voor Technische zaken binnen Bestuur.",
+                "longDescription": "Tijdsbesteding: 1–4 uur per week (vergaderingen, voorbereiding en handen uit de mouwen)\nWat houdt het in: Besturen van de vereniging gericht op technische zaken, beleid maken samen met de commissies, besluiten nemen en clubzaken organiseren.\nVoorwaarden: Betrokkenheid en verantwoordelijkheidsgevoel\nContact: Voorzitter vereniging",
+                "teamName": null,
+                "parentId": "cmtoelfzg0004paerivd36eh2",
+                "points": 20,
+                "status": "BESCHIKBAAR",
+                "date": "2026-05-24T22:00:00.000Z",
+                "startTime": "2026-05-24T22:00:00.000Z",
+                "endTime": "2027-06-29T22:00:00.000Z",
+                "location": null,
+                "createdAt": "2026-09-05T13:13:21.241Z",
+                "coordinators": {
+                  "ownAliases": [],
+                  "effectiveAliases": [
+                    "Edgar",
+                    "Peter",
+                    "Thomas",
+                    "Yaniek"
+                  ]
+                },
+                "settings": {
+                  "ownCoordinationType": null,
+                  "effectiveCoordinationType": "ORGANISEREN"
+                },
+                "children": [
+                  {
+                    "id": "cmtoelg0q001mpaer3y2cqw8z",
+                    "title": "Voorzitter TC Dames",
+                    "description": "Voorzitter TC Dames",
+                    "longDescription": "Tijdsbesteding: 2 uur per week, piekmomenten bij teamindeling\nWat houdt het in: Begeleiden van teams, maken van teamindelingen en ondersteunen van trainers/coaches.\nVoorwaarden: Basis volleybalinhoudelijke kennis\nContact: TC-voorzitter",
+                    "teamName": null,
+                    "parentId": "cmtoelg0o001kpaergv59d1kz",
+                    "points": 20,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.242Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelg0r001opaeriqcd3ph1",
+                        "title": "Training geven senioren",
+                        "description": "Training geven senioren",
+                        "longDescription": "Tijdsbesteding: ±1,5 uur per training + voorbereiding\nWat houdt het in: Geven van doelgerichte, leuke en veilige trainingen.\nVoorwaarden: Basis volleybalkennis, evt. trainerstraining mogelijk\nContact: TC dames",
+                        "teamName": null,
+                        "parentId": "cmtoelg0q001mpaer3y2cqw8z",
+                        "points": 15,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.244Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg0t001qpaer6dnvmnhr",
+                        "title": "Coach Senioren",
+                        "description": "Coach Senioren",
+                        "longDescription": "Tijdsbesteding: 1,5–2 uur per wedstrijd\nWat houdt het in: Coachen bij wedstrijden, begeleiden team en zorgen voor sportiviteit.\nContact: TC dames",
+                        "teamName": null,
+                        "parentId": "cmtoelg0q001mpaer3y2cqw8z",
+                        "points": 10,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.245Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cmtoelg0v001spaer5w34ndo6",
+                    "title": "Voorzitter TC Jeugd",
+                    "description": "Voorzitter TC Jeugd",
+                    "longDescription": "Tijdsbesteding: 2 uur per week, extra bij seizoenstart en teamindeling\nWat houdt het in: Organiseren van jeugdtrainingen, teamindelingen, begeleiders aanstellen en oudercommunicatie.\nVoorwaarden: Affiniteit met jeugd\nContact: Voorzitter jeugdcommissie",
+                    "teamName": null,
+                    "parentId": "cmtoelg0o001kpaergv59d1kz",
+                    "points": 20,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.247Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelg0w001upaerwo4guiy2",
+                        "title": "Lid TC Blauwvingers",
+                        "description": "Lid TC Blauwvingers",
+                        "longDescription": null,
+                        "teamName": null,
+                        "parentId": "cmtoelg0v001spaer5w34ndo6",
+                        "points": 20,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.248Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg0x001wpaerydu7x6kq",
+                        "title": "Lid TC Jeugd",
+                        "description": "Lid TC Jeugd",
+                        "longDescription": null,
+                        "teamName": null,
+                        "parentId": "cmtoelg0v001spaer5w34ndo6",
+                        "points": 20,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.249Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg0y001ypaerx0aul21q",
+                        "title": "Training geven jeugd",
+                        "description": "Training geven jeugd",
+                        "longDescription": "Tijdsbesteding: ±1,5 uur per training + voorbereiding\nWat houdt het in: Geven van doelgerichte, leuke en veilige trainingen.\nVoorwaarden: Basis volleybalkennis, evt. trainerstraining mogelijk\nContact: TC Jeugdcommissie",
+                        "teamName": null,
+                        "parentId": "cmtoelg0v001spaer5w34ndo6",
+                        "points": 15,
+                        "status": "TOEGEWEZEN",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.250Z",
+                        "coordinators": {
+                          "ownAliases": [
+                            "Lynn"
+                          ],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Lynn",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg0z0020paerv3iudtno",
+                        "title": "Coach jeugdteam",
+                        "description": "Coach jeugdteam",
+                        "longDescription": "Tijdsbesteding: 1,5–2 uur per wedstrijd\nWat houdt het in: Coachen bij wedstrijden, begeleiden team en zorgen voor sportiviteit.\nContact: TC Jeugd",
+                        "teamName": null,
+                        "parentId": "cmtoelg0v001spaer5w34ndo6",
+                        "points": 10,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-25T22:00:00.000Z",
+                        "startTime": "2026-05-25T22:00:00.000Z",
+                        "endTime": "2027-06-30T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.252Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cmtoelg100022paerfx9g9eyj",
+                    "title": "Commissie recreanten toernooien",
+                    "description": "Commissie recreanten toernooien",
+                    "longDescription": null,
+                    "teamName": null,
+                    "parentId": "cmtoelg0o001kpaergv59d1kz",
+                    "points": 20,
+                    "status": "TOEGEWEZEN",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.253Z",
+                    "coordinators": {
+                      "ownAliases": [
+                        "Emma",
+                        "Robin"
+                      ],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Emma",
+                        "Peter",
+                        "Robin",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  },
+                  {
+                    "id": "cmtoelg120024paer9vxylfte",
+                    "title": "Coordinator Recreanten",
+                    "description": "Coordinator Recreanten",
+                    "longDescription": "Tijdsbesteding: 1 uur per week\nWat houdt het in: Contactmoment voor recreanten, teamindelingen en informatievoorziening.\nContact: Recreantencoördinator",
+                    "teamName": null,
+                    "parentId": "cmtoelg0o001kpaergv59d1kz",
+                    "points": 10,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.254Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelg140026paer710i77ri",
+                        "title": "Training geven recreanten",
+                        "description": "Training geven recreanten",
+                        "longDescription": "Tijdsbesteding: ±1,5 uur per training + voorbereiding\nWat houdt het in: Geven van doelgerichte, leuke en veilige trainingen.\nVoorwaarden: Basis volleybalkennis, evt. trainerstraining mogelijk\nContact: Coordinator Recreanten",
+                        "teamName": null,
+                        "parentId": "cmtoelg120024paer9vxylfte",
+                        "points": 15,
+                        "status": "TOEGEWEZEN",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.256Z",
+                        "coordinators": {
+                          "ownAliases": [
+                            "roelofd"
+                          ],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "roelofd",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg160028paerpdhe5qq3",
+                        "title": "Organiseren recreantentournooien",
+                        "description": "Organiseren recreantentoernooien",
+                        "longDescription": "Tijdsbesteding: Variabel, pieken rond toernooien\nWat houdt het in: Organisatie en uitvoering van recreantentoernooien.\nContact: Recreantencoördinator",
+                        "teamName": null,
+                        "parentId": "cmtoelg120024paer9vxylfte",
+                        "points": 10,
+                        "status": "TOEGEWEZEN",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.258Z",
+                        "coordinators": {
+                          "ownAliases": [
+                            "Robin"
+                          ],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Robin",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cmtoelg18002apaerm4atn3vg",
+                    "title": "Coördinatie Volleystars",
+                    "description": "Coördinatie Volleystars",
+                    "longDescription": "Tijdsbesteding: 1–2 uur per week\nWat houdt het in: Plannen van trainingen/wedstrijden, communicatie met ouders en begeleiden trainers.\nVoorwaarden: Basiskennis Volleybal Startniveau\nContact: Coördinator Volley Stars",
+                    "teamName": null,
+                    "parentId": "cmtoelg0o001kpaergv59d1kz",
+                    "points": 20,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.260Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelg19002cpaerjyexk4b1",
+                        "title": "Gastpersoon",
+                        "description": "Gastpersoon",
+                        "longDescription": "Tijdsbesteding: 1-2 uur per trainingsmoment (vrijdag begin avond)\nWat houdt het in: Ontvangen nieuwe jeugdleden, helpen bij organisatie training en aanspreekpunt voor ouders.\nContact: Coördinator Volley Stars",
+                        "teamName": null,
+                        "parentId": "cmtoelg18002apaerm4atn3vg",
+                        "points": 20,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.261Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg1b002epaer4zh1gad4",
+                        "title": "Training geven volley stars",
+                        "description": "Training geven volley stars",
+                        "longDescription": "Tijdsbesteding: ±1,5 uur per training + voorbereiding\nWat houdt het in: Geven van doelgerichte, leuke en veilige trainingen.\nVoorwaarden: Basis volleybalkennis, evt. trainerstraining mogelijk\nContact: coordinator Volleystars",
+                        "teamName": null,
+                        "parentId": "cmtoelg18002apaerm4atn3vg",
+                        "points": 15,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.263Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg1d002gpaer6z4cbolp",
+                        "title": "Coach volleystars team",
+                        "description": "Coach volleystars team",
+                        "longDescription": null,
+                        "teamName": null,
+                        "parentId": "cmtoelg18002apaerm4atn3vg",
+                        "points": 20,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.265Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg1f002ipaervylf0lmd",
+                        "title": "Wedstrijdorganisatie volley stars thuisspeeldagen",
+                        "description": "Wedstrijdorganisatie volley stars thuisspeeldagen",
+                        "longDescription": "Tijdsbesteding: 3-4 uur per evenement, 4-5 keer per jaar\nWat houdt het in: Opbouw, wedstrijdschema begeleiden en aanspreekpunt voor teams.\nContact: Volley Stars coördinator",
+                        "teamName": null,
+                        "parentId": "cmtoelg18002apaerm4atn3vg",
+                        "points": 10,
+                        "status": "TOEGEWEZEN",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.267Z",
+                        "coordinators": {
+                          "ownAliases": [
+                            "Meike"
+                          ],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Meike",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cmtoelg1i002kpaerslat31hx",
+                    "title": "Coordinator Scheidrechterzaken",
+                    "description": "Verantwoordelijkheid voor scheidsrechterzaken binnen Bestuur.",
+                    "longDescription": "Tijdsbesteding: 1–2 uur per week\nWat houdt het in: Inplannen scheidsrechters, begeleiden nieuwe arbiters, contact Nevobo.\nContact: Bestuurslid technische zaken",
+                    "teamName": null,
+                    "parentId": "cmtoelg0o001kpaergv59d1kz",
+                    "points": 20,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.270Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": [
+                      {
+                        "id": "cmtoelg1k002mpaerkoehy7bb",
+                        "title": "Scheidsrechter 3 (VS 3) in opleiding",
+                        "description": "Scheidsrechter in opleiding",
+                        "longDescription": "Tijdsbesteding: Volgens opleidingsplanning 5 cursus momenten, inclusief 6 wedstrijden fluiten\nWat houdt het in: Volgen van opleiding en praktijkopdrachten.\nContact: Scheidsrechterscoördinator",
+                        "teamName": null,
+                        "parentId": "cmtoelg1i002kpaerslat31hx",
+                        "points": 20,
+                        "status": "TOEGEWEZEN",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.272Z",
+                        "coordinators": {
+                          "ownAliases": [
+                            "Manou"
+                          ],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Manou",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg1m002opaer47sepcbh",
+                        "title": "Scheidsrechter senioren 1e klasse en lager",
+                        "description": "Scheidsrechter senioren 1e klasse en lager",
+                        "longDescription": null,
+                        "teamName": null,
+                        "parentId": "cmtoelg1i002kpaerslat31hx",
+                        "points": 20,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.275Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg1o002qpaerhatcf39x",
+                        "title": "Scheidsrechters opleider",
+                        "description": "Scheidsrechters opleider",
+                        "longDescription": "Tijdsbesteding: 1–2 uur per cursus\nWat houdt het in: Uitleg basistaken, regels en begeleiding starters.\nContact: Scheidsrechterscoördinator",
+                        "teamName": null,
+                        "parentId": "cmtoelg1i002kpaerslat31hx",
+                        "points": 10,
+                        "status": "BESCHIKBAAR",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.276Z",
+                        "coordinators": {
+                          "ownAliases": [],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtoelg1q002spaerxrf2ebt3",
+                        "title": "Regioscheidsrechter",
+                        "description": "Regioscheidsrechter",
+                        "longDescription": "Tijdsbesteding: 1,5–2 uur per wedstrijd\nPunten: 5 per wedstrijd\nWat houdt het in: Fluiten van regionale Nevobo-wedstrijden.\nVoorwaarden: Geldige licentie",
+                        "teamName": null,
+                        "parentId": "cmtoelg1i002kpaerslat31hx",
+                        "points": 5,
+                        "status": "TOEGEWEZEN",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:13:21.278Z",
+                        "coordinators": {
+                          "ownAliases": [
+                            "Victor"
+                          ],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Peter",
+                            "Thomas",
+                            "Victor",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      },
+                      {
+                        "id": "cmtof1xl5003hpaer3rzdy1q2",
+                        "title": "Scheidsrechter Jeugd",
+                        "description": "Geen",
+                        "longDescription": null,
+                        "teamName": null,
+                        "parentId": "cmtoelg1i002kpaerslat31hx",
+                        "points": 10,
+                        "status": "TOEGEWEZEN",
+                        "date": "2026-05-24T22:00:00.000Z",
+                        "startTime": "2026-05-24T22:00:00.000Z",
+                        "endTime": "2027-06-29T22:00:00.000Z",
+                        "location": null,
+                        "createdAt": "2026-09-05T13:26:10.505Z",
+                        "coordinators": {
+                          "ownAliases": [
+                            "Marleen"
+                          ],
+                          "effectiveAliases": [
+                            "Edgar",
+                            "Marleen",
+                            "Peter",
+                            "Thomas",
+                            "Yaniek"
+                          ]
+                        },
+                        "settings": {
+                          "ownCoordinationType": null,
+                          "effectiveCoordinationType": "ORGANISEREN"
+                        },
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "id": "cmtoelg1r002upaer4j2gbb5l",
+                    "title": "Opleider kader",
+                    "description": "Opleider kader",
+                    "longDescription": "Tijdsbesteding: 1–2 uur per week\nWat houdt het in: Plannen van opleidingen voor trainers en scheidsrechters.\nContact: Technische commissie",
+                    "teamName": null,
+                    "parentId": "cmtoelg0o001kpaergv59d1kz",
+                    "points": 20,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.279Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "id": "cmtoelg1t002wpaercwinnpbu",
+                "title": "Voorzitter",
+                "description": "Voorzitterschap, koersbewaking en afstemming binnen het bestuur.",
+                "longDescription": null,
+                "teamName": null,
+                "parentId": "cmtoelfzg0004paerivd36eh2",
+                "points": 60,
+                "status": "TOEGEWEZEN",
+                "date": "2026-05-24T22:00:00.000Z",
+                "startTime": "2026-05-24T22:00:00.000Z",
+                "endTime": "2027-06-29T22:00:00.000Z",
+                "location": null,
+                "createdAt": "2026-09-05T13:13:21.281Z",
+                "coordinators": {
+                  "ownAliases": [
+                    "Edgar"
+                  ],
+                  "effectiveAliases": [
+                    "Edgar",
+                    "Peter",
+                    "Thomas",
+                    "Yaniek"
+                  ]
+                },
+                "settings": {
+                  "ownCoordinationType": null,
+                  "effectiveCoordinationType": "ORGANISEREN"
+                },
+                "children": [
+                  {
+                    "id": "cmtoelg1w002ypaerwsh844f8",
+                    "title": "Lid Werkgroep samenwerking Zwolse volleybalclubs",
+                    "description": "Lid Werkgroep samenwerking Zwolse volleybalclubs",
+                    "longDescription": "Tijdsbesteding: 1–2 uur per week bij actieve projecten\nWat houdt het in: Overleg met andere clubs, gezamenlijke initiatieven ontwikkelen.\nContact: Bestuur voorzitter",
+                    "teamName": null,
+                    "parentId": "cmtoelg1t002wpaercwinnpbu",
+                    "points": 20,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.284Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  },
+                  {
+                    "id": "cmtoelg1x0030paermfm4y6yj",
+                    "title": "Lid Werkgroep samenwerking Zwolse binnensport",
+                    "description": "Lid Werkgroep samenwerking Zwolse binnensport",
+                    "longDescription": "Tijdsbesteding: 1 uur per week\nWat houdt het in: Afstemmen en samenwerken met andere binnensporten in Zwolle.\nContact: Bestuur voorzitter",
+                    "teamName": null,
+                    "parentId": "cmtoelg1t002wpaercwinnpbu",
+                    "points": 10,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.285Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  },
+                  {
+                    "id": "cmtoelg1z0032paer4xtttd3v",
+                    "title": "Vertrouwenspersoon",
+                    "description": "Vertrouwenspersoon",
+                    "longDescription": "Tijdsbesteding: Op afroep\nWat houdt het in: Aanspreekpunt voor veilige sportomgeving, vertrouwelijk ondersteunen van leden, ouders en trainers.\nVoorwaarden: Integriteit, evt. VCP-training\nContact: Bestuur",
+                    "teamName": null,
+                    "parentId": "cmtoelg1t002wpaercwinnpbu",
+                    "points": 20,
+                    "status": "BESCHIKBAAR",
+                    "date": "2026-05-24T22:00:00.000Z",
+                    "startTime": "2026-05-24T22:00:00.000Z",
+                    "endTime": "2027-06-29T22:00:00.000Z",
+                    "location": null,
+                    "createdAt": "2026-09-05T13:13:21.287Z",
+                    "coordinators": {
+                      "ownAliases": [],
+                      "effectiveAliases": [
+                        "Edgar",
+                        "Peter",
+                        "Thomas",
+                        "Yaniek"
+                      ]
+                    },
+                    "settings": {
+                      "ownCoordinationType": null,
+                      "effectiveCoordinationType": "ORGANISEREN"
+                    },
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
