@@ -9,9 +9,10 @@ import {
   normalizeEmail,
   normalizeLoginName
 } from "@/lib/auth-credentials";
+import { attachSessionCookie } from "@/lib/api-session";
 import { sendMail } from "@/lib/mailer";
 import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { RATE_LIMITS, enforceRateLimits, getClientIp } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
   loginName: z.string().trim().min(3).max(254),
@@ -27,8 +28,17 @@ export async function POST(request: Request) {
   const rawIdentifier = parsed.data.loginName.trim();
   const isEmailLogin = rawIdentifier.includes("@");
 
+  const rateLimited = enforceRateLimits([
+    { key: `login:ip:${getClientIp(request)}`, rule: RATE_LIMITS.loginPerIp },
+    { key: `login:id:${rawIdentifier.toLowerCase()}`, rule: RATE_LIMITS.loginPerIdentifier }
+  ]);
+  if (rateLimited) {
+    return rateLimited;
+  }
+
   let userAlias = "";
   let emailVerifiedAt: Date | null = null;
+  let sessionPasswordHash: string | null = null;
 
   if (isEmailLogin) {
     const email = normalizeEmail(rawIdentifier);
@@ -132,6 +142,7 @@ export async function POST(request: Request) {
     }
     userAlias = user.alias;
     emailVerifiedAt = user.emailVerifiedAt;
+    sessionPasswordHash = user.passwordHash;
   }
 
   if (!emailVerifiedAt) {
@@ -149,15 +160,5 @@ export async function POST(request: Request) {
     { message: "Login geslaagd", alias: userAlias },
     { status: 200 }
   );
-  response.cookies.set({
-    name: SESSION_COOKIE_NAME,
-    value: userAlias,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/"
-  });
-
-  return response;
+  return attachSessionCookie(response, { alias: userAlias, passwordHash: sessionPasswordHash });
 }

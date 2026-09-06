@@ -1,10 +1,22 @@
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+// Signed CSRF tokens (double-submit cookie + header). Edge-compatible.
+
+import {
+  fromBase64Url,
+  hmacSign,
+  hmacVerify,
+  randomBase64Url,
+  resolveSecret,
+  toBase64Url,
+  utf8Decode,
+  utf8Encode
+} from "@/lib/signing";
 
 export const CSRF_COOKIE_NAME = "inzet_csrf";
 export const CSRF_HEADER_NAME = "x-csrf-token";
 export const CSRF_FIELD_NAME = "_csrf";
 export const CSRF_TOKEN_TTL_SECONDS = 60 * 30;
+
+const SIGNING_PURPOSE = "inzet-csrf";
 
 type CsrfPayload = {
   e: number;
@@ -12,69 +24,14 @@ type CsrfPayload = {
   s: string;
 };
 
-let keyPromise: Promise<CryptoKey> | null = null;
-
-function getCsrfSecret() {
-  const envSecret = process.env.CSRF_SECRET?.trim() || process.env.SESSION_SECRET?.trim();
-  if (envSecret) {
-    return envSecret;
-  }
-
-  return "inzet-dev-csrf-secret-change-me";
-}
-
-function toBase64Url(bytes: Uint8Array) {
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function fromBase64Url(value: string) {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padLength = (4 - (normalized.length % 4)) % 4;
-  const padded = normalized + "=".repeat(padLength);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
-}
-
-function randomNonce(size = 16) {
-  const bytes = new Uint8Array(size);
-  crypto.getRandomValues(bytes);
-  return toBase64Url(bytes);
-}
-
-function toBufferSource(bytes: Uint8Array) {
-  return new Uint8Array(bytes);
-}
-
-async function getSigningKey() {
-  if (!keyPromise) {
-    keyPromise = crypto.subtle.importKey(
-      "raw",
-      encoder.encode(getCsrfSecret()),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign", "verify"]
-    );
-  }
-  return keyPromise;
-}
-
-function serializePayload(payload: CsrfPayload) {
-  return encoder.encode(JSON.stringify(payload));
+function getCsrfSecret(): string {
+  return resolveSecret("CSRF_SECRET", "SESSION_SECRET");
 }
 
 function parsePayload(payloadPart: string): { payload: CsrfPayload; payloadBytes: Uint8Array } | null {
   try {
     const payloadBytes = fromBase64Url(payloadPart);
-    const payloadText = decoder.decode(payloadBytes);
-    const parsed = JSON.parse(payloadText) as Partial<CsrfPayload>;
+    const parsed = JSON.parse(utf8Decode(payloadBytes)) as Partial<CsrfPayload>;
     if (
       !parsed ||
       typeof parsed.s !== "string" ||
@@ -109,17 +66,16 @@ export async function issueCsrfToken(scope: string, nowMs = Date.now()) {
   const payload: CsrfPayload = {
     s: scope,
     e: nowSeconds + CSRF_TOKEN_TTL_SECONDS,
-    n: randomNonce(18)
+    n: randomBase64Url(18)
   };
-  const payloadBytes = serializePayload(payload);
-  const signingKey = await getSigningKey();
-  const signature = await crypto.subtle.sign("HMAC", signingKey, toBufferSource(payloadBytes));
-  return `${toBase64Url(payloadBytes)}.${toBase64Url(new Uint8Array(signature))}`;
+  const payloadBytes = utf8Encode(JSON.stringify(payload));
+  const signature = await hmacSign(getCsrfSecret(), SIGNING_PURPOSE, payloadBytes);
+  return `${toBase64Url(payloadBytes)}.${toBase64Url(signature)}`;
 }
 
 export async function verifyCsrfToken(token: string, expectedScope: string, nowMs = Date.now()) {
-  const [payloadPart, signaturePart] = token.split(".");
-  if (!payloadPart || !signaturePart) {
+  const [payloadPart, signaturePart, ...rest] = token.split(".");
+  if (!payloadPart || !signaturePart || rest.length > 0) {
     return false;
   }
 
@@ -144,11 +100,5 @@ export async function verifyCsrfToken(token: string, expectedScope: string, nowM
     return false;
   }
 
-  const signingKey = await getSigningKey();
-  return crypto.subtle.verify(
-    "HMAC",
-    signingKey,
-    toBufferSource(signatureBytes),
-    toBufferSource(parsed.payloadBytes)
-  );
+  return hmacVerify(getCsrfSecret(), SIGNING_PURPOSE, signatureBytes, parsed.payloadBytes);
 }

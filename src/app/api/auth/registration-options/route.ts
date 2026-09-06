@@ -4,12 +4,20 @@ import { z } from "zod";
 import { normalizeEmail } from "@/lib/auth-credentials";
 import { readPrecreatedAliases } from "@/lib/precreated-aliases";
 import { prisma } from "@/lib/prisma";
+import { RATE_LIMITS, enforceRateLimits, getClientIp } from "@/lib/rate-limit";
 
 const querySchema = z.object({
   token: z.string().trim().min(20)
 });
 
 export async function GET(request: Request) {
+  const rateLimited = enforceRateLimits([
+    { key: `token:ip:${getClientIp(request)}`, rule: RATE_LIMITS.tokenPerIp }
+  ]);
+  if (rateLimited) {
+    return rateLimited;
+  }
+
   const parsed = querySchema.safeParse(
     Object.fromEntries(new URL(request.url).searchParams.entries())
   );

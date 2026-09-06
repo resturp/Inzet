@@ -1,17 +1,26 @@
 services:
   db:
     image: postgres:16-alpine
+    networks:
+      - database
     restart: unless-stopped
+    # Hardening: no privilege escalation inside the container, and nothing dropped into /tmp
+    # can be executed (the September 2026 attack tried exactly that via SQL as superuser).
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev,size=64m
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-inzet}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres:/opt/inzet/postgres:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d inzet"]
+      test: ["CMD-SHELL", "PGPASSWORD=\"$$POSTGRES_PASSWORD\" PGCONNECT_TIMEOUT=3 psql -X -w -h db -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" -Atqc 'SELECT 1' >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -31,16 +40,30 @@ services:
 
   web:
     build: .
+    networks:
+      - default
+      - database
     depends_on:
       db:
         condition: service_healthy
       mail:
         condition: service_started
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-inzet}?schema=public}
+      # Signs session and CSRF cookies. Empty in development falls back to a dev-only value;
+      # production requires it (see docker-compose.prod.yml).
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      CSRF_SECRET: ${CSRF_SECRET:-}
+      # Every Node process (including Prisma CLI via compose exec) derives the URL.
+      NODE_OPTIONS: --import=/app/scripts/database-env.mjs
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-inzet}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       MAIL_FROM: ${MAIL_FROM:-Inzet <info@frii.nl>}
       MAIL_ENVELOPE_FROM: ${MAIL_ENVELOPE_FROM:-info@frii.nl}
@@ -56,3 +79,7 @@ services:
 
 volumes:
   postgres_data:
+
+networks:
+  database:
+    internal: true

@@ -16,6 +16,11 @@ const securityHeaders = [
   {
     key: "Referrer-Policy",
     value: "strict-origin-when-cross-origin"
+  },
+  {
+    // Browsers ignore this over plain HTTP, so it is harmless for local development.
+    key: "Strict-Transport-Security",
+    value: "max-age=31536000"
   }
 ];
 

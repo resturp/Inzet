@@ -77,7 +77,7 @@ test("hourly digest bundelt categorieen per gebruiker in een batch", async () =>
   try {
     (prisma.notificationPreference.findMany as unknown as (...args: unknown[]) => unknown) =
       async () => preferences;
-    (prisma.notificationEvent.findMany as unknown as (...args: unknown[]) => unknown) = async (
+    (prisma.notificationEvent.findMany as unknown as (args: { where?: { category?: NotificationCategory } }) => unknown) = async (
       args: { where?: { category?: NotificationCategory } }
     ) => pendingByCategory[args.where?.category ?? NotificationCategory.NEW_PROPOSAL] ?? [];
     (prisma.notificationEvent.updateMany as unknown as (...args: unknown[]) => unknown) = async (
@@ -92,7 +92,7 @@ test("hourly digest bundelt categorieen per gebruiker in een batch", async () =>
       preferenceUpdateArgs.push(args);
       return {};
     };
-    (prisma.$transaction as unknown as (...args: unknown[]) => unknown) = async (
+    (prisma.$transaction as unknown as (operations: unknown[]) => unknown) = async (
       operations: unknown[]
     ) => {
       transactionOperationCounts.push(operations.length);

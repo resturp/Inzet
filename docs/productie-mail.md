@@ -30,16 +30,19 @@ Zet op de server in `.env` dezelfde credentials voor Docker:
 POSTGRES_DB="inzet"
 POSTGRES_USER="postgres"
 POSTGRES_PASSWORD="BESTAAND_DATABASE_WACHTWOORD"
-DOCKER_DATABASE_URL="postgresql://postgres:BESTAAND_DATABASE_WACHTWOORD@db:5432/inzet?schema=public"
 ```
 
-Als het wachtwoord onbekend is, herstel alleen de loginrol:
+Docker bouwt de database-URL automatisch uit deze drie waarden. Verwijder de oude `DOCKER_DATABASE_URL` uit `.env`; deze wordt niet meer gebruikt. Buiten Docker blijft `DATABASE_URL` gelden.
+
+Als het wachtwoord bewust is gewijzigd of onbekend is en er geen aanwijzingen voor een aanval zijn, herstel alleen de loginrol:
 
 ```sh
 ./scripts/repair-postgres-login.sh
 ```
 
-Het script stopt `web` en `db`, zet de bestaande PostgreSQL-rol opnieuw op `LOGIN` met een nieuw wachtwoord, en print de `.env` regels die je moet overnemen. Het verwijdert geen volumes en wist geen productiegegevens.
+Het script stopt `web` en `db`, zet de bestaande PostgreSQL-rol opnieuw op `LOGIN` met het al ingestelde `POSTGRES_PASSWORD` en behoudt de bestaande privileges. Het genereert en print geen wachtwoord, verwijdert geen volumes en wist geen productiegegevens. Start daarna met `./scripts/compose-prod-up.sh`.
+
+Productie publiceert geen poort 5432. De database gebruikt een intern Docker-netwerk zonder internettoegang. Bij onverwacht geblokkeerde logins, onbekende rollen of SQL die systeemcommando's probeert uit te voeren: volg [database-incidentherstel](database-incidentherstel.md). Het herstelscript is geen opschoning van een aangetaste database.
 
 ## Postfix in Docker
 

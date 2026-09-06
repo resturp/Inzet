@@ -48,6 +48,11 @@ echo "== Recent web logs =="
 "${COMPOSE[@]}" logs --tail=80 web
 echo
 
+echo "== Database authentication and recent logs =="
+"${COMPOSE[@]}" exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=3 psql -X -w -h db -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "SELECT current_user, current_database()"' || true
+"${COMPOSE[@]}" logs --tail=80 db
+echo
+
 echo "== Recent mail logs =="
 "${COMPOSE[@]}" logs --tail=80 mail
 echo

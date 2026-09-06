@@ -7,3 +7,5 @@ docker-compose.yml
 README.md
 docs
 *.local
+.env
+.env.*

@@ -17,6 +17,9 @@ Deze handleiding gaat alleen over:
 
 3. Vul je Nevobo relatiecode en e-mailadres in.
 4. Klik op `Stuur magic link`.
+
+![Accountaanmaak-link aanvragen](assets/handleiding-account-aanvragen.png)
+
 5. Open de link in je e-mail.
 
 ![Voorbeeld van de magic-link e-mail](assets/handleiding-email.png)
@@ -63,7 +66,7 @@ Daarna:
 1. Log in.
 2. Open `Openstaande taken`.
 3. Zoek een taak die je wilt doen.
-4. Klik op `Schrijf in`.
+4. Klik op de knop met het vinger-icoon. Die knop heet `Schrijf in`.
 
 ![Openstaande taken met knop Schrijf in](assets/handleiding-taak-inschrijven.png)
 

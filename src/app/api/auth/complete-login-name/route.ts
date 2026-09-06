@@ -7,8 +7,9 @@ import {
   isValidLoginName,
   normalizeLoginName
 } from "@/lib/auth-credentials";
+import { attachSessionCookie } from "@/lib/api-session";
 import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { RATE_LIMITS, enforceRateLimits, getClientIp } from "@/lib/rate-limit";
 
 const setupSchema = z.object({
   token: z.string().trim().min(20),
@@ -17,6 +18,13 @@ const setupSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const rateLimited = enforceRateLimits([
+    { key: `token:ip:${getClientIp(request)}`, rule: RATE_LIMITS.tokenPerIp }
+  ]);
+  if (rateLimited) {
+    return rateLimited;
+  }
+
   const parsed = setupSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
@@ -57,7 +65,8 @@ export async function POST(request: Request) {
     select: {
       alias: true,
       loginName: true,
-      email: true
+      email: true,
+      passwordHash: true
     }
   });
   if (!user) {
@@ -86,14 +95,5 @@ export async function POST(request: Request) {
     { message: "Loginnaam ingesteld. Je bent ingelogd.", alias: user.alias },
     { status: 200 }
   );
-  response.cookies.set({
-    name: SESSION_COOKIE_NAME,
-    value: user.alias,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/"
-  });
-  return response;
+  return attachSessionCookie(response, { alias: user.alias, passwordHash: user.passwordHash });
 }

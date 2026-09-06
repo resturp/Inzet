@@ -1,10 +1,11 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { attachSessionCookie } from "@/lib/api-session";
 import { ensureGovernanceBootstrap } from "@/lib/bootstrap-governance";
 import { hashPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { RATE_LIMITS, enforceRateLimits, getClientIp } from "@/lib/rate-limit";
 
 const verifySchema = z.object({
   token: z.string().trim().min(20),
@@ -13,6 +14,13 @@ const verifySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const rateLimited = enforceRateLimits([
+    { key: `token:ip:${getClientIp(request)}`, rule: RATE_LIMITS.tokenPerIp }
+  ]);
+  if (rateLimited) {
+    return rateLimited;
+  }
+
   const parsed = verifySchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
@@ -99,15 +107,8 @@ export async function POST(request: Request) {
   await ensureGovernanceBootstrap(alias);
 
   const response = NextResponse.json({ message: "Login geslaagd", alias }, { status: 200 });
-  response.cookies.set({
-    name: SESSION_COOKIE_NAME,
-    value: alias,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/"
+  return attachSessionCookie(response, {
+    alias,
+    passwordHash: passwordHash ?? user.passwordHash
   });
-
-  return response;
 }

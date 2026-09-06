@@ -17,7 +17,7 @@ until curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null; do
   if (( SECONDS >= deadline )); then
     echo "Health check failed after ${HEALTH_TIMEOUT_SECONDS}s: $HEALTH_URL" >&2
     "${COMPOSE[@]}" ps >&2 || true
-    "${COMPOSE[@]}" logs --tail=120 web >&2 || true
+    "${COMPOSE[@]}" logs --tail=120 web db >&2 || true
     exit 1
   fi
   sleep 3

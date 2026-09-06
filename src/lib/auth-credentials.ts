@@ -31,7 +31,12 @@ export function isValidLoginName(value: string): boolean {
 export async function findUserByLoginNamePassword(
   loginName: string,
   password: string
-): Promise<{ alias: string; loginName: string; emailVerifiedAt: Date | null } | null> {
+): Promise<{
+  alias: string;
+  loginName: string;
+  passwordHash: string;
+  emailVerifiedAt: Date | null;
+} | null> {
   const normalizedLoginName = normalizeLoginName(loginName);
   const candidates: LoginCandidate[] = await prisma.user.findMany({
     where: {
@@ -55,6 +60,7 @@ export async function findUserByLoginNamePassword(
       return {
         alias: candidate.alias,
         loginName: candidate.loginName,
+        passwordHash: candidate.passwordHash,
         emailVerifiedAt: candidate.emailVerifiedAt
       };
     }

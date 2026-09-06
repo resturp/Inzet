@@ -1,9 +1,18 @@
 services:
+  db:
+    # Remove the development host mapping; ports: [] would keep it after merge.
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
   web:
+    # Only the reverse proxy on this host may reach the app. Never publish 0.0.0.0:3000.
+    ports: !override ["127.0.0.1:3000:3000"]
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set in .env (openssl rand -hex 32)}
     command: sh -c "npm run db:generate && npx prisma db push --accept-data-loss && npm run build && npm run start"
     healthcheck:
       test:

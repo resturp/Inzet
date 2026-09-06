@@ -7,11 +7,13 @@ import {
   isValidLoginName,
   normalizeLoginName
 } from "@/lib/auth-credentials";
+import { attachSessionCookie } from "@/lib/api-session";
 import { ensureGovernanceBootstrap } from "@/lib/bootstrap-governance";
 import { hashPassword } from "@/lib/password";
+import { readPrecreatedAliases } from "@/lib/precreated-aliases";
 import { prisma } from "@/lib/prisma";
+import { RATE_LIMITS, enforceRateLimits, getClientIp } from "@/lib/rate-limit";
 import { normalizeInputRelatiecode as normalizeRelatiecode } from "@/lib/relatiecodes";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
 
 const ALIAS_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}_\- .]{1,39}$/u;
 
@@ -25,6 +27,13 @@ const createAccountSchema = z
   });
 
 export async function POST(request: Request) {
+  const rateLimited = enforceRateLimits([
+    { key: `token:ip:${getClientIp(request)}`, rule: RATE_LIMITS.tokenPerIp }
+  ]);
+  if (rateLimited) {
+    return rateLimited;
+  }
+
   const parsed = createAccountSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
@@ -79,6 +88,11 @@ export async function POST(request: Request) {
     );
   }
 
+  // Only aliases the club pre-created (data/alias.csv) may be claimed. Any other existing
+  // user row, including seeded placeholders such as "Bestuur", is off limits: claiming one
+  // would inherit its task coordinator roles.
+  const claimablePrecreatedAlias = (await readPrecreatedAliases()).includes(targetAlias);
+
   const passwordHash = await hashPassword(parsed.data.password);
   const now = new Date();
 
@@ -107,7 +121,12 @@ export async function POST(request: Request) {
           }
         });
       } else {
-        if (existing.email || existing.passwordHash || existing.loginName) {
+        if (
+          !claimablePrecreatedAlias ||
+          existing.email ||
+          existing.passwordHash ||
+          existing.loginName
+        ) {
           throw new Error("ALIAS_ALREADY_CLAIMED");
         }
         await tx.user.update({
@@ -156,15 +175,5 @@ export async function POST(request: Request) {
     { message: "Account aangemaakt en ingelogd.", alias: targetAlias },
     { status: 200 }
   );
-  response.cookies.set({
-    name: SESSION_COOKIE_NAME,
-    value: targetAlias,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/"
-  });
-
-  return response;
+  return attachSessionCookie(response, { alias: targetAlias, passwordHash });
 }

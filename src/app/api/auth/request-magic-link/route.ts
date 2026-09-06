@@ -4,6 +4,7 @@ import { z } from "zod";
 import { normalizeEmail } from "@/lib/auth-credentials";
 import { sendMail } from "@/lib/mailer";
 import { prisma } from "@/lib/prisma";
+import { RATE_LIMITS, enforceRateLimits, getClientIp } from "@/lib/rate-limit";
 import {
   isRelatiecodeAllowed,
   normalizeInputRelatiecode
@@ -35,6 +36,14 @@ export async function POST(request: Request) {
 
   const bondsnummer = normalizeInputRelatiecode(parsed.data.bondsnummer);
   const email = normalizeEmail(parsed.data.email);
+
+  const rateLimited = enforceRateLimits([
+    { key: `magic:ip:${getClientIp(request)}`, rule: RATE_LIMITS.magicLinkPerIp },
+    { key: `magic:email:${email}`, rule: RATE_LIMITS.magicLinkPerTarget }
+  ]);
+  if (rateLimited) {
+    return rateLimited;
+  }
 
   if (!(await isRelatiecodeAllowed(bondsnummer))) {
     return NextResponse.json({ error: "Onbekende relatiecode" }, { status: 404 });

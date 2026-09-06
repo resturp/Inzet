@@ -7,12 +7,12 @@ import {
   resolveCsrfScope,
   verifyCsrfToken
 } from "@/lib/csrf";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
 export async function GET() {
   const cookieStore = await cookies();
-  const sessionAlias = cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
-  const scope = resolveCsrfScope(sessionAlias);
+  const session = await verifySessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  const scope = resolveCsrfScope(session?.alias ?? null);
 
   const existingToken = cookieStore.get(CSRF_COOKIE_NAME)?.value ?? "";
   const token =

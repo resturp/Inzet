@@ -5,6 +5,7 @@ import { normalizeEmail } from "@/lib/auth-credentials";
 import { sendMail } from "@/lib/mailer";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
+import { RATE_LIMITS, enforceRateLimits, getClientIp } from "@/lib/rate-limit";
 
 const requestSchema = z.object({
   alias: z.string().trim().min(1),
@@ -33,6 +34,14 @@ export async function POST(request: Request) {
 
   const alias = parsed.data.alias.trim();
   const email = normalizeEmail(parsed.data.email);
+
+  const rateLimited = enforceRateLimits([
+    { key: `verify:ip:${getClientIp(request)}`, rule: RATE_LIMITS.magicLinkPerIp },
+    { key: `verify:alias:${alias}`, rule: RATE_LIMITS.loginPerIdentifier }
+  ]);
+  if (rateLimited) {
+    return rateLimited;
+  }
 
   const user = await prisma.user.findUnique({ where: { alias } });
   if (!user || !user.isActive || !user.passwordHash) {

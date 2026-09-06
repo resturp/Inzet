@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { NotificationCategory, NotificationDelivery } from "@prisma/client";
 import { z } from "zod";
-import { getSessionUser } from "@/lib/api-session";
+import { attachSessionCookie, getSessionUser } from "@/lib/api-session";
 import { normalizeEmail } from "@/lib/auth-credentials";
 import { isBestuurAlias } from "@/lib/authorization";
 import {
@@ -213,8 +213,13 @@ export async function PATCH(request: Request) {
     getNotificationSettingsForUser(updated.alias)
   ]);
 
-  return NextResponse.json(
+  const response = NextResponse.json(
     { data: { ...updated, isBestuur: bestuur, notificationSettings }, message: "Account opgeslagen." },
     { status: 200 }
   );
+  if (passwordHash) {
+    // A password change invalidates every other session; keep this one alive.
+    await attachSessionCookie(response, { alias: updated.alias, passwordHash });
+  }
+  return response;
 }
